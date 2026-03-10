@@ -1,0 +1,69 @@
+import destBali from "@/assets/dest-bali.jpg";
+import destParis from "@/assets/dest-paris.jpg";
+import destDubai from "@/assets/dest-dubai.jpg";
+import destMaldives from "@/assets/dest-maldives.jpg";
+import destBangkok from "@/assets/dest-bangkok.jpg";
+import destIstanbul from "@/assets/dest-istanbul.jpg";
+export const destinations = [
+    { id: 1, name: "Bali", country: "Indonesia", image: destBali, price: 450, rating: 4.8, flights: 120 },
+    { id: 2, name: "Paris", country: "France", image: destParis, price: 680, rating: 4.9, flights: 200 },
+    { id: 3, name: "Dubai", country: "UAE", image: destDubai, price: 520, rating: 4.7, flights: 180 },
+    { id: 4, name: "Maldives", country: "Maldives", image: destMaldives, price: 890, rating: 4.9, flights: 80 },
+    { id: 5, name: "Bangkok", country: "Thailand", image: destBangkok, price: 380, rating: 4.6, flights: 150 },
+    { id: 6, name: "Istanbul", country: "Turkey", image: destIstanbul, price: 420, rating: 4.7, flights: 160 },
+];
+export const flights = [
+    { id: 1, airline: "Hangout Air", flightNo: "HT-201", from: "New York (JFK)", to: "Paris (CDG)", departure: "08:30", arrival: "21:45", duration: "7h 15m", price: 680, stops: 0, class: "Economy" },
+    { id: 2, airline: "Sky Wings", flightNo: "SW-445", from: "New York (JFK)", to: "Paris (CDG)", departure: "10:15", arrival: "23:30", duration: "7h 15m", price: 720, stops: 0, class: "Economy" },
+    { id: 3, airline: "Global Express", flightNo: "GE-112", from: "New York (JFK)", to: "Paris (CDG)", departure: "14:00", arrival: "05:20+1", duration: "9h 20m", price: 540, stops: 1, class: "Economy" },
+    { id: 4, airline: "Hangout Air", flightNo: "HT-305", from: "New York (JFK)", to: "Paris (CDG)", departure: "18:45", arrival: "08:00+1", duration: "7h 15m", price: 850, stops: 0, class: "Business" },
+    { id: 5, airline: "Ocean Airlines", flightNo: "OA-789", from: "New York (JFK)", to: "Paris (CDG)", departure: "22:00", arrival: "13:30+1", duration: "9h 30m", price: 490, stops: 1, class: "Economy" },
+    { id: 6, airline: "Horizon Jet", flightNo: "HJ-654", from: "New York (JFK)", to: "Paris (CDG)", departure: "06:00", arrival: "19:00", duration: "7h 00m", price: 950, stops: 0, class: "Business" },
+];
+export const hotels = [
+    { id: 1, name: "Grand Paradise Resort", location: "Bali, Indonesia", rating: 4.8, reviews: 1240, price: 185, image: destBali, amenities: ["Pool", "Spa", "WiFi", "Restaurant", "Beach Access"], type: "Resort" },
+    { id: 2, name: "Le Parisien Boutique", location: "Paris, France", rating: 4.7, reviews: 890, price: 220, image: destParis, amenities: ["WiFi", "Restaurant", "Bar", "Room Service"], type: "Boutique" },
+    { id: 3, name: "Dubai Marina Towers", location: "Dubai, UAE", rating: 4.9, reviews: 2100, price: 310, image: destDubai, amenities: ["Pool", "Gym", "Spa", "WiFi", "Restaurant", "Bar"], type: "Luxury" },
+    { id: 4, name: "Coral Bay Villas", location: "Maldives", rating: 4.9, reviews: 650, price: 450, image: destMaldives, amenities: ["Private Pool", "Spa", "Snorkeling", "WiFi", "Restaurant"], type: "Villa" },
+    { id: 5, name: "Sukhumvit Grand Hotel", location: "Bangkok, Thailand", rating: 4.5, reviews: 1800, price: 95, image: destBangkok, amenities: ["Pool", "WiFi", "Restaurant", "Gym"], type: "Hotel" },
+    { id: 6, name: "Bosphorus Palace", location: "Istanbul, Turkey", rating: 4.6, reviews: 920, price: 175, image: destIstanbul, amenities: ["WiFi", "Restaurant", "Bar", "Spa", "Historic View"], type: "Palace" },
+];
+export const holidays = [
+    { id: 1, title: "Bali Adventure Package", destination: "Bali, Indonesia", duration: "7 Days / 6 Nights", price: 1250, originalPrice: 1600, image: destBali, includes: ["Flights", "Hotel", "Transfers", "Tours", "Breakfast"], rating: 4.8 },
+    { id: 2, title: "Romantic Paris Getaway", destination: "Paris, France", duration: "5 Days / 4 Nights", price: 1800, originalPrice: 2200, image: destParis, includes: ["Flights", "Hotel", "Eiffel Tower", "Seine Cruise", "Museum Pass"], rating: 4.9 },
+    { id: 3, title: "Dubai Luxury Experience", destination: "Dubai, UAE", duration: "6 Days / 5 Nights", price: 2400, originalPrice: 3000, image: destDubai, includes: ["Flights", "5★ Hotel", "Desert Safari", "City Tour", "All Meals"], rating: 4.7 },
+    { id: 4, title: "Maldives Paradise Escape", destination: "Maldives", duration: "5 Days / 4 Nights", price: 3200, originalPrice: 4000, image: destMaldives, includes: ["Flights", "Water Villa", "Snorkeling", "Spa", "Full Board"], rating: 4.9 },
+    { id: 5, title: "Bangkok City Explorer", destination: "Bangkok, Thailand", duration: "4 Days / 3 Nights", price: 750, originalPrice: 950, image: destBangkok, includes: ["Flights", "Hotel", "Temple Tour", "Street Food Tour", "Transfers"], rating: 4.6 },
+    { id: 6, title: "Istanbul Heritage Tour", destination: "Istanbul, Turkey", duration: "6 Days / 5 Nights", price: 1100, originalPrice: 1400, image: destIstanbul, includes: ["Flights", "Hotel", "Guided Tours", "Bosphorus Cruise", "Breakfast"], rating: 4.7 },
+];
+export const services = [
+    { id: "flight", label: "Flight", icon: "Plane" },
+    { id: "hotel", label: "Hotel", icon: "Building2" },
+    { id: "holiday", label: "Holiday", icon: "Palmtree" },
+    { id: "visa", label: "Visa", icon: "FileCheck" },
+    { id: "cars", label: "Cars", icon: "Car" },
+    { id: "medical", label: "Medical", icon: "Heart" },
+    { id: "esim", label: "eSIM", icon: "Smartphone" },
+    { id: "recharge", label: "Recharge", icon: "Zap" },
+];
+export const offers = [
+    { id: 1, title: "20% Off International Flights", description: "Book any international flight and get 20% off on base fare. Limited time offer!", badge: "Hot Deal" },
+    { id: 2, title: "Student Special Fares", description: "Students enjoy special discounted fares and extra baggage on select airlines.", badge: "Student" },
+    { id: 3, title: "0% EMI on Holidays", description: "Book holiday packages on easy EMI with 0% interest for up to 6 months.", badge: "EMI" },
+];
+export const adminStats = {
+    totalBookings: 12450,
+    totalRevenue: 2340000,
+    activeUsers: 8920,
+    totalFlights: 450,
+    totalHotels: 280,
+    totalPackages: 65,
+};
+export const recentBookings = [
+    { id: "BK-001", customer: "John Smith", type: "Flight", destination: "Paris", amount: 680, status: "Confirmed", date: "2026-03-05" },
+    { id: "BK-002", customer: "Sarah Johnson", type: "Hotel", destination: "Dubai", amount: 1550, status: "Pending", date: "2026-03-05" },
+    { id: "BK-003", customer: "Mike Wilson", type: "Holiday", destination: "Bali", amount: 2500, status: "Confirmed", date: "2026-03-04" },
+    { id: "BK-004", customer: "Emily Davis", type: "Flight", destination: "Bangkok", amount: 380, status: "Cancelled", date: "2026-03-04" },
+    { id: "BK-005", customer: "Alex Brown", type: "Hotel", destination: "Maldives", amount: 2250, status: "Confirmed", date: "2026-03-03" },
+    { id: "BK-006", customer: "Lisa Chen", type: "Holiday", destination: "Istanbul", amount: 1100, status: "Pending", date: "2026-03-03" },
+];
