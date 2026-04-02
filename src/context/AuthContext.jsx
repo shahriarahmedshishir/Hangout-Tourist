@@ -67,8 +67,31 @@ export function AuthProvider({ children }) {
     setSocket(null);
   }
 
+  function refreshUser() {
+    const token = localStorage.getItem("ht_token");
+    if (token) {
+      return api
+        .get("/api/auth/me")
+        .then((u) => {
+          const userData = { ...u, id: u._id };
+          setUser(userData);
+          localStorage.setItem("ht_user", JSON.stringify(userData));
+          return userData;
+        })
+        .catch((err) => {
+          if (err.status === 401 || err.status === 403) {
+            logout();
+          }
+          throw err;
+        });
+    }
+    return Promise.resolve(null);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, socket, loading, login, logout }}>
+    <AuthContext.Provider
+      value={{ user, socket, loading, login, logout, refreshUser }}
+    >
       {children}
     </AuthContext.Provider>
   );

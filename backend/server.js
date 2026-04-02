@@ -33,8 +33,8 @@ const io = new Server(server, {
   cors: { origin: corsOrigin, methods: ["GET", "POST"] },
 });
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Payment callbacks come from SSLCommerz's domain — register BEFORE the
@@ -74,6 +74,8 @@ app.use("/api/cars", require("./routes/cars"));
 app.use("/api/bookings", require("./routes/bookings"));
 app.use("/api/admin", require("./routes/admin"));
 app.use("/api/staff", require("./routes/staff"));
+app.use("/api/manual-payment", require("./routes/manual-payment"));
+app.use("/api/hangcoin", require("./routes/hangcoin"));
 
 // 404 handler
 app.use((req, res) => res.status(404).json({ message: "Route not found" }));

@@ -25,10 +25,16 @@ import {
   Check,
   ImageIcon,
   CalendarRange,
+  CreditCard,
+  Coins,
+  Eye,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import { api, imgUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import logo from "@/assets/logo.png";
+
 const sidebarItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "hotels", label: "Hotels", icon: Building2 },
@@ -36,6 +42,8 @@ const sidebarItems = [
   { id: "bookings", label: "Bookings", icon: ShoppingCart },
   { id: "users", label: "Users", icon: Users },
   { id: "staff", label: "Add Staff", icon: UserPlus },
+  { id: "manual-payments", label: "Manual Payments", icon: CreditCard },
+  { id: "coin-topups", label: "Coin Top-ups", icon: Coins },
 ];
 
 const STATUS_COLORS = {
@@ -50,14 +58,24 @@ const Admin = () => {
   const [view, setView] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // All hooks must be called BEFORE any conditional returns
   useEffect(() => {
-    if (loading) return;
-    if (!user) navigate("/login");
-    else if (user.role !== "admin") navigate("/");
+    if (!loading && (!user || user.role !== "admin")) {
+      if (user?.role === "hotel_staff") {
+        navigate("/staff", { replace: true });
+      } else {
+        navigate("/", { replace: true });
+      }
+    }
   }, [user, loading, navigate]);
 
-  if (loading) return null;
-  if (!user || user.role !== "admin") return null;
+  if (loading) {
+    return null;
+  }
+
+  if (!user || user.role !== "admin") {
+    return null;
+  }
 
   return (
     <div className="flex min-h-screen bg-muted">
@@ -123,6 +141,8 @@ const Admin = () => {
           {view === "bookings" && <BookingsView />}
           {view === "users" && <UsersView />}
           {view === "staff" && <StaffView />}
+          {view === "manual-payments" && <ManualPaymentsView />}
+          {view === "coin-topups" && <CoinTopupsView />}
         </main>
       </div>
     </div>
@@ -134,19 +154,41 @@ const DashboardView = () => {
   const [stats, setStats] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
+  const loadStats = async () => {
+    try {
+      const [s, b] = await Promise.all([
+        api.get("/api/admin/stats"),
+        api.get("/api/admin/bookings?limit=8"),
+      ]);
+      setStats(s);
+      setBookings(b.bookings || []);
+    } catch (err) {
+      console.error("Failed to load stats:", err);
+    }
+  };
+
+  // Initial load
   useEffect(() => {
-    Promise.all([
-      api.get("/api/admin/stats"),
-      api.get("/api/admin/bookings?limit=8"),
-    ])
-      .then(([s, b]) => {
-        setStats(s);
-        setBookings(b.bookings || []);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    setLoading(true);
+    loadStats().finally(() => setLoading(false));
   }, []);
+
+  // Auto-refresh stats every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadStats();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadStats();
+    setRefreshing(false);
+  };
 
   if (loading) return <div className="text-muted-foreground">Loading...</div>;
 
@@ -157,9 +199,19 @@ const DashboardView = () => {
       icon: ShoppingBag,
     },
     {
-      label: "Revenue (BDT)",
+      label: "Net Revenue (BDT)",
       value: `৳${((stats?.totalRevenue || 0) / 1000).toFixed(1)}K`,
       icon: DollarSign,
+    },
+    {
+      label: "Today's Revenue",
+      value: `৳${((stats?.todayRevenue || 0) / 1000).toFixed(1)}K`,
+      icon: TrendingUp,
+    },
+    {
+      label: "Today's Canceled",
+      value: stats?.todayCanceled ?? 0,
+      icon: UserCheck,
     },
     { label: "Total Users", value: stats?.totalUsers ?? 0, icon: UserCheck },
     {
@@ -171,7 +223,22 @@ const DashboardView = () => {
 
   return (
     <div>
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 flex items-center justify-between">
+        <h2 className="font-heading text-2xl font-bold text-foreground">
+          Dashboard Overview
+        </h2>
+        <Button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          variant="outline"
+          size="sm"
+          className="gap-2"
+        >
+          {refreshing ? "Refreshing..." : "🔄 Refresh"}
+        </Button>
+      </div>
+
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((c, i) => (
           <div
             key={i}
@@ -209,6 +276,9 @@ const DashboardView = () => {
                   Type
                 </th>
                 <th className="px-5 py-3 text-left font-medium text-muted-foreground">
+                  Transaction ID
+                </th>
+                <th className="px-5 py-3 text-left font-medium text-muted-foreground">
                   Amount
                 </th>
                 <th className="px-5 py-3 text-left font-medium text-muted-foreground">
@@ -223,7 +293,7 @@ const DashboardView = () => {
               {bookings.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="px-5 py-8 text-center text-muted-foreground"
                   >
                     No bookings yet
@@ -240,6 +310,12 @@ const DashboardView = () => {
                     </td>
                     <td className="px-5 py-3 capitalize text-foreground">
                       {b.type}
+                    </td>
+                    <td
+                      className="px-5 py-3 font-mono text-xs text-muted-foreground"
+                      title={b.transactionId}
+                    >
+                      {b.transactionId ? b.transactionId.slice(-8) : "—"}
                     </td>
                     <td className="px-5 py-3 font-medium text-foreground">
                       ৳{b.totalAmount?.toLocaleString()}
@@ -1482,6 +1558,9 @@ const CarsView = () => {
                                     Location
                                   </th>
                                   <th className="pb-2 text-left font-medium text-muted-foreground">
+                                    Transaction ID
+                                  </th>
+                                  <th className="pb-2 text-left font-medium text-muted-foreground">
                                     Amount
                                   </th>
                                   <th className="pb-2 text-left font-medium text-muted-foreground">
@@ -1527,6 +1606,14 @@ const CarsView = () => {
                                     <td className="py-2 pr-4 text-muted-foreground">
                                       {b.pickupLocation || "—"}
                                     </td>
+                                    <td
+                                      className="py-2 pr-4 font-mono text-xs text-muted-foreground"
+                                      title={b.transactionId}
+                                    >
+                                      {b.transactionId
+                                        ? b.transactionId.slice(-8)
+                                        : "—"}
+                                    </td>
                                     <td className="py-2 pr-4 font-medium text-foreground">
                                       ৳{b.totalAmount?.toLocaleString()}
                                     </td>
@@ -1547,7 +1634,9 @@ const CarsView = () => {
                                               : "bg-warning/10 text-warning"
                                           }`}
                                         >
-                                          {b.refundStatus}
+                                          {b.refundStatus === "completed"
+                                            ? "refunded"
+                                            : b.refundStatus}
                                         </span>
                                       )}
                                     </td>
@@ -1640,6 +1729,27 @@ const BookingsView = () => {
     }
   };
 
+  const handleApproveCoinTopup = async (id) => {
+    if (!confirm("Approve this coin top-up?")) return;
+    try {
+      await api.post(`/api/admin/coin-topups/${id}/approve`, {});
+      load();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleRejectCoinTopup = async (id) => {
+    const reason = prompt("Reason for rejection:");
+    if (!reason) return;
+    try {
+      await api.post(`/api/admin/coin-topups/${id}/reject`, { reason });
+      load();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   const filtered = bookings.filter((b) => {
     const q = search.toLowerCase();
     const matchesSearch =
@@ -1647,7 +1757,14 @@ const BookingsView = () => {
       b.userName?.toLowerCase().includes(q) ||
       b.carName?.toLowerCase().includes(q) ||
       b.hotelName?.toLowerCase().includes(q) ||
+      (b.type === "coin_topup" && "coin topup".includes(q)) ||
       new Date(b.createdAt).toLocaleDateString().includes(q);
+
+    // For coin_topup, don't filter by date since they don't have startDate
+    if (b.type === "coin_topup") {
+      return matchesSearch;
+    }
+
     const startDate = b.pickupDate || b.checkIn;
     const matchesDate =
       !dateFilter ||
@@ -1764,6 +1881,9 @@ const BookingsView = () => {
                   Booking
                 </th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                  Transaction ID
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                   Dates
                 </th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">
@@ -1804,22 +1924,34 @@ const BookingsView = () => {
                       </td>
                       <td className="px-4 py-3">
                         <div className="capitalize text-foreground font-medium">
-                          {b.type === "car" ? b.carName : b.hotelName || "—"}
+                          {b.type === "coin_topup"
+                            ? `Coin Top-up`
+                            : b.type === "car"
+                              ? b.carName
+                              : b.hotelName || "—"}
                         </div>
                         <div className="text-xs text-muted-foreground capitalize">
-                          {b.type}
-                          {isToday && (
+                          {b.type === "coin_topup" ? "wallet" : b.type}
+                          {isToday && b.type !== "coin_topup" && (
                             <span className="ml-2 rounded-full bg-primary/10 text-primary px-1.5 py-0.5 text-[10px] font-semibold">
                               Today
                             </span>
                           )}
                         </div>
                       </td>
+                      <td
+                        className="px-4 py-3 font-mono text-xs text-muted-foreground"
+                        title={b.transactionId}
+                      >
+                        {b.transactionId ? b.transactionId.slice(-12) : "—"}
+                      </td>
                       <td className="px-4 py-3 text-muted-foreground text-xs">
-                        {startDate
-                          ? new Date(startDate).toLocaleDateString()
-                          : "—"}
-                        {endDate
+                        {b.type === "coin_topup"
+                          ? new Date(b.createdAt).toLocaleDateString()
+                          : startDate
+                            ? new Date(startDate).toLocaleDateString()
+                            : "—"}
+                        {endDate && b.type !== "coin_topup"
                           ? " → " + new Date(endDate).toLocaleDateString()
                           : ""}
                       </td>
@@ -1836,7 +1968,9 @@ const BookingsView = () => {
                           <span
                             className={`ml-1 rounded-full px-2 py-0.5 text-xs font-medium ${b.refundStatus === "completed" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}
                           >
-                            {b.refundStatus}
+                            {b.refundStatus === "completed"
+                              ? "refunded"
+                              : b.refundStatus}
                           </span>
                         )}
                       </td>
@@ -1845,30 +1979,77 @@ const BookingsView = () => {
                           className="flex gap-2"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          {b.status !== "cancelled" && (
-                            <button
-                              title="Cancel booking"
-                              className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-                              onClick={() => handleCancel(b._id)}
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          )}
-                          {b.refundStatus === "in_progress" && (
-                            <button
-                              title="Process refund"
-                              className="rounded-lg p-1.5 text-muted-foreground hover:bg-success/10 hover:text-success transition-colors"
-                              onClick={() => setRefundForm(b)}
-                            >
-                              <Check className="h-4 w-4" />
-                            </button>
-                          )}
+                          {b.type !== "coin_topup" &&
+                            b.status !== "cancelled" && (
+                              <button
+                                title="Cancel booking"
+                                className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                                onClick={() => handleCancel(b._id)}
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            )}
+                          {b.type !== "coin_topup" &&
+                            b.refundStatus === "in_progress" && (
+                              <button
+                                title="Process refund"
+                                className="rounded-lg p-1.5 text-muted-foreground hover:bg-success/10 hover:text-success transition-colors"
+                                onClick={() => setRefundForm(b)}
+                              >
+                                <Check className="h-4 w-4" />
+                              </button>
+                            )}
+                          {b.type === "coin_topup" &&
+                            b.paymentMethod === "ssl_commerz" &&
+                            b.status === "approved" && (
+                              <span className="px-2 py-1 text-xs text-success font-medium">
+                                Auto-approved
+                              </span>
+                            )}
+                          {b.type === "coin_topup" &&
+                            b.paymentMethod !== "ssl_commerz" && (
+                              <>
+                                <span
+                                  className={`px-2 py-1 text-xs font-medium ${
+                                    b.status === "approved"
+                                      ? "text-success bg-success/10"
+                                      : b.status === "rejected"
+                                        ? "text-destructive bg-destructive/10"
+                                        : "text-warning bg-warning/10"
+                                  }`}
+                                >
+                                  {b.status}
+                                </span>
+                                {b.status === "pending" && (
+                                  <>
+                                    <button
+                                      title="Approve top-up"
+                                      className="rounded-lg p-1.5 text-muted-foreground hover:bg-success/10 hover:text-success transition-colors"
+                                      onClick={() =>
+                                        handleApproveCoinTopup(b._id)
+                                      }
+                                    >
+                                      <Check className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      title="Reject top-up"
+                                      className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                                      onClick={() =>
+                                        handleRejectCoinTopup(b._id)
+                                      }
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </button>
+                                  </>
+                                )}
+                              </>
+                            )}
                         </div>
                       </td>
                     </tr>
                     {expanded === b._id && (
                       <tr key={`${b._id}-detail`} className="bg-muted/20">
-                        <td colSpan={6} className="px-6 py-4">
+                        <td colSpan={7} className="px-6 py-4">
                           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-sm">
                             <div>
                               <span className="text-muted-foreground text-xs">
@@ -1888,12 +2069,18 @@ const BookingsView = () => {
                             </div>
                             <div>
                               <span className="text-muted-foreground text-xs">
-                                {b.type === "car" ? "Car" : "Hotel / Room"}
+                                {b.type === "coin_topup"
+                                  ? "Top-up Type"
+                                  : b.type === "car"
+                                    ? "Car"
+                                    : "Hotel / Room"}
                               </span>
                               <p className="font-medium text-foreground">
-                                {b.type === "car"
-                                  ? b.carName
-                                  : `${b.hotelName || ""}${b.roomNumber ? " · Room " + b.roomNumber : ""}`}
+                                {b.type === "coin_topup"
+                                  ? "Wallet Coin Top-up"
+                                  : b.type === "car"
+                                    ? b.carName
+                                    : `${b.hotelName || ""}${b.roomNumber ? " · Room " + b.roomNumber : ""}`}
                               </p>
                             </div>
                             {b.type === "car" && b.pickupLocation && (
@@ -1916,24 +2103,26 @@ const BookingsView = () => {
                                 </p>
                               </div>
                             )}
-                            <div>
-                              <span className="text-muted-foreground text-xs">
-                                {b.type === "car"
-                                  ? "Pickup → Return"
-                                  : "Check-in → Check-out"}
-                              </span>
-                              <p className="text-foreground">
-                                {startDate
-                                  ? new Date(startDate).toLocaleDateString()
-                                  : "—"}
-                                {endDate
-                                  ? " → " +
-                                    new Date(endDate).toLocaleDateString()
-                                  : ""}
-                                {(b.days || b.nights) &&
-                                  ` (${b.days || b.nights} ${b.type === "car" ? "day" : "night"}${(b.days || b.nights) > 1 ? "s" : ""})`}
-                              </p>
-                            </div>
+                            {b.type !== "coin_topup" && (
+                              <div>
+                                <span className="text-muted-foreground text-xs">
+                                  {b.type === "car"
+                                    ? "Pickup → Return"
+                                    : "Check-in → Check-out"}
+                                </span>
+                                <p className="text-foreground">
+                                  {startDate
+                                    ? new Date(startDate).toLocaleDateString()
+                                    : "—"}
+                                  {endDate
+                                    ? " → " +
+                                      new Date(endDate).toLocaleDateString()
+                                    : ""}
+                                  {(b.days || b.nights) &&
+                                    ` (${b.days || b.nights} ${b.type === "car" ? "day" : "night"}${(b.days || b.nights) > 1 ? "s" : ""})`}
+                                </p>
+                              </div>
+                            )}
                             <div>
                               <span className="text-muted-foreground text-xs">
                                 Payment
@@ -1945,7 +2134,17 @@ const BookingsView = () => {
                             </div>
                             <div>
                               <span className="text-muted-foreground text-xs">
-                                Booked On
+                                Transaction ID
+                              </span>
+                              <p className="font-mono text-foreground text-xs break-all">
+                                {b.transactionId || "—"}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground text-xs">
+                                {b.type === "coin_topup"
+                                  ? "Top-up Date"
+                                  : "Booked On"}
                               </span>
                               <p className="text-foreground">
                                 {new Date(b.createdAt).toLocaleString()}
@@ -2211,6 +2410,413 @@ const StaffView = () => {
           </Button>
         </form>
       </div>
+    </div>
+  );
+};
+
+// ─── MANUAL PAYMENTS VIEW ───────────────────────────────────────────────────
+
+const ManualPaymentsView = () => {
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState("pending");
+  const [selected, setSelected] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
+
+  useEffect(() => {
+    fetchPayments();
+  }, [filter]);
+
+  const fetchPayments = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get(
+        `/api/admin/manual-payments?status=${filter}`,
+      );
+      setPayments(response || []);
+    } catch (err) {
+      console.error("Failed to fetch payments:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirm = async (paymentId) => {
+    try {
+      await api.post(`/api/admin/manual-payments/${paymentId}/confirm`);
+      toast({ title: "Payment confirmed", duration: 2000 });
+      fetchPayments();
+      setSelected(null);
+    } catch (err) {
+      console.error("Failed to confirm:", err);
+    }
+  };
+
+  const handleReject = async (paymentId) => {
+    if (!rejectReason.trim()) {
+      alert("Please enter a rejection reason");
+      return;
+    }
+    try {
+      await api.post(`/api/admin/manual-payments/${paymentId}/reject`, {
+        reason: rejectReason,
+      });
+      alert("Payment rejected");
+      fetchPayments();
+      setSelected(null);
+      setRejectReason("");
+    } catch (err) {
+      console.error("Failed to reject:", err);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex gap-2 mb-6">
+        {["pending", "approved", "rejected"].map((status) => (
+          <Button
+            key={status}
+            onClick={() => setFilter(status)}
+            variant={filter === status ? "default" : "outline"}
+            className="capitalize"
+          >
+            {status}
+          </Button>
+        ))}
+      </div>
+
+      <div className="space-y-4">
+        {loading ? (
+          <p className="text-muted-foreground">Loading...</p>
+        ) : payments.length === 0 ? (
+          <p className="text-muted-foreground">No {filter} payments</p>
+        ) : (
+          payments.map((payment) => (
+            <div
+              key={payment._id}
+              className="rounded-lg border border-border bg-card p-4"
+            >
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">User</p>
+                  <p className="font-semibold">{payment.userName}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Amount</p>
+                  <p className="font-semibold">
+                    ৳{payment.totalAmount.toLocaleString()}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Method</p>
+                  <p className="font-semibold capitalize">
+                    {payment.paymentMethod}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    Transaction ID
+                  </p>
+                  <p className="font-mono text-sm">{payment.transactionId}</p>
+                </div>
+              </div>
+
+              {payment.status === "pending" && (
+                <div className="mt-4 flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => setSelected(payment._id)}
+                    className="flex-1"
+                  >
+                    <Eye className="h-4 w-4 mr-1" /> Review
+                  </Button>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Review Modal */}
+      {selected && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-card rounded-lg p-6 max-w-md w-full space-y-4">
+            <h3 className="font-semibold">Review Payment</h3>
+            <img
+              src={payments.find((p) => p._id === selected)?.screenshot}
+              alt="Payment proof"
+              className="w-full rounded-lg max-h-80 object-cover"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                onClick={() => handleConfirm(selected)}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <CheckCircle className="h-4 w-4 mr-1" /> Confirm
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setRejectReason("");
+                  // Show rejection form
+                }}
+              >
+                <XCircle className="h-4 w-4 mr-1" /> Reject
+              </Button>
+            </div>
+            {/* Rejection Reason Input */}
+            <div>
+              <Input
+                placeholder="Rejection reason..."
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                className="text-sm"
+              />
+              {rejectReason && (
+                <Button
+                  onClick={() => handleReject(selected)}
+                  variant="destructive"
+                  className="w-full mt-2"
+                >
+                  Submit Rejection
+                </Button>
+              )}
+            </div>
+            <Button
+              onClick={() => {
+                setSelected(null);
+                setRejectReason("");
+              }}
+              variant="outline"
+              className="w-full"
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── COIN TOPUPS VIEW ───────────────────────────────────────────────────
+
+const CoinTopupsView = () => {
+  const [topups, setTopups] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState("pending");
+  const [rejectReason, setRejectReason] = useState("");
+  const [selected, setSelected] = useState(null);
+
+  useEffect(() => {
+    fetchTopups();
+  }, [filter]);
+
+  const fetchTopups = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get(`/api/admin/coin-topups?status=${filter}`);
+      setTopups(response || []);
+    } catch (err) {
+      console.error("Failed to fetch topups:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirm = async (topupId) => {
+    try {
+      await api.post(`/api/admin/coin-topups/${topupId}/confirm`);
+      alert("Coin top-up approved!");
+      fetchTopups();
+      setSelected(null);
+    } catch (err) {
+      console.error("Failed to confirm:", err);
+    }
+  };
+
+  const handleReject = async (topupId) => {
+    if (!rejectReason.trim()) {
+      alert("Please enter a rejection reason");
+      return;
+    }
+    try {
+      await api.post(`/api/admin/coin-topups/${topupId}/reject`, {
+        reason: rejectReason,
+      });
+      alert("Top-up rejected");
+      fetchTopups();
+      setSelected(null);
+      setRejectReason("");
+    } catch (err) {
+      console.error("Failed to reject:", err);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex gap-2 mb-6">
+        {["pending", "approved", "rejected"].map((status) => (
+          <Button
+            key={status}
+            onClick={() => setFilter(status)}
+            variant={filter === status ? "default" : "outline"}
+            className="capitalize"
+          >
+            {status}
+          </Button>
+        ))}
+      </div>
+
+      <div className="space-y-4">
+        {loading ? (
+          <p className="text-muted-foreground">Loading...</p>
+        ) : topups.length === 0 ? (
+          <p className="text-muted-foreground">No {filter} top-ups</p>
+        ) : (
+          topups.map((topup) => (
+            <div
+              key={topup._id}
+              className="rounded-lg border border-border bg-card p-4"
+            >
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">User</p>
+                  <p className="font-semibold">{topup.userName}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Amount</p>
+                  <div className="flex items-center gap-1">
+                    <Coins className="h-4 w-4 text-primary" />
+                    <p className="font-semibold">{topup.amount}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Method</p>
+                  <p className="font-semibold capitalize">
+                    {topup.paymentMethod}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Status</p>
+                  <p className="font-semibold capitalize text-primary">
+                    {topup.status}
+                  </p>
+                </div>
+              </div>
+
+              {topup.status === "pending" && (
+                <div className="mt-4 flex gap-2">
+                  {topup.paymentMethod === "manual" && topup.screenshot && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSelected(topup._id)}
+                      className="flex-1"
+                    >
+                      <Eye className="h-4 w-4 mr-1" /> View Proof
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    onClick={() => handleConfirm(topup._id)}
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-1" /> Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => {
+                      setSelected(topup._id);
+                      setRejectReason("");
+                    }}
+                    className="flex-1"
+                  >
+                    <XCircle className="h-4 w-4 mr-1" /> Reject
+                  </Button>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Review/Reject Modal */}
+      {selected && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-card rounded-lg p-6 max-w-md w-full space-y-4">
+            <h3 className="font-semibold">
+              {rejectReason ? "Reject Top-up" : "Review Proof"}
+            </h3>
+
+            {!rejectReason &&
+              topups.find((t) => t._id === selected)?.screenshot && (
+                <img
+                  src={topups.find((t) => t._id === selected)?.screenshot}
+                  alt="Payment proof"
+                  className="w-full rounded-lg max-h-80 object-cover"
+                />
+              )}
+
+            {rejectReason ||
+            !topups.find((t) => t._id === selected)?.screenshot ? (
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Rejection Reason
+                </label>
+                <Input
+                  type="text"
+                  placeholder="Enter reason..."
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+            ) : null}
+
+            <div className="grid grid-cols-2 gap-2">
+              {rejectReason ? (
+                <>
+                  <Button
+                    variant="destructive"
+                    onClick={() => handleReject(selected)}
+                    className="col-span-2"
+                  >
+                    Submit Rejection
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    onClick={() => handleConfirm(selected)}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => setRejectReason("Pending reason")}
+                  >
+                    Reject
+                  </Button>
+                </>
+              )}
+            </div>
+
+            <Button
+              onClick={() => {
+                setSelected(null);
+                setRejectReason("");
+              }}
+              variant="outline"
+              className="w-full"
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

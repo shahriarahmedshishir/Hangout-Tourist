@@ -675,19 +675,20 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const pipeline = [];
+    // Get bookings
+    const bookingsPipeline = [];
 
     // Add computed startDate field (pickupDate for cars, checkIn for hotels)
-    pipeline.push({
+    bookingsPipeline.push({
       $addFields: {
         startDate: { $ifNull: ["$pickupDate", "$checkIn"] },
       },
     });
 
     // Build initial match
-    const match = { startDate: { $gte: today } };
-    if (type) match.type = type;
-    if (status) match.status = status;
+    const bookingsMatch = { startDate: { $gte: today } };
+    if (type && type !== "coin_topup") bookingsMatch.type = type;
+    if (status) bookingsMatch.status = status;
 
     // Date range filter (overrides the default today filter)
     if (dateFrom || dateTo) {
@@ -698,16 +699,16 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
         end.setHours(23, 59, 59, 999);
         dateFilter.$lte = end;
       }
-      match.startDate = dateFilter;
+      bookingsMatch.startDate = dateFilter;
     }
 
-    pipeline.push({ $match: match });
+    bookingsPipeline.push({ $match: bookingsMatch });
 
-    // Lookup user info
-    pipeline.push({
+    // Lookup user info for bookings
+    bookingsPipeline.push({
       $addFields: { userObjectId: { $toObjectId: "$userId" } },
     });
-    pipeline.push({
+    bookingsPipeline.push({
       $lookup: {
         from: "users",
         localField: "userObjectId",
@@ -715,7 +716,7 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
         as: "userInfo",
       },
     });
-    pipeline.push({
+    bookingsPipeline.push({
       $addFields: {
         userName: {
           $ifNull: [{ $arrayElemAt: ["$userInfo.name", 0] }, "Unknown"],
@@ -726,47 +727,115 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
       },
     });
 
-    // Search by user name or item name
+    // Search by user name or item name for bookings
+    const searchFilters = [];
     if (search) {
-      pipeline.push({
-        $match: {
-          $or: [
-            { userName: { $regex: search, $options: "i" } },
-            { carName: { $regex: search, $options: "i" } },
-            { hotelName: { $regex: search, $options: "i" } },
-          ],
-        },
-      });
+      searchFilters.push({ userName: { $regex: search, $options: "i" } });
+      searchFilters.push({ carName: { $regex: search, $options: "i" } });
+      searchFilters.push({ hotelName: { $regex: search, $options: "i" } });
     }
 
-    // Sort: ascending by startDate (today first, then future)
-    pipeline.push({ $sort: { startDate: 1 } });
-
-    // Remove internals
-    pipeline.push({ $project: { userInfo: 0, userObjectId: 0 } });
-
-    // Count before pagination
-    const countPipeline = [...pipeline, { $count: "total" }];
-    const countResult = await db
-      .collection("bookings")
-      .aggregate(countPipeline)
-      .toArray();
-    const total = countResult[0]?.total || 0;
-
-    // Paginate
-    pipeline.push({ $skip: (parseInt(page) - 1) * parseInt(limit) });
-    pipeline.push({ $limit: parseInt(limit) });
+    // Remove internals from bookings
+    bookingsPipeline.push({ $project: { userInfo: 0, userObjectId: 0 } });
 
     const bookings = await db
       .collection("bookings")
-      .aggregate(pipeline)
+      .aggregate(bookingsPipeline)
       .toArray();
 
+    // Get coin topups if type filter is not set or is coin_topup
+    let coinTopups = [];
+    if (!type || type === "coin_topup") {
+      const coinMatch = {};
+      if (status) coinMatch.status = status;
+
+      if (dateFrom || dateTo) {
+        const dateFilter = {};
+        if (dateFrom) dateFilter.$gte = new Date(dateFrom);
+        if (dateTo) {
+          const end = new Date(dateTo);
+          end.setHours(23, 59, 59, 999);
+          dateFilter.$lte = end;
+        }
+        coinMatch.submittedAt = dateFilter;
+      }
+
+      const coinRequests = await db
+        .collection("coin_topup_requests")
+        .find(coinMatch)
+        .toArray();
+
+      // Enrich coin topups with user info and format to match bookings schema
+      coinTopups = await Promise.all(
+        coinRequests.map(async (cr) => {
+          const user = await db
+            .collection("users")
+            .findOne({ _id: new ObjectId(cr.userId) });
+          return {
+            _id: cr._id,
+            type: "coin_topup",
+            userId: cr.userId,
+            userName: user?.name || "Unknown",
+            userEmail: user?.email || "",
+            amount: cr.amount,
+            totalAmount: cr.amount,
+            status: cr.status,
+            transactionId: cr.transactionId,
+            paymentMethod: cr.paymentMethod,
+            createdAt: cr.submittedAt,
+          };
+        }),
+      );
+
+      // Apply search filter to coin topups
+      if (search) {
+        const q = search.toLowerCase();
+        coinTopups = coinTopups.filter(
+          (ct) =>
+            ct.userName?.toLowerCase().includes(q) ||
+            ct.userEmail?.toLowerCase().includes(q) ||
+            "coin topup".includes(q),
+        );
+      }
+    }
+
+    // Merge and sort
+    let allItems = [...bookings, ...coinTopups];
+
+    // Filter by search if provided
+    if (search) {
+      const q = search.toLowerCase();
+      allItems = allItems.filter(
+        (item) =>
+          item.userName?.toLowerCase().includes(q) ||
+          item.carName?.toLowerCase().includes(q) ||
+          item.hotelName?.toLowerCase().includes(q) ||
+          (item.type === "coin_topup" && "coin topup".includes(q)) ||
+          new Date(item.createdAt).toLocaleDateString().includes(q),
+      );
+    }
+
+    // Sort by createdAt (or startDate for bookings)
+    allItems.sort((a, b) => {
+      const dateA = a.startDate || a.createdAt;
+      const dateB = b.startDate || b.createdAt;
+      return new Date(dateA) - new Date(dateB);
+    });
+
+    // Paginate
+    const total = allItems.length;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const paginatedItems = allItems.slice(
+      (pageNum - 1) * limitNum,
+      pageNum * limitNum,
+    );
+
     res.json({
-      bookings,
+      bookings: paginatedItems,
       total,
-      page: parseInt(page),
-      pages: Math.ceil(total / parseInt(limit)),
+      page: pageNum,
+      pages: Math.ceil(total / limitNum),
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -898,30 +967,428 @@ router.get("/users", auth, role("admin"), async (req, res) => {
 router.get("/stats", auth, role("admin"), async (req, res) => {
   try {
     const db = await getDb();
-    const [totalBookings, totalHotels, totalCars, totalUsers, revenueResult] =
-      await Promise.all([
-        db.collection("bookings").countDocuments(),
-        db.collection("hotels").countDocuments({ isActive: { $ne: false } }),
-        db.collection("cars").countDocuments({ isActive: { $ne: false } }),
-        db.collection("users").countDocuments({ role: "user" }),
-        db
-          .collection("bookings")
-          .aggregate([
-            { $match: { status: "confirmed" } },
-            { $group: { _id: null, total: { $sum: "$totalAmount" } } },
-          ])
-          .toArray(),
-      ]);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const [
+      totalBookings,
+      totalHotels,
+      totalCars,
+      totalUsers,
+      revenueResult,
+      refundedResult,
+      todayRevenueResult,
+      todayCanceledResult,
+      coinTopupRevenueResult,
+      todayCoinTopupRevenueResult,
+    ] = await Promise.all([
+      db.collection("bookings").countDocuments(),
+      db.collection("hotels").countDocuments({ isActive: { $ne: false } }),
+      db.collection("cars").countDocuments({ isActive: { $ne: false } }),
+      db.collection("users").countDocuments({ role: "user" }),
+      // Total revenue from confirmed bookings (EXCLUDE coin-paid bookings to avoid double counting)
+      db
+        .collection("bookings")
+        .aggregate([
+          {
+            $match: {
+              status: "confirmed",
+              paidWithCoins: { $ne: true }, // Exclude bookings paid with coins
+            },
+          },
+          { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+        ])
+        .toArray(),
+      // Total refunded amount (EXCLUDE coin-paid bookings)
+      db
+        .collection("bookings")
+        .aggregate([
+          {
+            $match: {
+              status: "confirmed",
+              refundStatus: "completed",
+              paidWithCoins: { $ne: true }, // Exclude coin-paid bookings
+            },
+          },
+          { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+        ])
+        .toArray(),
+      // Today's revenue (EXCLUDE coin-paid bookings)
+      db
+        .collection("bookings")
+        .aggregate([
+          {
+            $match: {
+              status: "confirmed",
+              paidAt: { $gte: today, $lt: tomorrow },
+              paidWithCoins: { $ne: true }, // Exclude coin-paid bookings
+            },
+          },
+          { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+        ])
+        .toArray(),
+      // Today's canceled bookings
+      db.collection("bookings").countDocuments({
+        status: "cancelled",
+        createdAt: { $gte: today, $lt: tomorrow },
+      }),
+      // Total revenue from coin top-ups
+      db
+        .collection("revenue")
+        .aggregate([
+          { $match: { type: "coin_topup" } },
+          { $group: { _id: null, total: { $sum: "$amount" } } },
+        ])
+        .toArray(),
+      // Today's coin top-up revenue
+      db
+        .collection("revenue")
+        .aggregate([
+          {
+            $match: {
+              type: "coin_topup",
+              approvedAt: { $gte: today, $lt: tomorrow },
+            },
+          },
+          { $group: { _id: null, total: { $sum: "$amount" } } },
+        ])
+        .toArray(),
+    ]);
+
+    const bookingRevenue = revenueResult[0]?.total || 0;
+    const refundedTotal = refundedResult[0]?.total || 0;
+    const coinTopupRevenue = coinTopupRevenueResult[0]?.total || 0;
+    const totalRevenue = bookingRevenue + coinTopupRevenue;
+    const netRevenue = totalRevenue - refundedTotal;
+    const todayBookingRevenue = todayRevenueResult[0]?.total || 0;
+    const todayCoinTopupRevenue = todayCoinTopupRevenueResult[0]?.total || 0;
+    const todayRevenue = todayBookingRevenue + todayCoinTopupRevenue;
+
     res.json({
       totalBookings,
       totalHotels,
       totalCars,
       totalUsers,
-      totalRevenue: revenueResult[0]?.total || 0,
+      totalRevenue: netRevenue,
+      refundedTotal,
+      todayRevenue,
+      todayCanceled: todayCanceledResult,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
+
+// ─── MANUAL PAYMENTS ──────────────────────────────────────────────────────────
+
+// GET /api/admin/manual-payments — List all pending manual payments
+router.get("/manual-payments", auth, role("admin"), async (req, res) => {
+  try {
+    const db = await getDb();
+    const { status = "pending" } = req.query;
+
+    const query = status ? { status } : {};
+    const payments = await db
+      .collection("manual_payments")
+      .find(query)
+      .sort({ submittedAt: -1 })
+      .toArray();
+
+    // Enrich with user and booking details
+    const enriched = await Promise.all(
+      payments.map(async (payment) => {
+        const user = await db
+          .collection("users")
+          .findOne({ _id: new ObjectId(payment.userId) });
+        const booking = await db
+          .collection("bookings")
+          .findOne({ _id: new ObjectId(payment.bookingId) });
+
+        return {
+          ...payment,
+          userName: user?.name,
+          userEmail: user?.email,
+          bookingDetails: booking,
+        };
+      }),
+    );
+
+    res.json(enriched);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/manual-payments/:id/confirm — Confirm manual payment
+router.post(
+  "/manual-payments/:id/confirm",
+  auth,
+  role("admin"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const db = await getDb();
+
+      const payment = await db.collection("manual_payments").findOne({
+        _id: new ObjectId(id),
+      });
+
+      if (!payment) {
+        return res.status(404).json({ message: "Payment not found" });
+      }
+
+      if (payment.status !== "pending") {
+        return res.status(409).json({ message: "Payment already processed" });
+      }
+
+      // Update manual payment status
+      await db.collection("manual_payments").updateOne(
+        { _id: payment._id },
+        {
+          $set: {
+            status: "approved",
+            reviewedAt: new Date(),
+            reviewedBy: req.user.id,
+          },
+        },
+      );
+
+      // Update booking to confirmed
+      const now = new Date();
+      await db.collection("bookings").updateOne(
+        { _id: new ObjectId(payment.bookingId) },
+        {
+          $set: {
+            status: "confirmed",
+            paidAt: now,
+          },
+        },
+      );
+
+      res.json({ message: "Manual payment approved and booking confirmed" });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
+
+// POST /api/admin/manual-payments/:id/reject — Reject manual payment
+router.post(
+  "/manual-payments/:id/reject",
+  auth,
+  role("admin"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+
+      const db = await getDb();
+
+      const payment = await db.collection("manual_payments").findOne({
+        _id: new ObjectId(id),
+      });
+
+      if (!payment) {
+        return res.status(404).json({ message: "Payment not found" });
+      }
+
+      if (payment.status !== "pending") {
+        return res.status(409).json({ message: "Payment already processed" });
+      }
+
+      // Update manual payment status
+      await db.collection("manual_payments").updateOne(
+        { _id: payment._id },
+        {
+          $set: {
+            status: "rejected",
+            rejectionReason: reason || "Admin rejected the payment",
+            reviewedAt: new Date(),
+            reviewedBy: req.user.id,
+          },
+        },
+      );
+
+      // Update booking status to payment_failed to allow resubmission
+      await db.collection("bookings").updateOne(
+        { _id: new ObjectId(payment.bookingId) },
+        {
+          $set: {
+            status: "payment_failed",
+            paymentFailureReason: "Manual payment rejected",
+          },
+        },
+      );
+
+      res.json({
+        message: "Manual payment rejected",
+        rejectionReason: reason,
+      });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
+
+// ─── COIN TOP-UPS ──────────────────────────────────────────────────────────
+
+// GET /api/admin/coin-topups — List all pending coin top-up requests
+router.get("/coin-topups", auth, role("admin"), async (req, res) => {
+  try {
+    const db = await getDb();
+    const { status = "pending" } = req.query;
+
+    const query = status ? { status } : {};
+    const topups = await db
+      .collection("coin_topup_requests")
+      .find(query)
+      .sort({ submittedAt: -1 })
+      .toArray();
+
+    // Enrich with user details
+    const enriched = await Promise.all(
+      topups.map(async (topup) => {
+        const user = await db
+          .collection("users")
+          .findOne({ _id: new ObjectId(topup.userId) });
+
+        return {
+          ...topup,
+          userName: user?.name,
+          userEmail: user?.email,
+        };
+      }),
+    );
+
+    res.json(enriched);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/coin-topups/:id/confirm — Confirm coin top-up
+router.post(
+  "/coin-topups/:id/confirm",
+  auth,
+  role("admin"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const db = await getDb();
+
+      const topup = await db.collection("coin_topup_requests").findOne({
+        _id: new ObjectId(id),
+      });
+
+      if (!topup) {
+        return res.status(404).json({ message: "Top-up request not found" });
+      }
+
+      if (topup.status !== "pending") {
+        return res.status(409).json({ message: "Top-up already processed" });
+      }
+
+      // Update top-up request status
+      await db.collection("coin_topup_requests").updateOne(
+        { _id: topup._id },
+        {
+          $set: {
+            status: "approved",
+            reviewedAt: new Date(),
+            reviewedBy: req.user.id,
+          },
+        },
+      );
+
+      // Add coins to user's ledger
+      await db.collection("coin_ledger").updateOne(
+        { userId: topup.userId },
+        {
+          $inc: { coins: topup.amount },
+          $push: {
+            transactions: {
+              type: "topup",
+              topupRequestId: topup._id.toString(),
+              amount: topup.amount,
+              timestamp: new Date(),
+              description: `Top-up via ${topup.paymentMethod}`,
+              approvedBy: req.user.id,
+            },
+          },
+        },
+        { upsert: true },
+      );
+
+      // Track revenue
+      await db.collection("revenue").insertOne({
+        amount: topup.amount,
+        paymentMethod: topup.paymentMethod,
+        type: "coin_topup",
+        userId: topup.userId,
+        transactionId: topup.transactionId,
+        topupRequestId: topup._id,
+        approvedAt: new Date(),
+        approvedBy: req.user.id,
+        createdAt: new Date(),
+      });
+
+      res.json({
+        message: "Coin top-up approved",
+        coinsAdded: topup.amount,
+      });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
+
+// POST /api/admin/coin-topups/:id/reject — Reject coin top-up
+router.post(
+  "/coin-topups/:id/reject",
+  auth,
+  role("admin"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+
+      const db = await getDb();
+
+      const topup = await db.collection("coin_topup_requests").findOne({
+        _id: new ObjectId(id),
+      });
+
+      if (!topup) {
+        return res.status(404).json({ message: "Top-up request not found" });
+      }
+
+      if (topup.status !== "pending") {
+        return res.status(409).json({ message: "Top-up already processed" });
+      }
+
+      // Update top-up request status
+      await db.collection("coin_topup_requests").updateOne(
+        { _id: topup._id },
+        {
+          $set: {
+            status: "rejected",
+            rejectionReason: reason || "Admin rejected the top-up",
+            reviewedAt: new Date(),
+            reviewedBy: req.user.id,
+          },
+        },
+      );
+
+      res.json({
+        message: "Coin top-up rejected",
+        rejectionReason: reason,
+      });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
 
 module.exports = router;

@@ -5,9 +5,12 @@ import Footer from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { api, imgUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import WalletCard from "@/components/user/WalletCard";
+import CoinTopupCard from "@/components/user/CoinTopupCard";
 import {
   Hotel,
   Car,
+  Coins,
   RefreshCw,
   CheckCircle2,
   XCircle,
@@ -165,8 +168,12 @@ const UserDashboard = () => {
   const [tab, setTab] = useState("hotel");
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      navigate("/login");
+    if (!authLoading) {
+      if (!user) {
+        navigate("/login");
+      } else if (user.role === "hotel_staff") {
+        navigate("/staff", { replace: true });
+      }
     }
   }, [user, authLoading, navigate]);
 
@@ -292,6 +299,20 @@ const UserDashboard = () => {
               <div className="text-xs text-muted-foreground">{s.label}</div>
             </div>
           ))}
+        </div>
+
+        {/* Wallet Section */}
+        <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="md:col-span-2">
+            <WalletCard balance={user?.walletBalance || 0} />
+          </div>
+          <div>
+            <CoinTopupCard
+              onTopupSuccess={() => {
+                // Refresh user data or wallet balance
+              }}
+            />
+          </div>
         </div>
 
         {/* Tabs */}

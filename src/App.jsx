@@ -16,6 +16,7 @@ import Cars from "./pages/Cars";
 import CarBooking from "./pages/CarBooking";
 import Login from "./pages/Login";
 import Admin from "./pages/Admin";
+import Profile from "./pages/Profile";
 import UserDashboard from "./pages/UserDashboard";
 import StaffDashboard from "./pages/StaffDashboard";
 import NotFound from "./pages/NotFound";
@@ -44,7 +45,9 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
+        <BrowserRouter
+          future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+        >
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/flights" element={<Flights />} />
@@ -56,6 +59,12 @@ const App = () => (
             <Route path="/cars" element={<Cars />} />
             <Route path="/booking/car" element={<CarBooking />} />
             <Route path="/login" element={<Login />} />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute roles={["user"]} element={<Profile />} />
+              }
+            />
             <Route
               path="/admin"
               element={<ProtectedRoute roles={["admin"]} element={<Admin />} />}
