@@ -41,7 +41,7 @@ export default function HotelsSection() {
   return (
     <section className="py-16">
       <div className="container">
-        <div className="mb-8 flex items-end justify-between">
+        <div className="mb-8 flex flex-col items-center justify-center text-center">
           <div>
             <h2 className="font-heading text-2xl font-bold text-foreground md:text-3xl">
               Hotels & Stays
@@ -50,7 +50,7 @@ export default function HotelsSection() {
               Find the perfect place to stay
             </p>
           </div>
-          <Link to="/hotels">
+          <Link to="/hotels" className="mt-4">
             <Button variant="outline" size="sm" className="gap-1">
               View All <ChevronRight className="h-4 w-4" />
             </Button>

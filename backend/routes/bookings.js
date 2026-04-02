@@ -11,6 +11,13 @@ function isValidObjectId(id) {
 // POST /api/bookings/hotel — book one or more rooms
 router.post("/hotel", auth, async (req, res) => {
   try {
+    // Prevent staff and admin from booking
+    if (req.user.role === "hotel_staff" || req.user.role === "admin") {
+      return res
+        .status(403)
+        .json({ message: "Staff and admin accounts cannot book hotels" });
+    }
+
     const {
       rooms: roomIds,
       roomId,
@@ -145,6 +152,13 @@ router.post("/hotel", auth, async (req, res) => {
 // POST /api/bookings/car — book a car
 router.post("/car", auth, async (req, res) => {
   try {
+    // Prevent staff and admin from booking
+    if (req.user.role === "hotel_staff" || req.user.role === "admin") {
+      return res
+        .status(403)
+        .json({ message: "Staff and admin accounts cannot book cars" });
+    }
+
     const { carId, pickupDate, returnDate, pickupLocation, contactNumber } =
       req.body;
     if (!carId || !pickupDate || !returnDate) {

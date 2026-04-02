@@ -110,7 +110,17 @@ router.get("/me", auth, async (req, res) => {
         { projection: { password: 0 } },
       );
     if (!user) return res.status(404).json({ message: "User not found" });
-    res.json(user);
+
+    // Fetch wallet balance from coin_ledger
+    const wallet = await db
+      .collection("coin_ledger")
+      .findOne({ userId: req.user.id });
+
+    const userData = {
+      ...user,
+      walletBalance: wallet?.coins || 0,
+    };
+    res.json(userData);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
