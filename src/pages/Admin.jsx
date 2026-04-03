@@ -25,11 +25,13 @@ import {
   Check,
   ImageIcon,
   CalendarRange,
+  Calendar,
   CreditCard,
   Coins,
   Eye,
   CheckCircle,
   XCircle,
+  RotateCcw,
 } from "lucide-react";
 import { api, imgUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -39,11 +41,14 @@ const sidebarItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "hotels", label: "Hotels", icon: Building2 },
   { id: "cars", label: "Cars", icon: Car },
+  { id: "todays-bookings", label: "Today's Bookings", icon: CalendarRange },
   { id: "bookings", label: "Bookings", icon: ShoppingCart },
   { id: "users", label: "Users", icon: Users },
   { id: "staff", label: "Add Staff", icon: UserPlus },
   { id: "manual-payments", label: "Manual Payments", icon: CreditCard },
   { id: "coin-topups", label: "Coin Top-ups", icon: Coins },
+  { id: "coins-management", label: "Coins Management", icon: Coins },
+  { id: "payment-history", label: "Payment History", icon: CreditCard },
 ];
 
 const STATUS_COLORS = {
@@ -138,11 +143,14 @@ const Admin = () => {
           {view === "dashboard" && <DashboardView />}
           {view === "hotels" && <HotelsView />}
           {view === "cars" && <CarsView />}
+          {view === "todays-bookings" && <TodaysBookingsView />}
           {view === "bookings" && <BookingsView />}
           {view === "users" && <UsersView />}
           {view === "staff" && <StaffView />}
           {view === "manual-payments" && <ManualPaymentsView />}
           {view === "coin-topups" && <CoinTopupsView />}
+          {view === "coins-management" && <CoinsManagementView />}
+          {view === "payment-history" && <PaymentHistoryView />}
         </main>
       </div>
     </div>
@@ -1691,21 +1699,35 @@ const BookingsView = () => {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refundForm, setRefundForm] = useState(null);
+  const [rescheduleModal, setRescheduleModal] = useState(null);
+  const [newCheckIn, setNewCheckIn] = useState("");
+  const [newCheckOut, setNewCheckOut] = useState("");
+  const [newPickupDate, setNewPickupDate] = useState("");
+  const [newReturnDate, setNewReturnDate] = useState("");
+  const [rescheduling, setRescheduling] = useState(false);
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [expanded, setExpanded] = useState(null);
+  const [viewMode, setViewMode] = useState("upcoming"); // "upcoming" (default: today+future), "past", "all"
+  const [dateFromFilter, setDateFromFilter] = useState("");
+  const [dateToFilter, setDateToFilter] = useState("");
 
   const load = () => {
     setLoading(true);
+    // Build query params
+    const params = new URLSearchParams({ limit: 100, viewMode });
+    if (dateFromFilter) params.append("dateFrom", dateFromFilter);
+    if (dateToFilter) params.append("dateTo", dateToFilter);
+
     api
-      .get("/api/admin/bookings?limit=100")
+      .get(`/api/admin/bookings?${params.toString()}`)
       .then((data) => setBookings(data.bookings || []))
       .catch(() => {})
       .finally(() => setLoading(false));
   };
   useEffect(() => {
     load();
-  }, []);
+  }, [viewMode, dateFromFilter, dateToFilter]);
 
   const handleCancel = async (id) => {
     if (!confirm("Cancel this booking and initiate refund?")) return;
@@ -1750,15 +1772,85 @@ const BookingsView = () => {
     }
   };
 
+  const handleRefundCoinPaidBooking = async (id, amount) => {
+    const reason = prompt(
+      `Refund ${amount} coins for this booking? Enter reason:`,
+    );
+    if (!reason) return;
+    try {
+      await api.post(`/api/admin/bookings/${id}/refund-coins`, { reason });
+      alert("Booking refunded! Coins returned to user.");
+      load();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleRescheduleSubmit = async (e) => {
+    e.preventDefault();
+    if (!rescheduleModal) return;
+
+    const payload = {
+      type: rescheduleModal.type,
+    };
+
+    if (rescheduleModal.type === "hotel") {
+      if (!newCheckIn || !newCheckOut) {
+        alert("Please enter both check-in and check-out dates");
+        return;
+      }
+      payload.checkIn = newCheckIn;
+      payload.checkOut = newCheckOut;
+    } else if (rescheduleModal.type === "car") {
+      if (!newPickupDate || !newReturnDate) {
+        alert("Please enter both pickup and return dates");
+        return;
+      }
+      payload.pickupDate = newPickupDate;
+      payload.returnDate = newReturnDate;
+    }
+
+    setRescheduling(true);
+    try {
+      await api.patch(
+        `/api/admin/bookings/${rescheduleModal._id}/reschedule`,
+        payload,
+      );
+      alert("Booking rescheduled successfully!");
+      setRescheduleModal(null);
+      setNewCheckIn("");
+      setNewCheckOut("");
+      setNewPickupDate("");
+      setNewReturnDate("");
+      load();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setRescheduling(false);
+    }
+  };
+
+  // Helper function to format date as dd/mm/yyyy
+  const formatDate = (dateString) => {
+    if (!dateString) return "—";
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
   const filtered = bookings.filter((b) => {
     const q = search.toLowerCase();
     const matchesSearch =
       !search ||
       b.userName?.toLowerCase().includes(q) ||
+      b.userEmail?.toLowerCase().includes(q) ||
       b.carName?.toLowerCase().includes(q) ||
       b.hotelName?.toLowerCase().includes(q) ||
+      b.transactionId?.toLowerCase().includes(q) ||
       (b.type === "coin_topup" && "coin topup".includes(q)) ||
-      new Date(b.createdAt).toLocaleDateString().includes(q);
+      formatDate(b.createdAt).includes(q);
 
     // For coin_topup, don't filter by date since they don't have startDate
     if (b.type === "coin_topup") {
@@ -1779,6 +1871,40 @@ const BookingsView = () => {
         Bookings
       </h2>
 
+      {/* View Mode Tabs */}
+      <div className="mb-5 flex gap-2 border-b border-border">
+        <button
+          onClick={() => setViewMode("upcoming")}
+          className={`px-3 py-2 font-medium transition-colors ${
+            viewMode === "upcoming"
+              ? "border-b-2 border-primary text-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Today & Future
+        </button>
+        <button
+          onClick={() => setViewMode("past")}
+          className={`px-3 py-2 font-medium transition-colors ${
+            viewMode === "past"
+              ? "border-b-2 border-primary text-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Past Bookings
+        </button>
+        <button
+          onClick={() => setViewMode("all")}
+          className={`px-3 py-2 font-medium transition-colors ${
+            viewMode === "all"
+              ? "border-b-2 border-primary text-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          All Bookings
+        </button>
+      </div>
+
       {/* Filters */}
       <div className="mb-5 flex flex-wrap gap-3">
         <Input
@@ -1794,19 +1920,122 @@ const BookingsView = () => {
           className="bg-muted w-44"
           title="Filter by start date"
         />
-        {(search || dateFilter) && (
+        {/* Date Range Filters */}
+        <Input
+          type="date"
+          value={dateFromFilter}
+          onChange={(e) => setDateFromFilter(e.target.value)}
+          className="bg-muted w-40"
+          title="From date (dd/mm/yyyy)"
+          placeholder="From"
+        />
+        <Input
+          type="date"
+          value={dateToFilter}
+          onChange={(e) => setDateToFilter(e.target.value)}
+          className="bg-muted w-40"
+          title="To date (dd/mm/yyyy)"
+          placeholder="To"
+        />
+        {(search || dateFilter || dateFromFilter || dateToFilter) && (
           <Button
             variant="outline"
             size="sm"
             onClick={() => {
               setSearch("");
               setDateFilter("");
+              setDateFromFilter("");
+              setDateToFilter("");
             }}
           >
             Clear
           </Button>
         )}
       </div>
+
+      {rescheduleModal && (
+        <div className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-card">
+          <h3 className="mb-4 font-heading font-bold text-foreground">
+            Reschedule Booking — {rescheduleModal._id.slice(-8)}
+          </h3>
+          <form
+            onSubmit={handleRescheduleSubmit}
+            className="grid gap-3 sm:grid-cols-2"
+          >
+            {rescheduleModal.type === "hotel" ? (
+              <>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">
+                    New Check-in *
+                  </label>
+                  <input
+                    type="date"
+                    value={newCheckIn}
+                    onChange={(e) => setNewCheckIn(e.target.value)}
+                    required
+                    className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">
+                    New Check-out *
+                  </label>
+                  <input
+                    type="date"
+                    value={newCheckOut}
+                    onChange={(e) => setNewCheckOut(e.target.value)}
+                    required
+                    className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">
+                    New Pickup Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={newPickupDate}
+                    onChange={(e) => setNewPickupDate(e.target.value)}
+                    required
+                    className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">
+                    New Return Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={newReturnDate}
+                    onChange={(e) => setNewReturnDate(e.target.value)}
+                    required
+                    className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
+                  />
+                </div>
+              </>
+            )}
+            <div className="sm:col-span-2 flex gap-2">
+              <Button
+                type="submit"
+                disabled={rescheduling}
+                className="bg-gradient-primary text-primary-foreground"
+              >
+                {rescheduling ? "Rescheduling..." : "Confirm Reschedule"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRescheduleModal(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {refundForm && (
         <div className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-card">
@@ -1947,12 +2176,12 @@ const BookingsView = () => {
                       </td>
                       <td className="px-4 py-3 text-muted-foreground text-xs">
                         {b.type === "coin_topup"
-                          ? new Date(b.createdAt).toLocaleDateString()
+                          ? formatDate(b.createdAt)
                           : startDate
-                            ? new Date(startDate).toLocaleDateString()
+                            ? formatDate(startDate)
                             : "—"}
                         {endDate && b.type !== "coin_topup"
-                          ? " → " + new Date(endDate).toLocaleDateString()
+                          ? " → " + formatDate(endDate)
                           : ""}
                       </td>
                       <td className="px-4 py-3 font-medium text-foreground">
@@ -1980,6 +2209,28 @@ const BookingsView = () => {
                           onClick={(e) => e.stopPropagation()}
                         >
                           {b.type !== "coin_topup" &&
+                            b.status !== "cancelled" &&
+                            viewMode === "upcoming" && (
+                              <button
+                                title="Reschedule booking"
+                                className="rounded-lg p-1.5 text-muted-foreground hover:bg-info/10 hover:text-info transition-colors"
+                                onClick={() => {
+                                  setRescheduleModal({
+                                    _id: b._id,
+                                    type: b.type,
+                                    currentStartDate: b.pickupDate || b.checkIn,
+                                    currentEndDate: b.returnDate || b.checkOut,
+                                  });
+                                  setNewCheckIn(b.checkIn || "");
+                                  setNewCheckOut(b.checkOut || "");
+                                  setNewPickupDate(b.pickupDate || "");
+                                  setNewReturnDate(b.returnDate || "");
+                                }}
+                              >
+                                <Calendar className="h-4 w-4" />
+                              </button>
+                            )}
+                          {b.type !== "coin_topup" &&
                             b.status !== "cancelled" && (
                               <button
                                 title="Cancel booking"
@@ -1987,6 +2238,22 @@ const BookingsView = () => {
                                 onClick={() => handleCancel(b._id)}
                               >
                                 <X className="h-4 w-4" />
+                              </button>
+                            )}
+                          {b.type !== "coin_topup" &&
+                            b.paidWithCoins === true &&
+                            b.status !== "refunded" && (
+                              <button
+                                title="Refund coins to user"
+                                className="rounded-lg p-1.5 text-muted-foreground hover:bg-warning/10 hover:text-warning transition-colors"
+                                onClick={() =>
+                                  handleRefundCoinPaidBooking(
+                                    b._id,
+                                    b.totalAmount,
+                                  )
+                                }
+                              >
+                                <RotateCcw className="h-4 w-4" />
                               </button>
                             )}
                           {b.type !== "coin_topup" &&
@@ -2817,6 +3084,802 @@ const CoinTopupsView = () => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+// ─── COINS MANAGEMENT ─────────────────────────────────────────────────────────
+const CoinsManagementView = () => {
+  const [searchEmail, setSearchEmail] = useState("");
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const handleSearchUser = async () => {
+    if (!searchEmail.trim()) {
+      setErrorMessage("Please enter an email");
+      return;
+    }
+
+    setSearching(true);
+    setErrorMessage("");
+    try {
+      const response = await api.get("/api/admin/search-user", {
+        params: { email: searchEmail.trim() },
+      });
+
+      if (response.found) {
+        setSelectedUser(response);
+      } else {
+        setErrorMessage("User not found");
+        setSelectedUser(null);
+      }
+    } catch (err) {
+      console.error("Search error:", err);
+      const errorMsg = err.message || "Error searching user";
+      setErrorMessage(errorMsg);
+      setSelectedUser(null);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleAddCoins = async (e) => {
+    e.preventDefault();
+
+    if (!selectedUser?.user?.email || !amount || !reason) {
+      setErrorMessage("All fields required");
+      return;
+    }
+
+    if (parseInt(amount) <= 0) {
+      setErrorMessage("Amount must be greater than 0");
+      return;
+    }
+
+    if (!selectedUser.canReceiveCoins) {
+      setErrorMessage(`Cannot add coins to ${selectedUser.user.role}`);
+      return;
+    }
+
+    setLoading(true);
+    setErrorMessage("");
+    try {
+      const response = await api.post("/api/admin/add-coins", {
+        email: selectedUser.user.email,
+        amount: parseInt(amount),
+        reason,
+      });
+
+      setSuccessMessage(
+        `✓ Added ${amount} coins to ${response.data.user.name} (${response.data.user.email})`,
+      );
+
+      // Reset form
+      setSearchEmail("");
+      setSelectedUser(null);
+      setAmount("");
+      setReason("");
+      setTimeout(() => setSuccessMessage(""), 4000);
+    } catch (err) {
+      setErrorMessage(err.response?.data?.message || "Error adding coins");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedUser(null);
+    setAmount("");
+    setReason("");
+    setErrorMessage("");
+  };
+
+  return (
+    <div>
+      <h2 className="mb-6 font-heading text-lg font-bold text-foreground">
+        Coins Management
+      </h2>
+
+      <div className="rounded-2xl border border-border bg-card p-6 shadow-card max-w-2xl">
+        <h3 className="mb-6 font-heading font-bold text-foreground">
+          Add Coins to User
+        </h3>
+
+        {successMessage && (
+          <div className="mb-4 rounded-lg bg-success/10 p-3 text-sm text-success font-medium flex items-center gap-2">
+            <CheckCircle className="h-4 w-4" />
+            {successMessage}
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive font-medium flex items-center gap-2">
+            <XCircle className="h-4 w-4" />
+            {errorMessage}
+          </div>
+        )}
+
+        {/* Step 1: Search User */}
+        <div className="mb-6 pb-6 border-b border-border">
+          <h4 className="mb-3 font-medium text-foreground">
+            Step 1: Search User by Email
+          </h4>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Enter user email (e.g. john@example.com)"
+              value={searchEmail}
+              onChange={(e) => setSearchEmail(e.target.value)}
+              className="bg-muted flex-1"
+              disabled={searching || !!selectedUser}
+              onKeyPress={(e) => e.key === "Enter" && handleSearchUser()}
+            />
+            <Button
+              onClick={handleSearchUser}
+              disabled={searching || !searchEmail.trim() || !!selectedUser}
+              className="bg-gradient-primary text-primary-foreground"
+            >
+              {searching ? "Searching..." : "Search"}
+            </Button>
+          </div>
+        </div>
+
+        {/* Step 2: User Selection */}
+        {selectedUser && (
+          <div className="mb-6 pb-6 border-b border-border">
+            <h4 className="mb-3 font-medium text-foreground">
+              Step 2: Selected User
+            </h4>
+            <div className="rounded-lg bg-muted/50 p-4 space-y-3">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground text-xs">Name</p>
+                  <p className="font-medium">{selectedUser.user.name}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Email</p>
+                  <p className="font-medium">{selectedUser.user.email}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Role</p>
+                  <p className="font-medium capitalize">
+                    {selectedUser.user.role}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">
+                    Current Balance
+                  </p>
+                  <p className="font-medium flex items-center gap-1">
+                    <Coins className="h-4 w-4" />
+                    {selectedUser.currentBalance}
+                  </p>
+                </div>
+              </div>
+
+              {!selectedUser.canReceiveCoins && (
+                <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive font-medium flex items-center gap-2">
+                  <XCircle className="h-4 w-4" />
+                  Cannot add coins to {selectedUser.user.role} accounts
+                </div>
+              )}
+
+              {selectedUser.canReceiveCoins && (
+                <div className="rounded-lg bg-success/10 p-3 text-sm text-success font-medium flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4" />
+                  This user can receive coins
+                </div>
+              )}
+
+              <Button
+                variant="outline"
+                onClick={handleClearSelection}
+                className="w-full"
+              >
+                Change User
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Add Coins Form */}
+        {selectedUser && selectedUser.canReceiveCoins && (
+          <div>
+            <h4 className="mb-3 font-medium text-foreground">
+              Step 3: Add Coins
+            </h4>
+            <form onSubmit={handleAddCoins} className="grid gap-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-foreground">
+                  Amount (coins) *
+                </label>
+                <Input
+                  type="number"
+                  placeholder="e.g. 500"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="bg-muted"
+                  min="1"
+                  disabled={loading}
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-foreground">
+                  Reason for Addition *
+                </label>
+                <Input
+                  placeholder="e.g. Bonus, Reward, Compensation, Refund"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  className="bg-muted"
+                  disabled={loading}
+                />
+              </div>
+
+              <Button
+                type="submit"
+                disabled={loading || !amount || !reason}
+                className="bg-gradient-primary text-primary-foreground mt-2"
+              >
+                {loading ? "Adding Coins..." : "Add Coins"}
+              </Button>
+            </form>
+          </div>
+        )}
+
+        {!selectedUser && (
+          <div className="rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground">
+            <p className="font-medium mb-2">How to use:</p>
+            <ol className="list-inside list-decimal space-y-1">
+              <li>Enter a user's email address</li>
+              <li>Click "Search" to find the user</li>
+              <li>Review user details and coin balance</li>
+              <li>Enter amount and reason, then add coins</li>
+            </ol>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── PAYMENT HISTORY VIEW ────────────────────────────────────────────────────
+
+const PaymentHistoryView = () => {
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [date, setDate] = useState("");
+  const [paidBy, setPaidBy] = useState("");
+  const [type, setType] = useState("");
+  const [page, setPage] = useState(1);
+  const limit = 25;
+
+  const fetchPaymentHistory = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (email) params.append("email", email);
+      if (date) params.append("dateFrom", date);
+      if (paidBy) params.append("paidBy", paidBy);
+      if (type) params.append("type", type);
+      params.append("page", page);
+      params.append("limit", limit);
+
+      const response = await api.get(`/api/admin/payment-history?${params}`);
+      setHistory(response.history || []);
+    } catch (err) {
+      alert("Error fetching history: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPaymentHistory();
+  }, [page]);
+
+  const handleSearch = () => {
+    setPage(1);
+    fetchPaymentHistory();
+  };
+
+  const handleReset = () => {
+    setEmail("");
+    setDate("");
+    setPaidBy("");
+    setType("");
+    setPage(1);
+  };
+
+  const getPaidByBadge = (paidBy) => {
+    const badges = {
+      online: "bg-blue-100 text-blue-800",
+      manual: "bg-amber-100 text-amber-800",
+      coin: "bg-cyan-100 text-cyan-800",
+    };
+    return badges[paidBy] || "bg-gray-100 text-gray-800";
+  };
+
+  const getTypeBadge = (type) => {
+    const badges = {
+      payment: "bg-success/10 text-success",
+      refund: "bg-warning/10 text-warning",
+      coin_refund: "bg-warning/10 text-warning",
+      admin_coin_add: "bg-info/10 text-info",
+    };
+    return badges[type] || "bg-gray-100 text-gray-800";
+  };
+
+  const getTypeLabel = (type) => {
+    const labels = {
+      payment: "Payment",
+      refund: "Refund",
+      coin_refund: "Coin Refund",
+      admin_coin_add: "Admin Added",
+    };
+    return labels[type] || type;
+  };
+
+  return (
+    <div>
+      <h2 className="mb-6 font-heading text-lg font-bold text-foreground">
+        Payment History
+      </h2>
+
+      {/* Filters */}
+      <div className="mb-6 rounded-2xl border border-border bg-card p-6 shadow-card">
+        <h3 className="mb-4 font-heading font-bold text-foreground">Filters</h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-foreground">
+              Email
+            </label>
+            <Input
+              placeholder="Search by email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="bg-muted"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-foreground">
+              Date
+            </label>
+            <Input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="bg-muted"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-foreground">
+              Paid By
+            </label>
+            <select
+              value={paidBy}
+              onChange={(e) => setPaidBy(e.target.value)}
+              className="h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm"
+            >
+              <option value="">All</option>
+              <option value="online">Online (SSL Commerz)</option>
+              <option value="manual">Manual Payment</option>
+              <option value="coin">Coin</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-foreground">
+              Type
+            </label>
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              className="h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm"
+            >
+              <option value="">All</option>
+              <option value="payment">Payment</option>
+              <option value="refund">Refund</option>
+              <option value="coin_refund">Coin Refund</option>
+              <option value="admin_coin_add">Admin Added</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <Button
+            onClick={handleSearch}
+            disabled={loading}
+            className="bg-gradient-primary text-primary-foreground"
+          >
+            {loading ? "Searching..." : "Search"}
+          </Button>
+          <Button variant="outline" onClick={handleReset}>
+            Reset
+          </Button>
+        </div>
+      </div>
+
+      {/* History Table */}
+      <div className="rounded-2xl border border-border bg-card p-6 shadow-card overflow-x-auto">
+        <h3 className="mb-4 font-heading font-bold text-foreground">
+          Results ({history.length || 0})
+        </h3>
+
+        {history.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            No payment history found
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left py-3 px-4 font-semibold text-foreground">
+                  Email
+                </th>
+                <th className="text-left py-3 px-4 font-semibold text-foreground">
+                  Type
+                </th>
+                <th className="text-left py-3 px-4 font-semibold text-foreground">
+                  Paid By
+                </th>
+                <th className="text-right py-3 px-4 font-semibold text-foreground">
+                  Amount
+                </th>
+                <th className="text-left py-3 px-4 font-semibold text-foreground">
+                  Item
+                </th>
+                <th className="text-left py-3 px-4 font-semibold text-foreground">
+                  Transaction ID
+                </th>
+                <th className="text-left py-3 px-4 font-semibold text-foreground">
+                  Date & Time
+                </th>
+                <th className="text-left py-3 px-4 font-semibold text-foreground">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((item) => (
+                <tr
+                  key={item._id}
+                  className="border-b border-border hover:bg-muted/50 transition-colors"
+                >
+                  <td className="py-3 px-4">
+                    <div>
+                      <p className="font-medium text-foreground">
+                        {item.userName}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.email}
+                      </p>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <span
+                      className={`inline-block px-2 py-1 rounded text-xs font-medium ${getTypeBadge(item.type)}`}
+                    >
+                      {getTypeLabel(item.type)}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4">
+                    <span
+                      className={`inline-block px-2 py-1 rounded text-xs font-medium ${getPaidByBadge(item.paidBy)}`}
+                    >
+                      {item.paidBy === "online"
+                        ? "Online (SSL)"
+                        : item.paidBy === "coin"
+                          ? "Coin"
+                          : "Manual"}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-right font-medium text-foreground">
+                    {item.paidBy === "coin" ? (
+                      <span className="flex items-center justify-end gap-1">
+                        <Coins className="h-4 w-4" />
+                        {item.amount}
+                      </span>
+                    ) : (
+                      `$${item.amount.toFixed(2)}`
+                    )}
+                  </td>
+                  <td className="py-3 px-4 text-sm text-muted-foreground">
+                    {item.itemType}: {item.itemName}
+                  </td>
+                  <td className="py-3 px-4 text-xs font-mono text-muted-foreground">
+                    {item.transactionId ? (
+                      <span title={item.transactionId}>
+                        {item.transactionId.substring(0, 16)}...
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
+                  </td>
+                  <td className="py-3 px-4 text-sm text-muted-foreground">
+                    {new Date(item.timestamp).toLocaleString()}
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className="text-xs font-medium">{item.status}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {history.length > 0 && (
+          <div className="mt-4 flex justify-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setPage(Math.max(1, page - 1))}
+              disabled={page === 1}
+            >
+              Previous
+            </Button>
+            <span className="flex items-center text-sm text-muted-foreground">
+              Page {page}
+            </span>
+            <Button
+              variant="outline"
+              onClick={() => setPage(page + 1)}
+              disabled={history.length < limit}
+            >
+              Next
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── TODAY'S BOOKINGS VIEW ───────────────────────────────────────────────────
+
+const TodaysBookingsView = () => {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchTodaysBookings();
+    const interval = setInterval(fetchTodaysBookings, 60000); // Refresh every minute
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchTodaysBookings = async () => {
+    try {
+      const response = await api.get("/api/admin/todays-bookings");
+      setData(response);
+    } catch (err) {
+      alert("Error fetching today's bookings: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading || !data)
+    return <div className="text-muted-foreground">Loading...</div>;
+
+  const summary = data?.summary || {};
+
+  return (
+    <div>
+      <h2 className="mb-6 font-heading text-lg font-bold text-foreground">
+        Today's Bookings & Blocks
+      </h2>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
+        <div className="rounded-lg border border-border bg-card p-4">
+          <p className="text-xs text-muted-foreground mb-1">Hotel Check-ins</p>
+          <p className="text-2xl font-bold text-foreground">
+            {summary.hotelCheckIn || 0}
+          </p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4">
+          <p className="text-xs text-muted-foreground mb-1">Hotel Check-outs</p>
+          <p className="text-2xl font-bold text-foreground">
+            {summary.hotelCheckOut || 0}
+          </p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4">
+          <p className="text-xs text-muted-foreground mb-1">Car Pickups</p>
+          <p className="text-2xl font-bold text-foreground">
+            {summary.carPickup || 0}
+          </p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4">
+          <p className="text-xs text-muted-foreground mb-1">Car Returns</p>
+          <p className="text-2xl font-bold text-foreground">
+            {summary.carReturn || 0}
+          </p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4">
+          <p className="text-xs text-muted-foreground mb-1">Blocked Rooms</p>
+          <p className="text-2xl font-bold text-foreground">
+            {summary.blockedRooms || 0}
+          </p>
+        </div>
+      </div>
+
+      {/* Hotel Bookings */}
+      <div className="mb-6 rounded-2xl border border-border bg-card p-6 shadow-card">
+        <h3 className="mb-4 font-heading font-bold text-foreground">
+          Hotel Bookings ({data?.hotelBookings?.length || 0})
+        </h3>
+        {data?.hotelBookings?.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No hotel bookings today
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-3 px-4 font-semibold">Guest</th>
+                  <th className="text-left py-3 px-4 font-semibold">Hotel</th>
+                  <th className="text-left py-3 px-4 font-semibold">Room</th>
+                  <th className="text-left py-3 px-4 font-semibold">
+                    Check-in
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold">
+                    Check-out
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data?.hotelBookings &&
+                  data.hotelBookings.length > 0 &&
+                  data.hotelBookings.map((booking) => {
+                    if (!booking || !booking.userInfo) return null;
+                    return (
+                      <tr
+                        key={booking._id}
+                        className="border-b border-border hover:bg-muted/50"
+                      >
+                        <td className="py-3 px-4">
+                          <div>
+                            <p className="font-medium">
+                              {booking.userInfo?.name || "Unknown"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {booking.userInfo?.email || ""}
+                            </p>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          {booking.hotelInfo?.name || "Unknown"}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-sm">
+                          #{booking.roomInfo?.roomNumber || "N/A"}
+                        </td>
+                        <td className="py-3 px-4 text-sm">
+                          {new Date(booking.checkIn).toLocaleDateString()}
+                        </td>
+                        <td className="py-3 px-4 text-sm">
+                          {new Date(booking.checkOut).toLocaleDateString()}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span
+                            className={`inline-block px-2 py-1 rounded text-xs font-medium ${STATUS_COLORS[booking.status] || "bg-gray-100"}`}
+                          >
+                            {booking.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Car Bookings */}
+      <div className="mb-6 rounded-2xl border border-border bg-card p-6 shadow-card">
+        <h3 className="mb-4 font-heading font-bold text-foreground">
+          Car Bookings ({data?.carBookings?.length || 0})
+        </h3>
+        {data?.carBookings?.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No car bookings today</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-3 px-4 font-semibold">Guest</th>
+                  <th className="text-left py-3 px-4 font-semibold">Car</th>
+                  <th className="text-left py-3 px-4 font-semibold">
+                    Pickup Date
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold">
+                    Return Date
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data?.carBookings &&
+                  data.carBookings.length > 0 &&
+                  data.carBookings.map((booking) => {
+                    if (!booking || !booking.userInfo) return null;
+                    return (
+                      <tr
+                        key={booking._id}
+                        className="border-b border-border hover:bg-muted/50"
+                      >
+                        <td className="py-3 px-4">
+                          <div>
+                            <p className="font-medium">
+                              {booking.userInfo?.name || "Unknown"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {booking.userInfo?.email || ""}
+                            </p>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          {booking.carInfo?.name || "Unknown"}
+                        </td>
+                        <td className="py-3 px-4 text-sm">
+                          {new Date(booking.pickupDate).toLocaleDateString()}
+                        </td>
+                        <td className="py-3 px-4 text-sm">
+                          {new Date(booking.returnDate).toLocaleDateString()}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span
+                            className={`inline-block px-2 py-1 rounded text-xs font-medium ${STATUS_COLORS[booking.status] || "bg-gray-100"}`}
+                          >
+                            {booking.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Blocked Dates */}
+      <div className="rounded-2xl border border-border bg-card p-6 shadow-card">
+        <h3 className="mb-4 font-heading font-bold text-foreground">
+          Admin-Blocked Dates ({data?.blockedDates?.length || 0})
+        </h3>
+        {data?.blockedDates?.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No blocks today</p>
+        ) : (
+          <div className="space-y-2">
+            {data?.blockedDates?.map((block) => (
+              <div
+                key={block.blockId}
+                className="flex justify-between items-center p-3 bg-muted/50 rounded-lg border border-border"
+              >
+                <div>
+                  <p className="font-medium">{block.hotelName}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Room #{block.roomNumber} •{" "}
+                    {new Date(block.checkIn).toLocaleDateString()} to{" "}
+                    {new Date(block.checkOut).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

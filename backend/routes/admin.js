@@ -386,8 +386,27 @@ router.post("/rooms/:id/blocks", auth, role("admin"), async (req, res) => {
         .status(400)
         .json({ message: "checkOut must be after checkIn" });
 
-    const blockId = new ObjectId();
     const db = await getDb();
+
+    // Check if dates conflict with existing bookings
+    const existingBookings = await db
+      .collection("bookings")
+      .find({
+        roomId: req.params.id,
+        status: { $in: ["confirmed", "pending"] },
+        checkOut: { $gt: checkInDate },
+        checkIn: { $lt: checkOutDate },
+      })
+      .toArray();
+
+    if (existingBookings.length > 0) {
+      return res.status(409).json({
+        message: "Cannot block these dates - there are existing bookings",
+        conflictingBookings: existingBookings.length,
+      });
+    }
+
+    const blockId = new ObjectId();
     await db.collection("rooms").updateOne(
       { _id: new ObjectId(req.params.id) },
       {
@@ -670,6 +689,7 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
       search,
       dateFrom,
       dateTo,
+      viewMode = "upcoming", // "upcoming" = today+future (default), "past" = before today, "all" = no filter
     } = req.query;
 
     const today = new Date();
@@ -686,11 +706,21 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
     });
 
     // Build initial match
-    const bookingsMatch = { startDate: { $gte: today } };
+    const bookingsMatch = {};
     if (type && type !== "coin_topup") bookingsMatch.type = type;
     if (status) bookingsMatch.status = status;
 
-    // Date range filter (overrides the default today filter)
+    // Date filtering based on viewMode
+    if (viewMode === "upcoming") {
+      // Default: show today and future bookings
+      bookingsMatch.startDate = { $gte: today };
+    } else if (viewMode === "past") {
+      // Show past bookings (before today)
+      bookingsMatch.startDate = { $lt: today };
+    }
+    // If viewMode === "all", no date filter applied
+
+    // Date range filter (custom range overrides viewMode)
     if (dateFrom || dateTo) {
       const dateFilter = {};
       if (dateFrom) dateFilter.$gte = new Date(dateFrom);
@@ -1390,5 +1420,923 @@ router.post(
     }
   },
 );
+
+// POST /api/admin/coin-topups/:id/refund — Refund approved coins to user
+router.post(
+  "/coin-topups/:id/refund",
+  auth,
+  role("admin"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+
+      const db = await getDb();
+
+      const topup = await db.collection("coin_topup_requests").findOne({
+        _id: new ObjectId(id),
+      });
+
+      if (!topup) {
+        return res.status(404).json({ message: "Top-up request not found" });
+      }
+
+      if (topup.status !== "approved") {
+        return res
+          .status(409)
+          .json({ message: "Only approved top-ups can be refunded" });
+      }
+
+      if (topup.refundStatus === "completed") {
+        return res
+          .status(409)
+          .json({ message: "This top-up has already been refunded" });
+      }
+
+      // Remove coins from user's ledger
+      await db.collection("coin_ledger").updateOne(
+        { userId: topup.userId },
+        {
+          $inc: { coins: -topup.amount },
+          $push: {
+            transactions: {
+              type: "refund",
+              topupRequestId: topup._id.toString(),
+              amount: -topup.amount,
+              timestamp: new Date(),
+              description: `Refund: ${reason || "Admin refund"}`,
+              refundedBy: req.user.id,
+            },
+          },
+        },
+      );
+
+      // Mark top-up as refunded
+      await db.collection("coin_topup_requests").updateOne(
+        { _id: topup._id },
+        {
+          $set: {
+            refundStatus: "completed",
+            refundReason: reason || "Admin refunded the top-up",
+            refundedAt: new Date(),
+            refundedBy: req.user.id,
+          },
+        },
+      );
+
+      // Record refund in revenue (negative amount to offset original credit)
+      await db.collection("revenue").insertOne({
+        amount: -topup.amount,
+        paymentMethod: topup.paymentMethod,
+        type: "coin_topup_refund",
+        userId: topup.userId,
+        transactionId: topup.transactionId,
+        topupRequestId: topup._id,
+        refundReason: reason,
+        refundedAt: new Date(),
+        refundedBy: req.user.id,
+        createdAt: new Date(),
+      });
+
+      res.json({
+        message: "Coins refunded successfully",
+        coinsRefunded: topup.amount,
+        reason,
+      });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
+
+// POST /api/admin/bookings/:id/refund-coins — Refund coins for a coin-paid booking
+router.post(
+  "/bookings/:id/refund-coins",
+  auth,
+  role("admin"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+
+      if (!reason) {
+        return res.status(400).json({ message: "Refund reason required" });
+      }
+
+      const db = await getDb();
+
+      const booking = await db.collection("bookings").findOne({
+        _id: new ObjectId(id),
+      });
+
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+
+      if (booking.paidWithCoins !== true) {
+        return res
+          .status(409)
+          .json({ message: "This booking was not paid with coins" });
+      }
+
+      if (booking.refundStatus === "completed") {
+        return res
+          .status(409)
+          .json({ message: "This booking has already been refunded" });
+      }
+
+      const refundAmount = booking.totalAmount || 0;
+
+      // Add coins back to user's wallet
+      await db.collection("coin_ledger").updateOne(
+        { userId: booking.userId },
+        {
+          $inc: { coins: refundAmount },
+          $push: {
+            transactions: {
+              type: "refund",
+              bookingId: booking._id.toString(),
+              bookingType: booking.type,
+              amount: refundAmount,
+              timestamp: new Date(),
+              description: `Refund: ${reason}`,
+              refundedBy: req.user.id,
+            },
+          },
+        },
+        { upsert: true },
+      );
+
+      // Mark booking as refunded
+      await db.collection("bookings").updateOne(
+        { _id: booking._id },
+        {
+          $set: {
+            status: "refunded",
+            refundStatus: "completed",
+            refundReason: reason,
+            refundedAt: new Date(),
+            refundedBy: req.user.id,
+          },
+        },
+      );
+
+      // Record refund in revenue (negative amount)
+      await db.collection("revenue").insertOne({
+        amount: -refundAmount,
+        type: "booking_refund",
+        bookingId: booking._id.toString(),
+        bookingType: booking.type,
+        userId: booking.userId,
+        refundReason: reason,
+        refundedAt: new Date(),
+        refundedBy: req.user.id,
+        createdAt: new Date(),
+      });
+
+      res.json({
+        message: "Coins refunded successfully",
+        coinsRefunded: refundAmount,
+        reason,
+      });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
+
+// POST /api/admin/add-coins — Add coins to user (search by email first)
+router.post("/add-coins", auth, role("admin"), async (req, res) => {
+  try {
+    const { email, amount, reason } = req.body;
+
+    if (!email || !email.trim()) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ message: "Amount must be greater than 0" });
+    }
+
+    if (!reason) {
+      return res
+        .status(400)
+        .json({ message: "Reason for coin addition required" });
+    }
+
+    const db = await getDb();
+
+    // Search for user by email
+    const user = await db.collection("users").findOne({
+      email: email.toLowerCase().trim(),
+    });
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ message: "User not found with this email" });
+    }
+
+    // Verify user has user role (not admin/staff)
+    if (user.role === "admin" || user.role === "hotel_staff") {
+      return res.status(403).json({
+        message: `Cannot add coins to ${user.role}. Only regular users can receive coins.`,
+        userRole: user.role,
+      });
+    }
+
+    // Add coins to user's wallet
+    await db.collection("coin_ledger").updateOne(
+      { userId: user._id.toString() },
+      {
+        $inc: { coins: amount },
+        $push: {
+          transactions: {
+            type: "admin_add",
+            amount,
+            timestamp: new Date(),
+            description: `Admin added coins: ${reason}`,
+            addedBy: req.user.id,
+          },
+        },
+      },
+      { upsert: true },
+    );
+
+    // Record in revenue
+    await db.collection("revenue").insertOne({
+      amount,
+      type: "admin_coin_add",
+      userId: user._id.toString(),
+      reason,
+      addedAt: new Date(),
+      addedBy: req.user.id,
+      createdAt: new Date(),
+    });
+
+    res.json({
+      message: "Coins added successfully",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      coinsAdded: amount,
+      reason,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/search-user — Search user by email (for verification)
+router.get("/search-user", auth, role("admin"), async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    if (!email || !email.trim()) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const db = await getDb();
+
+    const user = await db.collection("users").findOne({
+      email: email.toLowerCase().trim(),
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Check if user can receive coins
+    const canReceiveCoins =
+      user.role !== "admin" && user.role !== "hotel_staff";
+
+    // Get current coin balance
+    const ledger = await db.collection("coin_ledger").findOne({
+      userId: user._id.toString(),
+    });
+
+    res.json({
+      found: true,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      canReceiveCoins,
+      currentBalance: ledger?.coins || 0,
+      reason: !canReceiveCoins
+        ? `Cannot add coins to ${user.role}`
+        : "This user can receive coins",
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ─── PAYMENT HISTORY ──────────────────────────────────────────────────────────
+
+// GET /api/admin/payment-history — Get all payments, refunds, coins with filters
+router.get("/payment-history", auth, role("admin"), async (req, res) => {
+  try {
+    const db = await getDb();
+    const {
+      email,
+      dateFrom,
+      dateTo,
+      paidBy, // 'online', 'manual', 'coin'
+      type, // 'payment', 'refund', 'coin_refund', 'admin_coin_add'
+      page = 1,
+      limit = 50,
+    } = req.query;
+
+    const today = new Date();
+    const payments = [];
+
+    // ─── 1. BOOKING PAYMENTS (Online & Manual) ──────────────────────────────────
+
+    const bookingMatch = {};
+    const userMatch = {};
+
+    if (email) {
+      userMatch.$or = [{ "userInfo.email": { $regex: email, $options: "i" } }];
+    }
+
+    if (dateFrom || dateTo) {
+      const dateFilter = {};
+      if (dateFrom) dateFilter.$gte = new Date(dateFrom);
+      if (dateTo) {
+        const end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.$lte = end;
+      }
+      bookingMatch.createdAt = dateFilter;
+    }
+
+    if (paidBy === "online") {
+      bookingMatch.paymentMethod = "online";
+    } else if (paidBy === "manual") {
+      bookingMatch.paymentMethod = "manual";
+    }
+
+    const bookingPipeline = [
+      { $match: bookingMatch },
+      { $addFields: { userObjectId: { $toObjectId: "$userId" } } },
+      {
+        $lookup: {
+          from: "users",
+          localField: "userObjectId",
+          foreignField: "_id",
+          as: "userInfo",
+        },
+      },
+      { $unwind: "$userInfo" },
+    ];
+
+    if (email) {
+      bookingPipeline.push({
+        $match: {
+          "userInfo.email": { $regex: email, $options: "i" },
+        },
+      });
+    }
+
+    const bookingsData = await db
+      .collection("bookings")
+      .aggregate(bookingPipeline)
+      .toArray();
+
+    bookingsData.forEach((booking) => {
+      if (
+        !type ||
+        type === "payment" ||
+        (type === "refund" && booking.refundStatus === "completed")
+      ) {
+        payments.push({
+          _id: booking._id,
+          type: booking.refundStatus === "completed" ? "refund" : "payment",
+          email: booking.userInfo.email,
+          userName: booking.userInfo.name,
+          userId: booking.userId,
+          paidBy: booking.paymentMethod || "online",
+          amount: booking.totalAmount || booking.amount,
+          transactionId: booking.transactionId || null,
+          timestamp: booking.refundedAt || booking.createdAt,
+          itemType: booking.type === "car" ? "Car" : "Hotel",
+          itemName: booking.carName || booking.hotelName,
+          status: booking.refundStatus === "completed" ? "Refunded" : "Paid",
+          bookingId: booking._id.toString(),
+        });
+      }
+    });
+
+    // ─── 2. COIN TOPUP REQUESTS (Online Payments) ──────────────────────────────
+
+    const coinTopupMatch = {};
+    if (paidBy !== "manual" && paidBy !== "coin") {
+      // Only include if filtering for online or no paidBy filter
+      if (!paidBy || paidBy === "online") {
+        const coinTopupPipeline = [
+          { $match: coinTopupMatch },
+          { $addFields: { userObjectId: { $toObjectId: "$userId" } } },
+          {
+            $lookup: {
+              from: "users",
+              localField: "userObjectId",
+              foreignField: "_id",
+              as: "userInfo",
+            },
+          },
+          { $unwind: "$userInfo" },
+        ];
+
+        if (email) {
+          coinTopupPipeline.push({
+            $match: {
+              "userInfo.email": { $regex: email, $options: "i" },
+            },
+          });
+        }
+
+        if (dateFrom || dateTo) {
+          const dateFilter = {};
+          if (dateFrom) dateFilter.$gte = new Date(dateFrom);
+          if (dateTo) {
+            const end = new Date(dateTo);
+            end.setHours(23, 59, 59, 999);
+            dateFilter.$lte = end;
+          }
+          coinTopupPipeline.push({
+            $match: { submittedAt: dateFilter },
+          });
+        }
+
+        const coinTopups = await db
+          .collection("coin_topup_requests")
+          .aggregate(coinTopupPipeline)
+          .toArray();
+
+        coinTopups.forEach((ct) => {
+          if (!type || type === "payment") {
+            payments.push({
+              _id: ct._id,
+              type: "payment",
+              email: ct.userInfo.email,
+              userName: ct.userInfo.name,
+              userId: ct.userId,
+              paidBy: "online",
+              amount: ct.amount,
+              transactionId: ct.transactionId || null,
+              timestamp: ct.submittedAt,
+              itemType: "Coin Topup",
+              itemName: `${ct.amount} Coins`,
+              status: ct.status,
+              requestId: ct._id.toString(),
+            });
+          }
+        });
+      }
+    }
+
+    // ─── 3. COIN LEDGER TRANSACTIONS (Admin adds & Coin refunds) ──────────────
+
+    if (!paidBy || paidBy === "coin") {
+      const ledgerMatch = {};
+      const ledgerLookupMatch = {};
+
+      if (email) {
+        ledgerLookupMatch.$or = [
+          { "userInfo.email": { $regex: email, $options: "i" } },
+        ];
+      }
+
+      const ledgerPipeline = [
+        { $match: ledgerMatch },
+        { $unwind: "$transactions" },
+        { $addFields: { userObjectId: { $toObjectId: "$userId" } } },
+        {
+          $lookup: {
+            from: "users",
+            localField: "userObjectId",
+            foreignField: "_id",
+            as: "userInfo",
+          },
+        },
+        { $unwind: "$userInfo" },
+      ];
+
+      if (email) {
+        ledgerPipeline.push({
+          $match: {
+            "userInfo.email": { $regex: email, $options: "i" },
+          },
+        });
+      }
+
+      if (dateFrom || dateTo) {
+        const dateFilter = {};
+        if (dateFrom) dateFilter.$gte = new Date(dateFrom);
+        if (dateTo) {
+          const end = new Date(dateTo);
+          end.setHours(23, 59, 59, 999);
+          dateFilter.$lte = end;
+        }
+        ledgerPipeline.push({
+          $match: { "transactions.timestamp": dateFilter },
+        });
+      }
+
+      const ledgers = await db
+        .collection("coin_ledger")
+        .aggregate(ledgerPipeline)
+        .toArray();
+
+      ledgers.forEach((ledger) => {
+        const tx = ledger.transactions;
+        // Only include relevant transaction types
+        if (
+          tx.type === "admin_add" ||
+          tx.type === "coin_deduction" ||
+          tx.type === "refund"
+        ) {
+          if (!type || type === "admin_coin_add" || type === "coin_refund") {
+            let txType = "payment";
+            if (tx.type === "admin_add") txType = "admin_coin_add";
+            else if (tx.type === "refund") txType = "coin_refund";
+
+            if (!type || type === txType) {
+              payments.push({
+                _id: ledger._id,
+                type: txType,
+                email: ledger.userInfo.email,
+                userName: ledger.userInfo.name,
+                userId: ledger.userId,
+                paidBy: "coin",
+                amount: tx.amount,
+                transactionId: null,
+                timestamp: tx.timestamp,
+                itemType: "Coin",
+                itemName: tx.description || `${tx.amount} Coins`,
+                status: tx.type === "admin_add" ? "Added" : "Refunded",
+                ledgerId: ledger._id.toString(),
+              });
+            }
+          }
+        }
+      });
+    }
+
+    // ─── 4. SORT & PAGINATE ─────────────────────────────────────────────────────
+
+    payments.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    const total = payments.length;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const paginatedPayments = payments.slice(
+      (pageNum - 1) * limitNum,
+      pageNum * limitNum,
+    );
+
+    res.json({
+      history: paginatedPayments,
+      total,
+      page: pageNum,
+      pages: Math.ceil(total / limitNum),
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ─── BOOKING MANAGEMENT ──────────────────────────────────────────────────────────
+
+// PATCH /api/admin/bookings/:id/reschedule — Change booking dates
+router.patch(
+  "/bookings/:id/reschedule",
+  auth,
+  role("admin"),
+  async (req, res) => {
+    try {
+      if (!isValidObjectId(req.params.id))
+        return res.status(400).json({ message: "Invalid id" });
+
+      const { checkIn, checkOut, pickupDate, returnDate } = req.body;
+      const db = await getDb();
+
+      const booking = await db
+        .collection("bookings")
+        .findOne({ _id: new ObjectId(req.params.id) });
+
+      if (!booking)
+        return res.status(404).json({ message: "Booking not found" });
+
+      let newCheckIn, newCheckOut;
+
+      if (booking.type === "hotel") {
+        if (!checkIn || !checkOut)
+          return res
+            .status(400)
+            .json({ message: "checkIn and checkOut required for hotel" });
+        newCheckIn = new Date(checkIn);
+        newCheckOut = new Date(checkOut);
+        if (isNaN(newCheckIn) || isNaN(newCheckOut))
+          return res.status(400).json({ message: "Invalid dates" });
+        if (newCheckOut <= newCheckIn)
+          return res
+            .status(400)
+            .json({ message: "checkOut must be after checkIn" });
+
+        // Check if new dates conflict with other bookings in same room
+        const conflicts = await db.collection("bookings").findOne({
+          _id: { $ne: new ObjectId(req.params.id) },
+          roomId: booking.roomId,
+          status: { $in: ["confirmed", "pending"] },
+          checkOut: { $gt: newCheckIn },
+          checkIn: { $lt: newCheckOut },
+        });
+
+        if (conflicts) {
+          return res.status(409).json({
+            message: "New dates conflict with another booking for this room",
+          });
+        }
+      } else if (booking.type === "car") {
+        if (!pickupDate || !returnDate)
+          return res
+            .status(400)
+            .json({ message: "pickupDate and returnDate required for car" });
+        newCheckIn = new Date(pickupDate);
+        newCheckOut = new Date(returnDate);
+        if (isNaN(newCheckIn) || isNaN(newCheckOut))
+          return res.status(400).json({ message: "Invalid dates" });
+        if (newCheckOut <= newCheckIn)
+          return res
+            .status(400)
+            .json({ message: "returnDate must be after pickupDate" });
+
+        // Check if new dates conflict with other bookings for same car
+        const conflicts = await db.collection("bookings").findOne({
+          _id: { $ne: new ObjectId(req.params.id) },
+          carId: booking.carId,
+          status: { $in: ["confirmed", "pending"] },
+          returnDate: { $gt: newCheckIn },
+          pickupDate: { $lt: newCheckOut },
+        });
+
+        if (conflicts) {
+          return res.status(409).json({
+            message: "New dates conflict with another booking for this car",
+          });
+        }
+      }
+
+      // Update booking
+      const updateData = {
+        rescheduledAt: new Date(),
+        rescheduledBy: req.user.id,
+      };
+
+      if (booking.type === "hotel") {
+        updateData.checkIn = newCheckIn;
+        updateData.checkOut = newCheckOut;
+      } else {
+        updateData.pickupDate = newCheckIn;
+        updateData.returnDate = newCheckOut;
+      }
+
+      await db
+        .collection("bookings")
+        .updateOne({ _id: new ObjectId(req.params.id) }, { $set: updateData });
+
+      res.json({
+        message: "Booking rescheduled successfully",
+        bookingId: req.params.id,
+        newDates:
+          booking.type === "hotel"
+            ? { checkIn: newCheckIn, checkOut: newCheckOut }
+            : { pickupDate: newCheckIn, returnDate: newCheckOut },
+      });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
+
+// GET /api/admin/todays-bookings — Get all bookings and blocks for today
+router.get("/todays-bookings", auth, role("admin"), async (req, res) => {
+  try {
+    const db = await getDb();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // ─── HOTEL BOOKINGS FOR TODAY ──────────────────────────────────────
+
+    const hotelBookings = await db
+      .collection("bookings")
+      .aggregate([
+        {
+          $match: {
+            type: "hotel",
+            status: { $in: ["confirmed", "pending"] },
+            $or: [
+              { checkIn: { $gte: today, $lt: tomorrow } }, // Check-in today
+              {
+                checkOut: { $gt: today, $lte: tomorrow },
+              }, // Check-out today
+              {
+                checkIn: { $lt: today },
+                checkOut: { $gt: today },
+              }, // Ongoing
+            ],
+          },
+        },
+        { $addFields: { userObjectId: { $toObjectId: "$userId" } } },
+        {
+          $lookup: {
+            from: "users",
+            localField: "userObjectId",
+            foreignField: "_id",
+            as: "userInfo",
+          },
+        },
+        { $unwind: "$userInfo" },
+        { $addFields: { roomObjectId: { $toObjectId: "$roomId" } } },
+        {
+          $lookup: {
+            from: "rooms",
+            localField: "roomObjectId",
+            foreignField: "_id",
+            as: "roomInfo",
+          },
+        },
+        { $unwind: { path: "$roomInfo", preserveNullAndEmptyArrays: true } },
+        { $addFields: { hotelObjectId: { $toObjectId: "$hotelId" } } },
+        {
+          $lookup: {
+            from: "hotels",
+            localField: "hotelObjectId",
+            foreignField: "_id",
+            as: "hotelInfo",
+          },
+        },
+        { $unwind: { path: "$hotelInfo", preserveNullAndEmptyArrays: true } },
+        {
+          $project: {
+            userObjectId: 0,
+            roomObjectId: 0,
+            hotelObjectId: 0,
+            "roomInfo.images": 0,
+            "roomInfo.blockedDates": 0,
+          },
+        },
+      ])
+      .toArray();
+
+    // ─── CAR BOOKINGS FOR TODAY ──────────────────────────────────────
+
+    const carBookings = await db
+      .collection("bookings")
+      .aggregate([
+        {
+          $match: {
+            type: "car",
+            status: { $in: ["confirmed", "pending"] },
+            $or: [
+              { pickupDate: { $gte: today, $lt: tomorrow } }, // Pickup today
+              {
+                returnDate: { $gt: today, $lte: tomorrow },
+              }, // Return today
+              {
+                pickupDate: { $lt: today },
+                returnDate: { $gt: today },
+              }, // Ongoing
+            ],
+          },
+        },
+        { $addFields: { userObjectId: { $toObjectId: "$userId" } } },
+        {
+          $lookup: {
+            from: "users",
+            localField: "userObjectId",
+            foreignField: "_id",
+            as: "userInfo",
+          },
+        },
+        { $unwind: "$userInfo" },
+        { $addFields: { carObjectId: { $toObjectId: "$carId" } } },
+        {
+          $lookup: {
+            from: "cars",
+            localField: "carObjectId",
+            foreignField: "_id",
+            as: "carInfo",
+          },
+        },
+        { $unwind: { path: "$carInfo", preserveNullAndEmptyArrays: true } },
+        {
+          $project: {
+            userObjectId: 0,
+            carObjectId: 0,
+            "carInfo.images": 0,
+          },
+        },
+      ])
+      .toArray();
+
+    // ─── BLOCKED DATES FOR TODAY ──────────────────────────────────────
+
+    const rooms = await db
+      .collection("rooms")
+      .aggregate([
+        {
+          $match: {
+            blockedDates: {
+              $elemMatch: {
+                checkIn: { $lt: tomorrow },
+                checkOut: { $gt: today },
+              },
+            },
+          },
+        },
+        { $addFields: { hotelObjectId: { $toObjectId: "$hotelId" } } },
+        {
+          $lookup: {
+            from: "hotels",
+            localField: "hotelObjectId",
+            foreignField: "_id",
+            as: "hotelInfo",
+          },
+        },
+        { $unwind: { path: "$hotelInfo", preserveNullAndEmptyArrays: true } },
+        {
+          $project: {
+            images: 0,
+            hotelObjectId: 0,
+          },
+        },
+      ])
+      .toArray();
+
+    const blockedDates = [];
+    rooms.forEach((room) => {
+      room.blockedDates?.forEach((block) => {
+        if (block.checkIn < tomorrow && block.checkOut > today) {
+          blockedDates.push({
+            roomId: room._id,
+            roomNumber: room.roomNumber,
+            hotelName: room.hotelInfo?.name,
+            hotelId: room.hotelId,
+            checkIn: block.checkIn,
+            checkOut: block.checkOut,
+            blockId: block._id,
+          });
+        }
+      });
+    });
+
+    res.json({
+      today: today.toISOString().split("T")[0],
+      hotelBookings,
+      carBookings,
+      blockedDates,
+      summary: {
+        hotelCheckIn: hotelBookings.filter((b) => {
+          const checkInDate = new Date(b.checkIn);
+          checkInDate.setHours(0, 0, 0, 0);
+          return checkInDate.getTime() === today.getTime();
+        }).length,
+        hotelCheckOut: hotelBookings.filter((b) => {
+          const checkOutDate = new Date(b.checkOut);
+          checkOutDate.setHours(0, 0, 0, 0);
+          return checkOutDate.getTime() === today.getTime();
+        }).length,
+        carPickup: carBookings.filter((b) => {
+          const pickupDate = new Date(b.pickupDate);
+          pickupDate.setHours(0, 0, 0, 0);
+          return pickupDate.getTime() === today.getTime();
+        }).length,
+        carReturn: carBookings.filter((b) => {
+          const returnDate = new Date(b.returnDate);
+          returnDate.setHours(0, 0, 0, 0);
+          return returnDate.getTime() === today.getTime();
+        }).length,
+        blockedRooms: blockedDates.length,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Old endpoint removed - use new /add-coins endpoint instead
+// Kept comment for reference:
+// Previous: POST /api/admin/users/:userId/add-coins — Manually add coins to user wallet
+// New: POST /api/admin/add-coins — Add coins after email search
 
 module.exports = router;

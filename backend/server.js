@@ -4,15 +4,31 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+const compression = require("compression");
+const helmet = require("helmet");
+const mongoSanitize = require("express-mongo-sanitize");
+const xss = require("xss-clean");
+const rateLimit = require("express-rate-limit");
+const csrf = require("csurf");
 const path = require("path");
 const jwt = require("jsonwebtoken");
 const { getDb } = require("./db");
+const { initCache } = require("./cache");
 
 const app = express();
 const server = http.createServer(app);
 
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
-const SECRET = process.env.JWT_SECRET || "hangout_secret_dev_only";
+const SECRET = process.env.JWT_SECRET;
+
+// ✅ SECURITY: Enforce JWT_SECRET in production
+if (!SECRET || SECRET === "hangout_secret_dev_only") {
+  if (process.env.NODE_ENV === "production") {
+    console.error("❌ FATAL: JWT_SECRET not set in environment!");
+    process.exit(1);
+  }
+  console.warn("⚠️ WARNING: Using default JWT_SECRET (dev only)");
+}
 
 // Allow the configured origin + any localhost port in development
 // + SSLCommerz sandbox/live origins (they POST back to our callback endpoints)
@@ -31,7 +47,37 @@ const corsOrigin = (origin, callback) => {
 
 const io = new Server(server, {
   cors: { origin: corsOrigin, methods: ["GET", "POST"] },
+  transports: ["websocket", "polling"],
+  maxHttpBufferSize: 1e6, // 1MB
 });
+
+// Compression middleware — reduces payload by 70%
+app.use(compression());
+
+// ✅ SECURITY: Helmet - Sets security headers (CSP, HSTS, etc.)
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'", "https://sslcommerz.com"],
+        frameSrc: ["https://sslcommerz.com"],
+      },
+    },
+    hsts: {
+      maxAge: 31536000, // 1 year
+      includeSubDomains: true,
+      preload: false,
+    },
+  }),
+);
+
+// ✅ SECURITY: Input sanitization & XSS protection before JSON parsing
+app.use(mongoSanitize()); // Prevent NoSQL injection
+app.use(xss()); // Prevent XSS attacks
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
@@ -43,8 +89,38 @@ app.use("/api/payment", cors({ origin: "*" }), require("./routes/payment"));
 
 app.use(cors({ origin: corsOrigin }));
 
+// ✅ SECURITY: Rate limiting on auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 attempts per window
+  message: "Too many login attempts, please try again later",
+  standardHeaders: true,
+  skip: (req) => process.env.NODE_ENV !== "production",
+});
+
+const signupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // 3 attempts per window
+  message: "Too many signup attempts, please try again later",
+  standardHeaders: true,
+  skip: (req) => process.env.NODE_ENV !== "production",
+});
+
+const paymentLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 payment attempts per minute
+  message: "Too many payment requests, please try again later",
+  standardHeaders: true,
+  skip: (req) => process.env.NODE_ENV !== "production",
+});
+
 // Make io accessible in routes
 app.set("io", io);
+
+// Store limiters in app for reuse
+app.set("authLimiter", authLimiter);
+app.set("signupLimiter", signupLimiter);
+app.set("paymentLimiter", paymentLimiter);
 
 // Socket.io: authenticate user and join personal room
 io.use((socket, next) => {
@@ -88,11 +164,16 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-getDb()
+// Initialize cache and DB on startup
+Promise.all([getDb(), initCache()])
   .then(() => {
-    server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    server.listen(PORT, () => {
+      console.log(
+        `Server running on port ${PORT} in ${process.env.NODE_ENV || "development"} mode`,
+      );
+    });
   })
   .catch((err) => {
-    console.error("Failed to connect to MongoDB:", err.message);
+    console.error("Failed to start server:", err.message);
     process.exit(1);
   });

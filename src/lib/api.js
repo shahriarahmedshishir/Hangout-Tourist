@@ -26,7 +26,12 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
-  get: (url) => request(url),
+  get: (url, options = {}) => {
+    const finalUrl = options.params
+      ? `${url}?${new URLSearchParams(options.params).toString()}`
+      : url;
+    return request(finalUrl);
+  },
   post: (url, body) =>
     request(url, { method: "POST", body: JSON.stringify(body) }),
   put: (url, body) =>
