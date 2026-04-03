@@ -4,6 +4,11 @@ const SSLCommerzPayment = require("sslcommerz-lts");
 const { getDb } = require("../db");
 const { ObjectId } = require("mongodb");
 const { auth } = require("../middleware/auth");
+const { isValidObjectId, validatePrice } = require("../utils/validation");
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SSL COMMERZ CONFIGURATION & SETUP
+// ═══════════════════════════════════════════════════════════════════════════
 
 const STORE_ID = process.env.SSLCOMMERZ_STORE_ID;
 const STORE_PASSWORD = process.env.SSLCOMMERZ_STORE_PASSWORD;
@@ -12,9 +17,20 @@ const IS_LIVE = false; // sandbox mode
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
 
-function isValidObjectId(id) {
-  return /^[0-9a-fA-F]{24}$/.test(id);
+// Ensure TTL index on payment_sessions (auto-expires after 5 minutes)
+async function ensureSessionTTL() {
+  const db = await getDb();
+  await db
+    .collection("payment_sessions")
+    .createIndex({ createdAt: 1 }, { expireAfterSeconds: 300 }); // ✅ SECURITY: Reduced from 3600 to 300 seconds (5 minutes)
 }
+ensureSessionTTL().catch(() => {});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SHARED UTILITY FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Removed isValidObjectId - now imported from utils/validation.js
 
 function makeTranId(prefix = "HT") {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
@@ -33,16 +49,26 @@ function getProductName(type, name) {
   return name ? `${label} - ${name}` : label;
 }
 
-// Ensure TTL index on payment_sessions (auto-expires after 1 hour)
-async function ensureSessionTTL() {
-  const db = await getDb();
-  await db
-    .collection("payment_sessions")
-    .createIndex({ createdAt: 1 }, { expireAfterSeconds: 3600 });
-}
-ensureSessionTTL().catch(() => {});
+// ═══════════════════════════════════════════════════════════════════════════
+// ███████████████████████████████████████████████████████████████████████████
+// SSL COMMERZ PAYMENT SYSTEM - ALL ENDPOINTS & HANDLERS
+// ███████████████████████████████████████████████████████████████████████████
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// This block contains all SSL Commerz payment processing logic including:
+// - Payment initiation endpoints (hotel, car, coin-topup)
+// - SSL Commerz callbacks (success, fail, cancel, ipn)
+// - Payment confirmation and session management
+//
+// For SSL Commerz integration support, contact: support@sslcommerz.com
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─────────────────────────────────────────────────────────────────────────
+// PAYMENT INITIATION ENDPOINTS
+// ─────────────────────────────────────────────────────────────────────────
 
 // POST /api/payment/initiate/hotel
+// Initiates a hotel booking payment through SSL Commerz
 router.post("/initiate/hotel", auth, async (req, res) => {
   try {
     // Prevent staff and admin from booking
@@ -145,6 +171,19 @@ router.post("/initiate/hotel", auth, async (req, res) => {
       });
     }
 
+    // ✅ SECURITY: Validate total amount hasn't been tampered with
+    // Client sends totalAmount, we recalculate and verify it matches
+    const clientTotalAmount = parseFloat(req.body.totalAmount) || 0;
+    if (!validatePrice(clientTotalAmount, totalAmount, 1)) {
+      console.warn(
+        `Price mismatch for user ${req.user.id}: client=${clientTotalAmount}, server=${totalAmount}`,
+      );
+      return res.status(400).json({
+        message: `Price mismatch. Expected ${totalAmount} BDT, got ${clientTotalAmount} BDT. Please refresh and try again.`,
+        expectedAmount: totalAmount,
+      });
+    }
+
     const tran_id = makeTranId("HT-HTL");
 
     // Store booking intent in payment_sessions — NOT in bookings yet
@@ -210,6 +249,7 @@ router.post("/initiate/hotel", auth, async (req, res) => {
 });
 
 // POST /api/payment/initiate/car
+// Initiates a car rental booking payment through SSL Commerz
 router.post("/initiate/car", auth, async (req, res) => {
   try {
     // Prevent staff and admin from booking
@@ -267,6 +307,19 @@ router.post("/initiate/car", auth, async (req, res) => {
       (returnDateObj - pickupDateObj) / (1000 * 60 * 60 * 24),
     );
     const totalAmount = car.price * days;
+
+    // ✅ SECURITY: Validate total amount hasn't been tampered with
+    const clientTotalAmount = parseFloat(req.body.totalAmount) || 0;
+    if (!validatePrice(clientTotalAmount, totalAmount, 1)) {
+      console.warn(
+        `Price mismatch for user ${req.user.id}: client=${clientTotalAmount}, server=${totalAmount}`,
+      );
+      return res.status(400).json({
+        message: `Price mismatch. Expected ${totalAmount} BDT, got ${clientTotalAmount} BDT. Please refresh and try again.`,
+        expectedAmount: totalAmount,
+      });
+    }
+
     const tran_id = makeTranId("HT-CAR");
 
     // Store booking intent in payment_sessions — NOT in bookings yet
@@ -332,7 +385,9 @@ router.post("/initiate/car", auth, async (req, res) => {
   }
 });
 
-// POST /api/payment/initiate/coin-topup — Initiate coin top-up payment
+// POST /api/payment/initiate/coin-topup
+// Initiates a coin top-up payment through SSL Commerz
+// User taps up coins which get auto-credited to wallet after payment succeeds
 router.post("/initiate/coin-topup", auth, async (req, res) => {
   try {
     const { amount } = req.body;
@@ -400,58 +455,14 @@ router.post("/initiate/coin-topup", auth, async (req, res) => {
   }
 });
 
-// POST /api/payment/submit/manual-coin-topup — submit manual coin top-up (pending admin approval)
-router.post("/submit/manual-coin-topup", auth, async (req, res) => {
-  try {
-    const { amount, paymentMethod, proofUrl, description } = req.body;
+// ─────────────────────────────────────────────────────────────────────────
+// SSL COMMERZ CALLBACK ENDPOINTS
+// ─────────────────────────────────────────────────────────────────────────
+// These endpoints receive callbacks from SSL Commerz payment gateway
+// Do not modify callback URLs without updating SSL Commerz merchant panel
 
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ message: "Valid amount is required" });
-    }
-
-    if (!paymentMethod) {
-      return res.status(400).json({
-        message:
-          "Payment method is required (e.g., Bank Transfer, Mobile Banking)",
-      });
-    }
-
-    const db = await getDb();
-    const user = await db
-      .collection("users")
-      .findOne({ _id: new ObjectId(req.user.id) });
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    const tran_id = makeTranId("HT-MANUAL");
-    const now = new Date();
-
-    // Create pending top-up request
-    const result = await db.collection("coin_topup_requests").insertOne({
-      userId: req.user.id,
-      amount,
-      paymentMethod, // e.g., "bank_transfer", "mobile_banking", "cash"
-      status: "pending",
-      transactionId: tran_id,
-      proofUrl: proofUrl || null, // Optional: receipt/screenshot URL
-      description: description || null,
-      submittedAt: now,
-      reviewedAt: null,
-      reviewedBy: null,
-      rejectionReason: null,
-    });
-
-    res.json({
-      message:
-        "Top-up request submitted successfully. Awaiting admin approval.",
-      topupRequestId: result.insertedId,
-      transactionId: tran_id,
-      status: "pending",
-    });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
+// POST /api/payment/success
+// Browser redirect callback from SSL Commerz after successful payment
 router.post("/success", async (req, res) => {
   try {
     const { tran_id, val_id, status } = req.body;
@@ -536,6 +547,7 @@ router.post("/success", async (req, res) => {
 });
 
 // POST /api/payment/fail
+// Browser redirect callback from SSL Commerz when payment fails
 router.post("/fail", async (req, res) => {
   const { tran_id } = req.body;
   try {
@@ -547,6 +559,7 @@ router.post("/fail", async (req, res) => {
 });
 
 // POST /api/payment/cancel
+// Browser redirect callback from SSL Commerz when user cancels payment
 router.post("/cancel", async (req, res) => {
   const { tran_id } = req.body;
   try {
@@ -557,7 +570,10 @@ router.post("/cancel", async (req, res) => {
   );
 });
 
-// POST /api/payment/ipn — server-to-server notification from SSLCommerz
+// POST /api/payment/ipn
+// Server-to-server Instant Payment Notification from SSL Commerz
+// This is a backup callback (browser may not reach /success if user closes window)
+// Configure IPN URL in SSL Commerz merchant panel
 router.post("/ipn", async (req, res) => {
   try {
     const { tran_id, val_id, status } = req.body;
@@ -594,6 +610,10 @@ router.post("/ipn", async (req, res) => {
   }
   res.status(200).send("OK");
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// PAYMENT PROCESSING HELPER FUNCTIONS (SSL COMMERZ)
+// ─────────────────────────────────────────────────────────────────────────
 
 // Move session data → bookings as confirmed, then delete session
 // Returns true only if booking was successfully created
@@ -694,7 +714,6 @@ async function _confirmBooking(tran_id, validation = null) {
     await db.collection("bookings").insertMany(bookings);
   } else if (session.type === "car") {
     // Double-check: Ensure car is still available (prevent race condition)
-    const now = new Date();
     const conflictingBookings = await db.collection("bookings").countDocuments({
       carId: session.carId,
       type: "car",
@@ -770,7 +789,7 @@ async function _confirmBooking(tran_id, validation = null) {
       rejectionReason: null,
     });
 
-    // Track revenue
+    // Track revenue (coins received as payment)
     await db.collection("revenue").insertOne({
       amount: session.amount,
       paymentMethod: "ssl_commerz",
@@ -794,5 +813,73 @@ async function _deleteSession(tran_id) {
   const db = await getDb();
   await db.collection("payment_sessions").deleteOne({ tran_id });
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// END SSL COMMERZ PAYMENT SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MANUAL PAYMENT SYSTEM (Non-SSL Commerz)
+// ═══════════════════════════════════════════════════════════════════════════
+// For manual payments (bank transfer, mobile banking, cash, etc.)
+// Requires admin approval before coins are credited
+
+// POST /api/payment/submit/manual-coin-topup
+// User submits a manual coin top-up request (bank transfer, mobile banking, etc.)
+// Coins are NOT credited immediately - requires admin approval in dashboard
+router.post("/submit/manual-coin-topup", auth, async (req, res) => {
+  try {
+    const { amount, paymentMethod, proofUrl, description } = req.body;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ message: "Valid amount is required" });
+    }
+
+    if (!paymentMethod) {
+      return res.status(400).json({
+        message:
+          "Payment method is required (e.g., Bank Transfer, Mobile Banking)",
+      });
+    }
+
+    const db = await getDb();
+    const user = await db
+      .collection("users")
+      .findOne({ _id: new ObjectId(req.user.id) });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const tran_id = makeTranId("HT-MANUAL");
+    const now = new Date();
+
+    // Create pending top-up request (requires admin approval)
+    const result = await db.collection("coin_topup_requests").insertOne({
+      userId: req.user.id,
+      amount,
+      paymentMethod, // e.g., "bank_transfer", "mobile_banking", "cash", "cheque"
+      status: "pending",
+      transactionId: tran_id,
+      proofUrl: proofUrl || null, // Optional: receipt/screenshot URL
+      description: description || null,
+      submittedAt: now,
+      reviewedAt: null,
+      reviewedBy: null,
+      rejectionReason: null,
+    });
+
+    res.json({
+      message:
+        "Top-up request submitted successfully. Awaiting admin approval.",
+      topupRequestId: result.insertedId,
+      transactionId: tran_id,
+      status: "pending",
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// END MANUAL PAYMENT SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════
 
 module.exports = router;

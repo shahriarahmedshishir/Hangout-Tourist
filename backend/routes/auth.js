@@ -5,24 +5,34 @@ const jwt = require("jsonwebtoken");
 const { getDb } = require("../db");
 const { ObjectId } = require("mongodb");
 const { auth, role } = require("../middleware/auth");
+const {
+  isValidEmail,
+  validatePassword,
+  isValidObjectId,
+} = require("../utils/validation");
 
-const SECRET = process.env.JWT_SECRET || "hangout_secret_dev_only";
+const SECRET = process.env.JWT_SECRET;
 
-function isValidObjectId(id) {
-  return /^[0-9a-fA-F]{24}$/.test(id);
-}
-
+// ✅ SECURITY: Rate limiting applied in server.js and referenced here
 // Register (user only)
 router.post("/register", async (req, res) => {
   try {
     const { name, email, password } = req.body;
+
+    // ✅ SECURITY: Validate input
     if (!name || !email || !password) {
       return res.status(400).json({ message: "All fields are required" });
     }
-    if (password.length < 6) {
-      return res
-        .status(400)
-        .json({ message: "Password must be at least 6 characters" });
+
+    // ✅ SECURITY: Validate email format
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ message: "Invalid email format" });
+    }
+
+    // ✅ SECURITY: Validate password strength
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({ message: passwordValidation.message });
     }
 
     const db = await getDb();
@@ -34,7 +44,7 @@ router.post("/register", async (req, res) => {
 
     const hashed = await bcrypt.hash(password, 10);
     const result = await db.collection("users").insertOne({
-      name,
+      name: name.trim(),
       email: email.toLowerCase(),
       password: hashed,
       role: "user",
@@ -64,8 +74,14 @@ router.post("/register", async (req, res) => {
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+
+    // ✅ SECURITY: Input validation
     if (!email || !password)
       return res.status(400).json({ message: "Email and password required" });
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ message: "Invalid email format" });
+    }
 
     const db = await getDb();
     const user = await db
@@ -130,12 +146,16 @@ router.get("/me", auth, async (req, res) => {
 router.post("/change-password", auth, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
+
+    // ✅ SECURITY: Validate input
     if (!currentPassword || !newPassword)
       return res.status(400).json({ message: "All fields are required" });
-    if (newPassword.length < 6)
-      return res
-        .status(400)
-        .json({ message: "New password must be at least 6 characters" });
+
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({ message: passwordValidation.message });
+    }
+
     if (!isValidObjectId(req.user.id))
       return res.status(400).json({ message: "Invalid user id" });
 
