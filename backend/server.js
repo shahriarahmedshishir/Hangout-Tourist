@@ -54,6 +54,25 @@ const io = new Server(server, {
 // Compression middleware — reduces payload by 70%
 app.use(compression());
 
+// Serve static files with CORS headers applied - BEFORE Helmet
+app.use(
+  "/uploads",
+  cors({ origin: "*" }),
+  express.static(path.join(__dirname, "uploads"), {
+    setHeaders: (res, filepath) => {
+      if (filepath.endsWith(".webp")) {
+        res.setHeader("Content-Type", "image/webp");
+      } else if (filepath.endsWith(".png")) {
+        res.setHeader("Content-Type", "image/png");
+      } else if (filepath.endsWith(".gif")) {
+        res.setHeader("Content-Type", "image/gif");
+      } else if (filepath.endsWith(".jpg") || filepath.endsWith(".jpeg")) {
+        res.setHeader("Content-Type", "image/jpeg");
+      }
+    },
+  }),
+);
+
 // ✅ SECURITY: Helmet - Sets security headers (CSP, HSTS, etc.)
 app.use(
   helmet({
@@ -62,8 +81,8 @@ app.use(
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "https:"],
-        connectSrc: ["'self'", "https://sslcommerz.com"],
+        imgSrc: ["'self'", "data:", "https:", "http://localhost:*"],
+        connectSrc: ["'self'", "https://sslcommerz.com", "http://localhost:*"],
         frameSrc: ["https://sslcommerz.com"],
       },
     },
@@ -81,7 +100,6 @@ app.use(xss()); // Prevent XSS attacks
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Payment callbacks come from SSLCommerz's domain — register BEFORE the
 // global CORS middleware so they are never blocked.

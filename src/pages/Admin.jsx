@@ -1709,15 +1709,11 @@ const BookingsView = () => {
   const [dateFilter, setDateFilter] = useState("");
   const [expanded, setExpanded] = useState(null);
   const [viewMode, setViewMode] = useState("upcoming"); // "upcoming" (default: today+future), "past", "all"
-  const [dateFromFilter, setDateFromFilter] = useState("");
-  const [dateToFilter, setDateToFilter] = useState("");
 
   const load = () => {
     setLoading(true);
     // Build query params
     const params = new URLSearchParams({ limit: 100, viewMode });
-    if (dateFromFilter) params.append("dateFrom", dateFromFilter);
-    if (dateToFilter) params.append("dateTo", dateToFilter);
 
     api
       .get(`/api/admin/bookings?${params.toString()}`)
@@ -1727,7 +1723,7 @@ const BookingsView = () => {
   };
   useEffect(() => {
     load();
-  }, [viewMode, dateFromFilter, dateToFilter]);
+  }, [viewMode]);
 
   const handleCancel = async (id) => {
     if (!confirm("Cancel this booking and initiate refund?")) return;
@@ -1858,10 +1854,16 @@ const BookingsView = () => {
     }
 
     const startDate = b.pickupDate || b.checkIn;
-    const matchesDate =
-      !dateFilter ||
-      (startDate &&
-        new Date(startDate).toISOString().split("T")[0] === dateFilter);
+    const endDate = b.returnDate || b.checkOut;
+
+    let matchesDate = !dateFilter;
+    if (dateFilter && startDate && endDate) {
+      // Check if the selected date is within the booking range (check-in inclusive, check-out exclusive)
+      const selectedDate = new Date(dateFilter);
+      const bookingStart = new Date(startDate);
+      const bookingEnd = new Date(endDate);
+      matchesDate = selectedDate >= bookingStart && selectedDate < bookingEnd;
+    }
     return matchesSearch && matchesDate;
   });
 
@@ -1918,34 +1920,15 @@ const BookingsView = () => {
           value={dateFilter}
           onChange={(e) => setDateFilter(e.target.value)}
           className="bg-muted w-44"
-          title="Filter by start date"
+          title="Filter by date - shows all bookings that overlap with this date"
         />
-        {/* Date Range Filters */}
-        <Input
-          type="date"
-          value={dateFromFilter}
-          onChange={(e) => setDateFromFilter(e.target.value)}
-          className="bg-muted w-40"
-          title="From date (dd/mm/yyyy)"
-          placeholder="From"
-        />
-        <Input
-          type="date"
-          value={dateToFilter}
-          onChange={(e) => setDateToFilter(e.target.value)}
-          className="bg-muted w-40"
-          title="To date (dd/mm/yyyy)"
-          placeholder="To"
-        />
-        {(search || dateFilter || dateFromFilter || dateToFilter) && (
+        {(search || dateFilter) && (
           <Button
             variant="outline"
             size="sm"
             onClick={() => {
               setSearch("");
               setDateFilter("");
-              setDateFromFilter("");
-              setDateToFilter("");
             }}
           >
             Clear

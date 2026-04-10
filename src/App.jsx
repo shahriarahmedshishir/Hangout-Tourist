@@ -21,6 +21,8 @@ import UserDashboard from "./pages/UserDashboard";
 import StaffDashboard from "./pages/StaffDashboard";
 import NotFound from "./pages/NotFound";
 import PaymentResult from "./pages/PaymentResult";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import FloatingPrivacyButton from "@/components/FloatingPrivacyButton";
 
 const queryClient = new QueryClient();
 
@@ -85,8 +87,10 @@ const App = () => (
               }
             />
             <Route path="/payment/result" element={<PaymentResult />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          <FloatingPrivacyButton />
         </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>
