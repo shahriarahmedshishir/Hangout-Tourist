@@ -31,14 +31,35 @@ const _multer = multer({
 });
 
 // Compress and save a single buffer, returns the saved filename
-async function compressAndSave(buffer) {
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.webp`;
+async function compressAndSave(buffer, originalMimetype) {
+  // Determine extension based on mime type
+  let ext = ".jpg";
+  if (originalMimetype === "image/png") ext = ".png";
+  else if (originalMimetype === "image/gif") ext = ".gif";
+  else if (originalMimetype === "image/webp") ext = ".webp";
+
+  const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
   const dest = path.join(uploadDir, filename);
-  await sharp(buffer)
-    .rotate() // auto-orient from EXIF
-    .resize({ width: 1280, withoutEnlargement: true }) // max 1280px wide
-    .webp({ quality: 80 }) // convert to WebP at 80% quality
-    .toFile(dest);
+
+  let pipeline = sharp(buffer).rotate(); // auto-orient from EXIF
+
+  // Resize to max 1280px wide
+  pipeline = pipeline.resize({ width: 1280, withoutEnlargement: true });
+
+  // Apply compression based on format
+  if (ext === ".png") {
+    pipeline = pipeline.png({ quality: 80, compression: 9 });
+  } else if (ext === ".gif") {
+    // GIF stays as-is, just resized
+    pipeline = pipeline.toFormat("gif");
+  } else if (ext === ".webp") {
+    pipeline = pipeline.webp({ quality: 80 });
+  } else {
+    // JPEG default
+    pipeline = pipeline.jpeg({ quality: 80, progressive: true });
+  }
+
+  await pipeline.toFile(dest);
   return filename;
 }
 
@@ -46,7 +67,10 @@ async function compressAndSave(buffer) {
 async function compressMiddleware(req, res, next) {
   try {
     if (req.file) {
-      const filename = await compressAndSave(req.file.buffer);
+      const filename = await compressAndSave(
+        req.file.buffer,
+        req.file.mimetype,
+      );
       req.file.filename = filename;
       req.file.path = path.join(uploadDir, filename);
     }
@@ -56,7 +80,7 @@ async function compressMiddleware(req, res, next) {
         : Object.values(req.files).flat();
       await Promise.all(
         files.map(async (f) => {
-          const filename = await compressAndSave(f.buffer);
+          const filename = await compressAndSave(f.buffer, f.mimetype);
           f.filename = filename;
           f.path = path.join(uploadDir, filename);
         }),
