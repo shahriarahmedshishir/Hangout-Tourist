@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/ht.png";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 
@@ -225,11 +225,8 @@ const Navbar = () => {
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between">
-        <Link to="/" className="flex items-center gap-2">
-          <img src={logo} alt="Hangout Tourist" className="h-9 w-9" />
-          <span className="font-heading text-xl font-bold text-foreground">
-            Hangout <span className="text-gradient-primary">Tourist</span>
-          </span>
+        <Link to="/" className="flex items-center justify-center gap-2">
+          <img src={logo} alt="Hangout Tourist" className=" h-10" />
         </Link>
 
         {/* Desktop Nav */}
@@ -334,16 +331,11 @@ const Navbar = () => {
           ) : (
             <>
               <Link to="/login">
-                <Button variant="ghost" size="sm" className="gap-2">
-                  <User className="h-4 w-4" /> Login
-                </Button>
-              </Link>
-              <Link to="/login">
                 <Button
                   size="sm"
                   className="bg-gradient-primary text-primary-foreground hover:opacity-90"
                 >
-                  Sign Up
+                 <User className="h-4 w-4" /> Login
                 </Button>
               </Link>
             </>
@@ -422,17 +414,17 @@ const Navbar = () => {
               </>
             ) : (
               <>
-                <Link to="/login" onClick={() => setMobileOpen(false)}>
+                {/* <Link to="/login" onClick={() => setMobileOpen(false)}>
                   <Button
                     variant="ghost"
                     className="w-full justify-start gap-2"
                   >
                     <User className="h-4 w-4" /> Login
                   </Button>
-                </Link>
+                </Link> */}
                 <Link to="/login" onClick={() => setMobileOpen(false)}>
                   <Button className="w-full bg-gradient-primary text-primary-foreground">
-                    Sign Up
+                     <User className="h-4 w-4" /> Login
                   </Button>
                 </Link>
               </>

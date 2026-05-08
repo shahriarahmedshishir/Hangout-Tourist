@@ -50,11 +50,6 @@ export default function HotelsSection() {
               Find the perfect place to stay
             </p>
           </div>
-          <Link to="/hotels" className="mt-4">
-            <Button variant="outline" size="sm" className="gap-1">
-              View All <ChevronRight className="h-4 w-4" />
-            </Button>
-          </Link>
         </div>
 
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
@@ -135,13 +130,20 @@ export default function HotelsSection() {
                     size="sm"
                     className="bg-gradient-primary text-primary-foreground hover:opacity-90"
                   >
-                    View
+                    Details
                   </Button>
                 </div>
               </div>
             </Link>
           ))}
         </div>
+      </div>
+      <div className="container flex justify-center mt-6">
+        <Link to="/hotels">
+          <Button variant="outline" size="sm" className="gap-1 rounded-xl">
+            View All <ChevronRight className="h-4 w-4" />
+          </Button>
+        </Link>
       </div>
     </section>
   );

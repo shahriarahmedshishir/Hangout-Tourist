@@ -51,34 +51,41 @@ const Login = () => {
       setLoading(false);
     }
   };
+
   return (
-    <div className="flex min-h-screen">
-      {/* Left - Form */}
-      <div className="flex flex-1 flex-col justify-center px-6 py-12 lg:px-20">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
+      <div className="w-full max-w-md">
+        {/* Back Link */}
         <Link
           to="/"
-          className="mb-8 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-4 w-4" /> Back to Home
         </Link>
 
-        <div className="mx-auto w-full max-w-sm">
-          <div className="mb-8 flex items-center gap-2">
+        {/* Card Container */}
+        <div className="rounded-2xl border bg-card p-6 shadow-lg sm:p-8">
+          {/* Logo & Brand */}
+          <div className="mb-6 flex items-center gap-2">
             <img src={logo} alt="Hangout Tourist" className="h-10 w-10" />
             <span className="font-heading text-2xl font-bold text-foreground">
               Hangout <span className="text-gradient-primary">Tourist</span>
             </span>
           </div>
 
-          <h2 className="mb-2 font-heading text-2xl font-bold text-foreground">
-            {isSignUp ? "Create Account" : "Welcome Back"}
-          </h2>
-          <p className="mb-6 text-sm text-muted-foreground">
-            {isSignUp
-              ? "Sign up to start your journey"
-              : "Sign in to access your bookings"}
-          </p>
+          {/* Header */}
+          <div className="mb-6">
+            <h2 className="font-heading text-2xl font-bold text-foreground">
+              {isSignUp ? "Create Account" : "Welcome Back"}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {isSignUp
+                ? "Sign up to start your journey"
+                : "Sign in to access your bookings"}
+            </p>
+          </div>
 
+          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
@@ -166,7 +173,7 @@ const Login = () => {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-primary text-primary-foreground hover:opacity-90"
+              className="w-full bg-gradient-primary text-primary-foreground hover:opacity-90 transition-opacity"
             >
               {loading
                 ? "Please wait..."
@@ -176,30 +183,32 @@ const Login = () => {
             </Button>
           </form>
 
-          <div className="mt-4 text-center text-sm text-muted-foreground">
+          {/* Toggle Auth Mode */}
+          <div className="mt-6 text-center text-sm text-muted-foreground">
             {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
             <button
               onClick={() => setIsSignUp(!isSignUp)}
-              className="text-primary hover:underline font-medium"
+              className="text-primary hover:underline font-medium transition-colors"
             >
               {isSignUp ? "Sign In" : "Sign Up"}
             </button>
           </div>
         </div>
-      </div>
 
-      {/* Right - Visual */}
-      <div className="hidden lg:flex lg:flex-1 lg:items-center lg:justify-center bg-gradient-primary p-12">
-        <div className="text-center text-primary-foreground">
-          <h2 className="mb-4 font-heading text-4xl font-bold">
-            Explore the World
-          </h2>
-          <p className="text-lg opacity-80">
-            Book flights, hotels, and holiday packages at the best prices.
-          </p>
-        </div>
+        {/* Footer Note */}
+        <p className="mt-6 text-center text-xs text-muted-foreground">
+          By continuing, you agree to our{" "}
+          <a href="#" className="text-primary hover:underline">
+            Terms of Service
+          </a>{" "}
+          and{" "}
+          <a href="#" className="text-primary hover:underline">
+            Privacy Policy
+          </a>
+        </p>
       </div>
     </div>
   );
 };
+
 export default Login;
