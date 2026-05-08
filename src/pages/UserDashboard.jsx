@@ -166,6 +166,9 @@ const UserDashboard = () => {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("hotel");
+  const [hotelPage, setHotelPage] = useState(1);
+  const [carPage, setCarPage] = useState(1);
+  const ITEMS_PER_PAGE = 3;
 
   useEffect(() => {
     if (!authLoading) {
@@ -241,9 +244,26 @@ const UserDashboard = () => {
     );
   }
 
-  const hotelBookings = bookings.filter((b) => b.type === "hotel");
-  const carBookings = bookings.filter((b) => b.type === "car");
+  // Check if a booking is upcoming (not yet completed or cancelled)
+  const isUpcoming = (booking) => {
+    if (booking.status === "cancelled") return false;
+    const endDate =
+      booking.type === "hotel" ? booking.checkOut : booking.returnDate;
+    return new Date(endDate) > new Date();
+  };
+
+  const upcomingBookings = bookings.filter(isUpcoming);
+  const hotelBookings = bookings.filter(
+    (b) => b.type === "hotel" && isUpcoming(b),
+  );
+  const carBookings = bookings.filter((b) => b.type === "car" && isUpcoming(b));
+
+  // Pagination
   const shown = tab === "hotel" ? hotelBookings : carBookings;
+  const totalPages = Math.ceil(shown.length / ITEMS_PER_PAGE);
+  const currentPage = tab === "hotel" ? hotelPage : carPage;
+  const startIdx = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedShown = shown.slice(startIdx, startIdx + ITEMS_PER_PAGE);
 
   return (
     <div className="min-h-screen bg-background">
@@ -261,7 +281,7 @@ const UserDashboard = () => {
 
       <div className="container py-10">
         {/* Stats */}
-        <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-3">
           {[
             {
               label: "Hotel Bookings",
@@ -277,15 +297,11 @@ const UserDashboard = () => {
             },
             {
               label: "Confirmed",
-              value: bookings.filter((b) => b.status === "confirmed").length,
+              value: bookings.filter(
+                (b) => b.status === "confirmed" && isUpcoming(b),
+              ).length,
               icon: <CheckCircle2 className="h-5 w-5" />,
               color: "text-success",
-            },
-            {
-              label: "Cancelled",
-              value: bookings.filter((b) => b.status === "cancelled").length,
-              icon: <XCircle className="h-5 w-5" />,
-              color: "text-destructive",
             },
           ].map((s) => (
             <div
@@ -319,24 +335,29 @@ const UserDashboard = () => {
         <div className="mb-6 flex gap-2">
           <Button
             variant={tab === "hotel" ? "default" : "outline"}
-            onClick={() => setTab("hotel")}
+            onClick={() => {
+              setTab("hotel");
+              setHotelPage(1);
+            }}
             className={
               tab === "hotel"
                 ? "bg-gradient-primary text-primary-foreground"
                 : ""
             }
           >
-            <Hotel className="h-4 w-4 mr-2" /> Hotel Bookings (
-            {hotelBookings.length})
+            <Hotel className="h-4 w-4 mr-2" /> Hotel Bookings
           </Button>
           <Button
             variant={tab === "car" ? "default" : "outline"}
-            onClick={() => setTab("car")}
+            onClick={() => {
+              setTab("car");
+              setCarPage(1);
+            }}
             className={
               tab === "car" ? "bg-gradient-primary text-primary-foreground" : ""
             }
           >
-            <Car className="h-4 w-4 mr-2" /> Car Rentals ({carBookings.length})
+            <Car className="h-4 w-4 mr-2" /> Car Rentals
           </Button>
         </div>
 
@@ -355,11 +376,42 @@ const UserDashboard = () => {
             </Button>
           </div>
         ) : (
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {shown.map((b) => (
-              <BookingCard key={b._id} booking={b} />
-            ))}
-          </div>
+          <>
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {paginatedShown.map((b) => (
+                <BookingCard key={b._id} booking={b} />
+              ))}
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="mt-8 flex justify-center gap-2">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                  (page) => (
+                    <Button
+                      key={page}
+                      variant={page === currentPage ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => {
+                        if (tab === "hotel") {
+                          setHotelPage(page);
+                        } else {
+                          setCarPage(page);
+                        }
+                      }}
+                      className={
+                        page === currentPage
+                          ? "bg-gradient-primary text-primary-foreground"
+                          : ""
+                      }
+                    >
+                      {page}
+                    </Button>
+                  ),
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
       <Footer />

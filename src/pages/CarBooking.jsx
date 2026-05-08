@@ -34,6 +34,7 @@ const CarBooking = () => {
   const [pickupArea, setPickupArea] = useState("");
   const [pickupAddress, setPickupAddress] = useState("");
   const [contactNumber, setContactNumber] = useState("");
+  const [nidNumber, setNidNumber] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [activeImg, setActiveImg] = useState(0);
@@ -109,6 +110,10 @@ const CarBooking = () => {
       setError("Please enter a contact number.");
       return false;
     }
+    if (!nidNumber.trim()) {
+      setError("Please enter your NID number.");
+      return false;
+    }
     setError("");
     return true;
   };
@@ -133,6 +138,8 @@ const CarBooking = () => {
           ? `${pickupArea} — ${pickupAddress.trim()}`
           : pickupAddress.trim(),
         contactNumber: contactNumber.trim(),
+        nidNumber: nidNumber.trim(),
+        totalAmount: total,
       });
       window.location.href = paymentUrl;
     } catch (err) {
@@ -168,6 +175,7 @@ const CarBooking = () => {
           ? `${pickupArea} — ${pickupAddress.trim()}`
           : pickupAddress.trim(),
         contactNumber: contactNumber.trim(),
+        nidNumber: nidNumber.trim(),
       });
 
       // Then submit manual payment
@@ -224,6 +232,7 @@ const CarBooking = () => {
           ? `${pickupArea} — ${pickupAddress.trim()}`
           : pickupAddress.trim(),
         contactNumber: contactNumber.trim(),
+        nidNumber: nidNumber.trim(),
       });
 
       // Pay with coins
@@ -518,6 +527,18 @@ const CarBooking = () => {
                     className="pl-9"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-foreground">
+                  NID Number *
+                </label>
+                <Input
+                  type="text"
+                  placeholder="Enter your National ID number"
+                  value={nidNumber}
+                  onChange={(e) => setNidNumber(e.target.value)}
+                />
               </div>
 
               {error && (

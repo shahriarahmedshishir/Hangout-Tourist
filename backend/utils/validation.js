@@ -21,6 +21,7 @@ function isValidEmail(email) {
 
 /**
  * Validate password strength
+ * Requirements: Min 8 chars, 1 uppercase, 1 lowercase, 1 special character
  * @param {string} password
  * @returns {object} { valid: boolean, message: string }
  */
@@ -28,11 +29,30 @@ function validatePassword(password) {
   if (!password || typeof password !== "string") {
     return { valid: false, message: "Password is required" };
   }
-  if (password.length < 6) {
-    return { valid: false, message: "Password must be at least 6 characters" };
+  if (password.length < 8) {
+    return { valid: false, message: "Password must be at least 8 characters" };
   }
   if (password.length > 128) {
     return { valid: false, message: "Password is too long" };
+  }
+  if (!/[A-Z]/.test(password)) {
+    return {
+      valid: false,
+      message: "Password must contain at least one uppercase letter",
+    };
+  }
+  if (!/[a-z]/.test(password)) {
+    return {
+      valid: false,
+      message: "Password must contain at least one lowercase letter",
+    };
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    return {
+      valid: false,
+      message:
+        "Password must contain at least one special character (!@#$%^&* etc.)",
+    };
   }
   return { valid: true };
 }

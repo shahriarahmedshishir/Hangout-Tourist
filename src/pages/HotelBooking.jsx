@@ -46,6 +46,7 @@ export default function HotelBooking() {
     email: "",
     address: "",
     contactNumber: "",
+    nidNumber: "",
   });
 
   const [contactNumber, setContactNumber] = useState("");
@@ -114,9 +115,10 @@ export default function HotelBooking() {
       !guestDetails.fullName.trim() ||
       !guestDetails.email.trim() ||
       !guestDetails.address.trim() ||
-      !guestDetails.contactNumber.trim()
+      !guestDetails.contactNumber.trim() ||
+      !guestDetails.nidNumber.trim()
     ) {
-      setError("Please fill all guest details.");
+      setError("Please fill all guest details including NID number.");
       return false;
     }
     if (!termsAccepted || !policyAccepted) {
@@ -174,6 +176,7 @@ export default function HotelBooking() {
         checkIn,
         checkOut,
         guestDetails,
+        totalAmount: total,
       });
       // Redirect browser to SSLCommerz payment page
       window.location.href = paymentUrl;
@@ -412,7 +415,8 @@ export default function HotelBooking() {
               {/* Stay Details */}
               <div className="rounded-2xl border border-border bg-card p-6 shadow-card">
                 <h2 className="mb-4 flex items-center gap-2 font-heading text-xl font-bold text-foreground">
-                  <CalendarCheck className="h-5 w-5 text-primary" /> Stay Details
+                  <CalendarCheck className="h-5 w-5 text-primary" /> Stay
+                  Details
                 </h2>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="rounded-lg bg-muted/50 p-4">
@@ -503,7 +507,10 @@ export default function HotelBooking() {
                         placeholder="+880 1234567890"
                         value={guestDetails.contactNumber}
                         onChange={(e) =>
-                          handleGuestDetailsChange("contactNumber", e.target.value)
+                          handleGuestDetailsChange(
+                            "contactNumber",
+                            e.target.value,
+                          )
                         }
                         className="pl-9 bg-muted"
                       />
@@ -527,6 +534,21 @@ export default function HotelBooking() {
                       />
                     </div>
                   </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-foreground mb-2">
+                      NID Number *
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="Enter your National ID number"
+                      value={guestDetails.nidNumber}
+                      onChange={(e) =>
+                        handleGuestDetailsChange("nidNumber", e.target.value)
+                      }
+                      className="bg-muted"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -542,8 +564,8 @@ export default function HotelBooking() {
                       className="flex justify-between items-center p-3 rounded-lg bg-muted/50"
                     >
                       <span className="text-sm text-muted-foreground">
-                        Room {r.roomNumber} — ৳{(r.price || 0).toLocaleString()} ×{" "}
-                        {days} {days === 1 ? "night" : "nights"}
+                        Room {r.roomNumber} — ৳{(r.price || 0).toLocaleString()}{" "}
+                        × {days} {days === 1 ? "night" : "nights"}
                       </span>
                       <span className="font-semibold text-foreground">
                         ৳{((r.price || 0) * days).toLocaleString()}
@@ -775,7 +797,9 @@ export default function HotelBooking() {
                         <Upload className="h-8 w-8 text-primary" />
                         <div>
                           <span className="text-sm font-semibold text-foreground">
-                            {manualScreenshot ? "Image Uploaded" : "Upload Screenshot"}
+                            {manualScreenshot
+                              ? "Image Uploaded"
+                              : "Upload Screenshot"}
                           </span>
                           <p className="text-xs text-muted-foreground">
                             PNG, JPG up to 5MB
@@ -875,7 +899,9 @@ export default function HotelBooking() {
 
                     <Button
                       onClick={handleCoinPayment}
-                      disabled={coinLoading || !termsAccepted || !policyAccepted}
+                      disabled={
+                        coinLoading || !termsAccepted || !policyAccepted
+                      }
                       className="w-full bg-gradient-primary text-primary-foreground hover:opacity-90 py-6 text-lg font-semibold rounded-xl"
                     >
                       {coinLoading
@@ -892,8 +918,8 @@ export default function HotelBooking() {
                           Insufficient Balance
                         </p>
                         <p className="text-xs text-amber-800 mt-1">
-                          You need ৳{(total - coinBalance).toLocaleString()} more
-                          coins
+                          You need ৳{(total - coinBalance).toLocaleString()}{" "}
+                          more coins
                         </p>
                       </div>
                     </div>
@@ -1011,9 +1037,7 @@ export default function HotelBooking() {
               </section>
 
               <section>
-                <h3 className="font-bold text-foreground mb-2">
-                  7. Liability
-                </h3>
+                <h3 className="font-bold text-foreground mb-2">7. Liability</h3>
                 <p>
                   The hotel is not responsible for loss, theft, or damage to
                   personal belongings. Please use the hotel safe for valuables.
@@ -1075,15 +1099,9 @@ export default function HotelBooking() {
                   3. Refund Policy
                 </h3>
                 <ul className="list-disc list-inside space-y-2">
-                  <li>
-                    Cancellations 48+ hours before check-in: Full refund
-                  </li>
-                  <li>
-                    Cancellations 24-48 hours before check-in: 50% refund
-                  </li>
-                  <li>
-                    Cancellations less than 24 hours: No refund
-                  </li>
+                  <li>Cancellations 48+ hours before check-in: Full refund</li>
+                  <li>Cancellations 24-48 hours before check-in: 50% refund</li>
+                  <li>Cancellations less than 24 hours: No refund</li>
                 </ul>
               </section>
 
@@ -1136,8 +1154,8 @@ export default function HotelBooking() {
                   8. Contact & Disputes
                 </h3>
                 <p>
-                  For cancellations or disputes, please contact our support
-                  team at support@hangcoin.com within 30 days of your booking.
+                  For cancellations or disputes, please contact our support team
+                  at support@hangcoin.com within 30 days of your booking.
                 </p>
               </section>
             </div>
