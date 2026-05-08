@@ -58,10 +58,15 @@ const STATUS_COLORS = {
 };
 
 const Admin = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
   const [view, setView] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login", { replace: true });
+  };
 
   // All hooks must be called BEFORE any conditional returns
   useEffect(() => {
@@ -111,7 +116,14 @@ const Admin = () => {
             </button>
           ))}
         </nav>
-        <div className="border-t border-sidebar-border p-3">
+        <div className="border-t border-sidebar-border p-3 space-y-2">
+          <Button
+            onClick={handleLogout}
+            variant="ghost"
+            className="w-full justify-start gap-2 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-destructive/10 hover:text-destructive"
+          >
+            <LogOut className="h-4 w-4" /> Logout
+          </Button>
           <Link to="/">
             <Button
               variant="ghost"
@@ -962,11 +974,8 @@ const RoomsView = ({ hotel, onBack }) => {
                   (b) => new Date(b.checkOut) >= today,
                 );
                 return (
-                  <>
-                    <tr
-                      key={r._id}
-                      className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-                    >
+                  <Fragment key={r._id}>
+                    <tr className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                       <td className="px-5 py-3 font-medium text-foreground">
                         {r.roomNumber}
                       </td>
@@ -1121,7 +1130,7 @@ const RoomsView = ({ hotel, onBack }) => {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>

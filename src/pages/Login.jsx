@@ -3,7 +3,16 @@ import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Eye, EyeOff, Mail, Lock, User, ArrowLeft } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  Mail,
+  Lock,
+  User,
+  ArrowLeft,
+  Check,
+  X,
+} from "lucide-react";
 import logo from "@/assets/logo.png";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -14,9 +23,27 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [showResendEmail, setShowResendEmail] = useState(false);
+  const [resendEmail, setResendEmail] = useState("");
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const navigate = useNavigate();
   const { login } = useAuth();
+
+  // Password validation checks
+  const passwordChecks = {
+    length: form.password.length >= 8,
+    uppercase: /[A-Z]/.test(form.password),
+    lowercase: /[a-z]/.test(form.password),
+    special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(form.password),
+  };
+
+  const isPasswordValid =
+    passwordChecks.length &&
+    passwordChecks.uppercase &&
+    passwordChecks.lowercase &&
+    passwordChecks.special;
 
   const handleChange = (e) => {
     setForm((p) => ({ ...p, [e.target.id]: e.target.value }));
@@ -36,15 +63,68 @@ const Login = () => {
         : { email: form.email, password: form.password };
       const data = await api.post(endpoint, body);
       if (isSignUp) {
-        setSuccess("Account created! Please sign in.");
-        setForm({ name: "", email: form.email, password: "" });
-        setIsSignUp(false);
+        setSuccess(
+          "Account created! Please check your email to verify your account.",
+        );
+        setForm({ name: "", email: "", password: "" });
+        // Don't switch to sign in - keep showing the message
       } else {
         login(data.token, data.user);
         if (data.user.role === "admin") navigate("/admin");
         else if (data.user.role === "hotel_staff") navigate("/staff");
         else navigate("/");
       }
+    } catch (err) {
+      // Check if error is about email verification
+      if (
+        err.response?.status === 403 &&
+        err.response?.data?.requiresVerification
+      ) {
+        setError(`${err.message} You can resend the verification email below.`);
+        setShowResendEmail(true);
+        setResendEmail(form.email);
+      } else {
+        setError(err.message || "Something went wrong");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendEmail = async () => {
+    if (!resendEmail) {
+      setError("Please enter your email");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      await api.post("/api/auth/resend-verification", { email: resendEmail });
+      setSuccess("Verification email sent! Please check your inbox.");
+      setShowResendEmail(false);
+    } catch (err) {
+      setError(err.message || "Failed to resend email");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!forgotPasswordEmail) {
+      setError("Please enter your email");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      await api.post("/api/auth/forgot-password", {
+        email: forgotPasswordEmail,
+      });
+      setSuccess(
+        "If an account exists with this email, a reset link has been sent. Please check your inbox.",
+      );
+      setShowForgotPassword(false);
+      setForgotPasswordEmail("");
     } catch (err) {
       setError(err.message || "Something went wrong");
     } finally {
@@ -156,23 +236,129 @@ const Login = () => {
                   )}
                 </button>
               </div>
+
+              {/* Password Requirements Checklist - Show only during signup */}
+              {isSignUp && form.password && (
+                <div className="mt-3 space-y-2 rounded-lg bg-muted/50 p-3">
+                  <p className="text-xs font-medium text-foreground">
+                    Password Requirements:
+                  </p>
+                  <div className="space-y-1">
+                    <PasswordCheck
+                      valid={passwordChecks.length}
+                      label="At least 8 characters"
+                    />
+                    <PasswordCheck
+                      valid={passwordChecks.uppercase}
+                      label="One uppercase letter (A-Z)"
+                    />
+                    <PasswordCheck
+                      valid={passwordChecks.lowercase}
+                      label="One lowercase letter (a-z)"
+                    />
+                    <PasswordCheck
+                      valid={passwordChecks.special}
+                      label="One special character (!@#$%^&*)"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
+            {/* Resend Verification Email Section - Show when email verification is needed */}
+            {!isSignUp && showResendEmail && (
+              <div className="rounded-lg bg-warning/10 p-3 space-y-3">
+                <p className="text-sm font-medium text-foreground">
+                  Verify your email to continue
+                </p>
+                <div>
+                  <Input
+                    type="email"
+                    placeholder="your@email.com"
+                    value={resendEmail}
+                    onChange={(e) => setResendEmail(e.target.value)}
+                    className="bg-background"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleResendEmail}
+                  disabled={loading}
+                  className="w-full text-sm"
+                  variant="outline"
+                >
+                  Resend Verification Email
+                </Button>
+              </div>
+            )}
+
+            {/* Forgot Password Form - Show when clicked */}
+            {!isSignUp && showForgotPassword && (
+              <div className="rounded-lg bg-info/10 p-3 space-y-3 border border-info/20">
+                <p className="text-sm font-medium text-foreground">
+                  Reset Your Password
+                </p>
+                <div>
+                  <Input
+                    type="email"
+                    placeholder="Enter your email"
+                    value={forgotPasswordEmail}
+                    onChange={(e) => {
+                      setForgotPasswordEmail(e.target.value);
+                      setError("");
+                    }}
+                    className="bg-background"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    disabled={loading || !forgotPasswordEmail}
+                    className="flex-1 bg-gradient-primary text-primary-foreground text-sm"
+                  >
+                    {loading ? "Sending..." : "Send Reset Link"}
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setShowForgotPassword(false);
+                      setForgotPasswordEmail("");
+                      setError("");
+                    }}
+                    disabled={loading}
+                    variant="outline"
+                    className="flex-1 text-sm"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {!isSignUp && (
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" className="accent-primary" /> Remember
                   me
                 </label>
-                <a href="#" className="text-sm text-primary hover:underline">
-                  Forgot Password?
-                </a>
+                {!showForgotPassword && (
+                  <Button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    disabled={loading}
+                    variant="ghost"
+                    className="h-auto px-2 py-1 text-sm text-primary hover:text-primary hover:bg-primary/10 transition-colors"
+                  >
+                    Forgot Password?
+                  </Button>
+                )}
               </div>
             )}
 
             <Button
               type="submit"
-              disabled={loading}
+              disabled={loading || (isSignUp && !isPasswordValid)}
               className="w-full bg-gradient-primary text-primary-foreground hover:opacity-90 transition-opacity"
             >
               {loading
@@ -187,7 +373,14 @@ const Login = () => {
           <div className="mt-6 text-center text-sm text-muted-foreground">
             {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
             <button
-              onClick={() => setIsSignUp(!isSignUp)}
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setError("");
+                setSuccess("");
+                setShowResendEmail(false);
+                setShowForgotPassword(false);
+                setForgotPasswordEmail("");
+              }}
               className="text-primary hover:underline font-medium transition-colors"
             >
               {isSignUp ? "Sign In" : "Sign Up"}
@@ -210,5 +403,17 @@ const Login = () => {
     </div>
   );
 };
+
+// Helper component for password checks
+const PasswordCheck = ({ valid, label }) => (
+  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+    {valid ? (
+      <Check className="h-4 w-4 text-green-600" />
+    ) : (
+      <X className="h-4 w-4 text-red-600" />
+    )}
+    <span className={valid ? "text-green-600" : "text-red-600"}>{label}</span>
+  </div>
+);
 
 export default Login;

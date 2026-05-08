@@ -9,7 +9,6 @@ const helmet = require("helmet");
 const mongoSanitize = require("express-mongo-sanitize");
 const xss = require("xss-clean");
 const rateLimit = require("express-rate-limit");
-const csrf = require("csurf");
 const path = require("path");
 const jwt = require("jsonwebtoken");
 const { getDb } = require("./db");

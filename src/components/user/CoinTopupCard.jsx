@@ -208,7 +208,7 @@ export default function CoinTopupCard({ onTopupSuccess }) {
                         : ""
                     }
                   >
-                    ${preset}
+                    ৳{preset}
                   </Button>
                 ))}
               </div>
@@ -221,7 +221,7 @@ export default function CoinTopupCard({ onTopupSuccess }) {
               </Label>
               <div className="relative mt-1">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground">
-                  $
+                  ৳
                 </span>
                 <Input
                   id="amount"
@@ -245,7 +245,7 @@ export default function CoinTopupCard({ onTopupSuccess }) {
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-muted-foreground">Amount:</span>
                   <span className="font-heading text-lg font-bold text-foreground">
-                    ${(selectedPreset || parseFloat(amount) || 0).toFixed(2)}
+                    ৳{(selectedPreset || parseFloat(amount) || 0).toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -274,7 +274,7 @@ export default function CoinTopupCard({ onTopupSuccess }) {
               </Label>
               <div className="relative mt-1">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground">
-                  $
+                  ৳
                 </span>
                 <Input
                   id="manual-amount"
@@ -335,7 +335,7 @@ export default function CoinTopupCard({ onTopupSuccess }) {
                       Amount:
                     </span>
                     <span className="font-heading text-lg font-bold text-foreground">
-                      ${parseFloat(manualAmount || 0).toFixed(2)}
+                      ৳{parseFloat(manualAmount || 0).toFixed(2)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-xs">

@@ -392,7 +392,20 @@ router.post("/initiate/coin-topup", auth, async (req, res) => {
   try {
     const { amount } = req.body;
 
+    // ✅ SECURITY: Log payment attempt
+    console.log("🔔 Coin top-up initiated", {
+      userId: req.user.id,
+      userName: req.user.name,
+      amount,
+      timestamp: new Date().toISOString(),
+      ipAddress: req.ip,
+    });
+
     if (!amount || amount <= 0) {
+      console.warn("❌ Invalid amount attempted", {
+        userId: req.user.id,
+        amount,
+      });
       return res.status(400).json({ message: "Valid amount is required" });
     }
 
@@ -442,10 +455,12 @@ router.post("/initiate/coin-topup", auth, async (req, res) => {
     const apiResponse = await sslcz.init(sslData);
 
     if (apiResponse?.GatewayPageURL) {
+      console.log("✅ Payment gateway initialized", { tran_id, amount });
       return res.json({ paymentUrl: apiResponse.GatewayPageURL, tran_id });
     }
 
     // Gateway init failed — clean up session
+    console.error("❌ SSL Commerz gateway init failed", { tran_id, amount });
     await db.collection("payment_sessions").deleteOne({ tran_id });
     res
       .status(502)
@@ -467,15 +482,22 @@ router.post("/success", async (req, res) => {
   try {
     const { tran_id, val_id, status } = req.body;
 
-    console.log("Payment success callback:", { tran_id, val_id, status });
+    // ✅ SECURITY: Log payment success attempt
+    console.log("🔔 Payment success callback received", {
+      tran_id,
+      val_id,
+      status,
+      timestamp: new Date().toISOString(),
+      ipAddress: req.ip,
+    });
 
     if (!tran_id) {
-      console.error("No tran_id in success callback");
+      console.error("❌ No tran_id in success callback from", req.ip);
       return res.redirect(`${CLIENT_URL}/payment/result?status=fail`);
     }
 
     if (status !== "VALID" && status !== "VALIDATED") {
-      console.error(`Invalid status: ${status}`);
+      console.error(`❌ Invalid status: ${status} for tran_id: ${tran_id}`);
       await _deleteSession(tran_id);
       return res.redirect(
         `${CLIENT_URL}/payment/result?status=fail&tran_id=${tran_id}`,
@@ -490,7 +512,10 @@ router.post("/success", async (req, res) => {
       try {
         const sslcz = new SSLCommerzPayment(STORE_ID, STORE_PASSWORD, IS_LIVE);
         validation = await sslcz.validate({ val_id });
-        console.log("SSLCommerz validation response:", validation);
+        console.log("✅ SSLCommerz validation successful", {
+          tran_id,
+          validationStatus: validation?.status,
+        });
 
         if (
           validation?.status === "VALID" ||
@@ -500,9 +525,8 @@ router.post("/success", async (req, res) => {
           confirmed = await _confirmBooking(tran_id, validation);
           if (!confirmed) {
             console.error(
-              "Payment validation mismatch for tran_id:",
+              "❌ Payment validation mismatch for tran_id:",
               tran_id,
-              validation,
             );
             return res.redirect(
               `${CLIENT_URL}/payment/result?status=fail&tran_id=${tran_id}`,
@@ -512,36 +536,41 @@ router.post("/success", async (req, res) => {
           // Validation response doesn't show VALID/VALIDATED status
           // But SSL Commerz already told us it's VALID, so confirm booking
           console.warn(
-            "Validation API returned different status:",
+            "⚠️ Validation API returned different status:",
             validation?.status,
           );
           confirmed = await _confirmBooking(tran_id, null);
         }
       } catch (validationErr) {
-        console.warn("SSLCommerz validation API error:", validationErr.message);
+        console.warn(
+          "⚠️ SSLCommerz validation API error:",
+          validationErr.message,
+        );
         // Since SSL Commerz callback status is VALID, confirm the booking
         // even if direct validation API fails
         confirmed = await _confirmBooking(tran_id, null);
       }
     } else {
       // No val_id provided, but status is VALID — trust SSL Commerz
-      console.log("No val_id provided but status is VALID, confirming booking");
+      console.log(
+        "⚠️ No val_id provided but status is VALID, confirming booking",
+      );
       confirmed = await _confirmBooking(tran_id, null);
     }
 
     if (!confirmed) {
-      console.error("Booking confirmation failed for tran_id:", tran_id);
+      console.error("❌ Booking confirmation failed for tran_id:", tran_id);
       return res.redirect(
         `${CLIENT_URL}/payment/result?status=fail&tran_id=${tran_id}&reason=unavailable`,
       );
     }
 
-    console.log("Payment success - redirecting with success status");
+    console.log("✅ Payment success confirmed", { tran_id });
     return res.redirect(
       `${CLIENT_URL}/payment/result?status=success&tran_id=${tran_id}`,
     );
   } catch (err) {
-    console.error("SSLCommerz success handler error:", err);
+    console.error("❌ SSLCommerz success handler error:", err);
     res.redirect(`${CLIENT_URL}/payment/result?status=fail`);
   }
 });
@@ -577,12 +606,24 @@ router.post("/cancel", async (req, res) => {
 router.post("/ipn", async (req, res) => {
   try {
     const { tran_id, val_id, status } = req.body;
-    console.log("IPN received:", { tran_id, val_id, status });
+
+    // ✅ SECURITY: Log IPN payment callback
+    console.log("🔔 IPN payment callback received", {
+      tran_id,
+      val_id,
+      status,
+      timestamp: new Date().toISOString(),
+      ipAddress: req.ip,
+    });
 
     if ((status === "VALID" || status === "VALIDATED") && val_id) {
       const sslcz = new SSLCommerzPayment(STORE_ID, STORE_PASSWORD, IS_LIVE);
       const validation = await sslcz.validate({ val_id });
-      console.log("IPN validation response:", validation);
+      console.log("✅ IPN validation response:", {
+        tran_id,
+        status: validation?.status,
+      });
+
       if (
         validation?.status === "VALID" ||
         validation?.status === "VALIDATED"
@@ -596,17 +637,15 @@ router.post("/ipn", async (req, res) => {
         if (session) {
           // Session still exists, process it
           await _confirmBooking(tran_id, validation);
+          console.log("✅ IPN booking confirmed", { tran_id });
         } else {
           // Session not found - might be already processed by browser callback, which is ok
-          console.log(
-            "IPN: Session not found, might be already processed:",
-            tran_id,
-          );
+          console.log("ℹ️ IPN: Session already processed:", tran_id);
         }
       }
     }
   } catch (err) {
-    console.error("IPN error:", err);
+    console.error("❌ IPN error:", err);
   }
   res.status(200).send("OK");
 });

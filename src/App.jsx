@@ -15,6 +15,8 @@ import Visa from "./pages/Visa";
 import Cars from "./pages/Cars";
 import CarBooking from "./pages/CarBooking";
 import Login from "./pages/Login";
+import VerifyEmail from "./pages/VerifyEmail";
+import ResetPassword from "./pages/ResetPassword";
 import Admin from "./pages/Admin";
 import Profile from "./pages/Profile";
 import UserDashboard from "./pages/UserDashboard";
@@ -61,6 +63,8 @@ const App = () => (
             <Route path="/cars" element={<Cars />} />
             <Route path="/booking/car" element={<CarBooking />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route
               path="/profile"
               element={
