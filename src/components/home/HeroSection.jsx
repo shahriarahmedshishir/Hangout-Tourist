@@ -28,7 +28,7 @@ const HeroSection = () => {
       <div className="container relative z-10 flex flex-col items-center pb-12 pt-16 text-center">
         <h1 className="mb-3 font-heading text-4xl font-extrabold tracking-tight text-background md:text-5xl lg:text-6xl animate-fade-in">
           Welcome to{" "}
-          <span className="text-gradient-primary">Hangout Tourist!</span>
+          <span className="text-gradient-primary">Hang Out Tourist!</span>
         </h1>
         <p
           className="mb-10 text-lg text-background/80 animate-fade-in"

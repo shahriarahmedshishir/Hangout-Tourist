@@ -2,7 +2,7 @@ import { Mail, Phone, MapPin, Facebook, Twitter, Instagram, Youtube } from "luci
 import logo from "@/assets/logo.png";
 const Footer = () => {
     return (<footer className="border-t border-border bg-foreground text-background">
-      <div className="container py-12">
+      <div className="container py-12 ">
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
           <div>
             <div className="mb-4 flex items-center gap-2">
