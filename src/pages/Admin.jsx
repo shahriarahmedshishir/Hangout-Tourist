@@ -43,6 +43,8 @@ const sidebarItems = [
   { id: "cars", label: "Cars", icon: Car },
   { id: "todays-bookings", label: "Today's Bookings", icon: CalendarRange },
   { id: "bookings", label: "Bookings", icon: ShoppingCart },
+  { id: "cancel-requests", label: "Cancellation Requests", icon: XCircle },
+  { id: "refund-initiation", label: "Refund Initiation", icon: DollarSign },
   { id: "users", label: "Users", icon: Users },
   { id: "staff", label: "Add Staff", icon: UserPlus },
   { id: "manual-payments", label: "Manual Payments", icon: CreditCard },
@@ -120,7 +122,7 @@ const Admin = () => {
           <Button
             onClick={handleLogout}
             variant="ghost"
-            className="w-full justify-start gap-2 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-destructive/10 hover:text-destructive"
+            className="w-full justify-start gap-2 text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive"
           >
             <LogOut className="h-4 w-4" /> Logout
           </Button>
@@ -157,6 +159,8 @@ const Admin = () => {
           {view === "cars" && <CarsView />}
           {view === "todays-bookings" && <TodaysBookingsView />}
           {view === "bookings" && <BookingsView />}
+          {view === "cancel-requests" && <CancelRequestsView />}
+          {view === "refund-initiation" && <RefundInitiationView />}
           {view === "users" && <UsersView />}
           {view === "staff" && <StaffView />}
           {view === "manual-payments" && <ManualPaymentsView />}
@@ -3872,6 +3876,419 @@ const TodaysBookingsView = () => {
           </div>
         )}
       </div>
+    </div>
+  );
+};
+
+// ─── CANCELLATION REQUESTS ───────────────────────────────────────────────────
+const CancelRequestsView = () => {
+  const { socket } = useAuth();
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState({});
+
+  const loadRequests = async () => {
+    try {
+      setLoading(true);
+      const data = await api.get("/api/admin/cancel-requests");
+      setRequests(data);
+    } catch (err) {
+      console.error("Failed to load cancel requests:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRequests();
+  }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewRequest = (request) => {
+      setRequests((prev) => [request, ...prev]);
+    };
+
+    const handleRequestApproved = ({ requestId }) => {
+      setRequests((prev) => prev.filter((r) => r._id !== requestId));
+    };
+
+    const handleRequestRejected = ({ requestId }) => {
+      setRequests((prev) => prev.filter((r) => r._id !== requestId));
+    };
+
+    socket.on("new-cancel-request", handleNewRequest);
+    socket.on("cancel-request-approved", handleRequestApproved);
+    socket.on("cancel-request-rejected", handleRequestRejected);
+
+    return () => {
+      socket.off("new-cancel-request", handleNewRequest);
+      socket.off("cancel-request-approved", handleRequestApproved);
+      socket.off("cancel-request-rejected", handleRequestRejected);
+    };
+  }, [socket]);
+
+  const handleApprove = async (requestId) => {
+    try {
+      setProcessing((prev) => ({ ...prev, [requestId]: "approving" }));
+      await api.post(`/api/admin/cancel-requests/${requestId}/approve`);
+      setRequests((prev) =>
+        prev.map((r) =>
+          r._id === requestId ? { ...r, status: "approved" } : r,
+        ),
+      );
+    } catch (err) {
+      alert("Failed to approve: " + err.message);
+    } finally {
+      setProcessing((prev) => ({ ...prev, [requestId]: null }));
+    }
+  };
+
+  const handleReject = async (requestId) => {
+    const reason = prompt("Reason for rejection (optional):");
+    if (reason === null) return;
+
+    try {
+      setProcessing((prev) => ({ ...prev, [requestId]: "rejecting" }));
+      await api.post(`/api/admin/cancel-requests/${requestId}/reject`, {
+        reason,
+      });
+      setRequests((prev) =>
+        prev.map((r) =>
+          r._id === requestId ? { ...r, status: "rejected" } : r,
+        ),
+      );
+    } catch (err) {
+      alert("Failed to reject: " + err.message);
+    } finally {
+      setProcessing((prev) => ({ ...prev, [requestId]: null }));
+    }
+  };
+
+  const formatDate = (date) => {
+    return new Date(date).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const pendingRequests = requests.filter((r) => r.status === "pending");
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-heading text-2xl font-bold text-foreground">
+            Cancellation Requests
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage user cancellation requests
+          </p>
+        </div>
+        <Button onClick={loadRequests} variant="outline" size="sm">
+          Refresh
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-12">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+        </div>
+      ) : pendingRequests.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card p-12 text-center shadow-card">
+          <p className="text-muted-foreground">
+            No pending cancellation requests
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-border overflow-hidden shadow-card">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border bg-muted/50">
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-foreground">
+                    User
+                  </th>
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-foreground">
+                    Booking
+                  </th>
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-foreground">
+                    Property
+                  </th>
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-foreground">
+                    Check-in
+                  </th>
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-foreground">
+                    Requested
+                  </th>
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-foreground">
+                    Amount
+                  </th>
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-foreground">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingRequests.map((req) => (
+                  <tr
+                    key={req._id}
+                    className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                  >
+                    <td className="px-5 py-3 font-medium text-foreground">
+                      <div>
+                        <p>{req.user?.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {req.user?.email}
+                        </p>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 text-sm">
+                      <span className="text-muted-foreground">
+                        BK{req.bookingId.slice(-8).toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-sm">
+                      <div>
+                        <p className="font-medium">
+                          {req.booking?.type === "hotel"
+                            ? req.booking?.hotelName
+                            : req.booking?.carName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {req.booking?.type === "hotel"
+                            ? `Room ${req.booking?.roomNumber}`
+                            : req.booking?.carType}
+                        </p>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 text-sm text-muted-foreground">
+                      {formatDate(
+                        req.booking?.checkIn || req.booking?.pickupDate,
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-sm text-muted-foreground">
+                      {formatDate(req.createdAt)}
+                    </td>
+                    <td className="px-5 py-3 text-sm font-semibold">
+                      ৳{(req.booking?.totalAmount || 0).toLocaleString()}
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => handleApprove(req._id)}
+                          disabled={processing[req._id]}
+                          className="bg-success hover:bg-success/90"
+                        >
+                          {processing[req._id] === "approving" ? (
+                            "..."
+                          ) : (
+                            <>
+                              <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                              Approve
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleReject(req._id)}
+                          disabled={processing[req._id]}
+                        >
+                          {processing[req._id] === "rejecting" ? (
+                            "..."
+                          ) : (
+                            <>
+                              <XCircle className="h-3.5 w-3.5 mr-1" />
+                              Reject
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Info Box */}
+      <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+        <h3 className="font-semibold text-blue-900 mb-2">How it works:</h3>
+        <ul className="text-sm text-blue-800 space-y-1 ml-4 list-disc">
+          <li>Users can only cancel bookings 23+ hours before check-in</li>
+          <li>
+            When you approve, the booking is marked as cancelled and refund is
+            initiated
+          </li>
+          <li>
+            After approval, complete the refund transaction to mark it as
+            refunded
+          </li>
+        </ul>
+      </div>
+    </div>
+  );
+};
+
+const RefundInitiationView = () => {
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState({});
+
+  useEffect(() => {
+    const fetchCancelledBookings = async () => {
+      try {
+        const response = await api.get("/api/admin/bookings");
+        const cancelled = response.data.filter(
+          (b) => b.status === "cancelled" && b.refundStatus === "pending",
+        );
+        setBookings(cancelled);
+      } catch (err) {
+        console.error("Failed to fetch cancelled bookings:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCancelledBookings();
+  }, []);
+
+  const handleInitiateRefund = async (bookingId) => {
+    const refundAmount = prompt("Enter refund amount to initiate:");
+    if (refundAmount === null) return;
+
+    if (
+      !refundAmount ||
+      isNaN(parseFloat(refundAmount)) ||
+      parseFloat(refundAmount) <= 0
+    ) {
+      alert("Please enter a valid refund amount");
+      return;
+    }
+
+    try {
+      setProcessing((prev) => ({ ...prev, [bookingId]: true }));
+      await api.post(`/api/admin/bookings/${bookingId}/initiate-refund`, {
+        refundAmount: parseFloat(refundAmount),
+      });
+      setBookings((prev) => prev.filter((b) => b._id !== bookingId));
+      alert("Refund initiated successfully!");
+    } catch (err) {
+      alert("Failed to initiate refund: " + err.message);
+    } finally {
+      setProcessing((prev) => ({ ...prev, [bookingId]: false }));
+    }
+  };
+
+  const formatDate = (date) => {
+    return new Date(date).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-heading text-2xl font-bold text-foreground">
+            Refund Initiation
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Initialize refunds for approved cancellations
+          </p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-8">Loading...</div>
+      ) : bookings.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-card">
+          <p className="text-muted-foreground">
+            No pending refunds to initiate
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-border overflow-x-auto shadow-card">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border bg-card">
+                <th className="px-5 py-3 text-left text-xs font-semibold text-foreground uppercase">
+                  Booking ID
+                </th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-foreground uppercase">
+                  Type
+                </th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-foreground uppercase">
+                  Property
+                </th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-foreground uppercase">
+                  Amount
+                </th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-foreground uppercase">
+                  Cancelled Date
+                </th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-foreground uppercase">
+                  Action
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {bookings.map((booking) => (
+                <tr
+                  key={booking._id}
+                  className="border-b border-border hover:bg-muted/50 transition-colors"
+                >
+                  <td className="px-5 py-3 text-sm text-muted-foreground font-mono">
+                    {booking._id.slice(-8)}
+                  </td>
+                  <td className="px-5 py-3 text-sm text-muted-foreground capitalize">
+                    {booking.type}
+                  </td>
+                  <td className="px-5 py-3 text-sm text-muted-foreground">
+                    {booking.type === "hotel"
+                      ? booking.hotelName
+                      : booking.carType}
+                  </td>
+                  <td className="px-5 py-3 text-sm font-semibold">
+                    ৳{(booking.totalAmount || 0).toLocaleString()}
+                  </td>
+                  <td className="px-5 py-3 text-sm text-muted-foreground">
+                    {formatDate(booking.cancelledAt)}
+                  </td>
+                  <td className="px-5 py-3">
+                    <Button
+                      size="sm"
+                      className="bg-success hover:bg-success/90"
+                      onClick={() => handleInitiateRefund(booking._id)}
+                      disabled={processing[booking._id]}
+                    >
+                      {processing[booking._id] ? (
+                        "..."
+                      ) : (
+                        <>
+                          <DollarSign className="h-3.5 w-3.5 mr-1" />
+                          Initiate Refund
+                        </>
+                      )}
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };

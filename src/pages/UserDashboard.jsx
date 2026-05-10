@@ -7,6 +7,7 @@ import { api, imgUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import WalletCard from "@/components/user/WalletCard";
 import CoinTopupCard from "@/components/user/CoinTopupCard";
+import BookingDetail from "@/components/booking/BookingDetail";
 import {
   Hotel,
   Car,
@@ -15,6 +16,9 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  FileText,
+  Trash2,
+  AlertCircle,
 } from "lucide-react";
 
 const statusBadge = (booking) => {
@@ -53,7 +57,24 @@ const statusBadge = (booking) => {
   );
 };
 
-const BookingCard = ({ booking }) => {
+const canCancelBooking = (booking) => {
+  if (booking.status !== "confirmed") return false;
+  if (booking.cancelRequest) return false; // Block if ANY cancel request exists
+
+  const checkInTime = new Date(booking.checkIn || booking.pickupDate);
+  const now = new Date();
+  const hoursUntilCheckIn = (checkInTime - now) / (1000 * 60 * 60);
+
+  return hoursUntilCheckIn >= 23;
+};
+
+const getHoursUntilCheckIn = (booking) => {
+  const checkInTime = new Date(booking.checkIn || booking.pickupDate);
+  const now = new Date();
+  return Math.ceil((checkInTime - now) / (1000 * 60 * 60));
+};
+
+const BookingCard = ({ booking, onViewDetails }) => {
   const isHotel = booking.type === "hotel";
   const dateStart = isHotel ? booking.checkIn : booking.pickupDate;
   const dateEnd = isHotel ? booking.checkOut : booking.returnDate;
@@ -66,9 +87,15 @@ const BookingCard = ({ booking }) => {
         })
       : "-";
 
+  const canCancel = canCancelBooking(booking);
+  const hoursLeft = canCancel ? getHoursUntilCheckIn(booking) : 0;
+
   return (
-    <div className="rounded-2xl border border-border bg-card p-5 shadow-card">
-      <div className="flex items-start justify-between gap-4">
+    <div
+      onClick={() => onViewDetails(booking._id)}
+      className="group cursor-pointer rounded-2xl border border-border bg-card p-5 shadow-card hover:shadow-lg hover:border-primary/50 transition-all duration-300"
+    >
+      <div className="flex items-start justify-between gap-4 mb-4">
         <div className="flex items-center gap-3">
           <div
             className={`rounded-xl p-2.5 ${isHotel ? "bg-primary/10" : "bg-secondary/10"}`}
@@ -95,7 +122,7 @@ const BookingCard = ({ booking }) => {
         {statusBadge(booking)}
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+      <div className="grid grid-cols-2 gap-3 text-sm mb-4">
         <div>
           <p className="text-xs text-muted-foreground">
             {isHotel ? "Check-in" : "Pick-up"}
@@ -122,40 +149,81 @@ const BookingCard = ({ booking }) => {
         </div>
       </div>
 
-      {booking.status === "cancelled" &&
-        booking.refundStatus === "completed" && (
-          <div className="mt-4 rounded-xl bg-primary/5 p-3 text-sm">
-            <p className="font-medium text-primary mb-1">Refund Processed</p>
-            <p className="text-muted-foreground">
-              Method:{" "}
-              <span className="text-foreground">{booking.paymentMethod}</span>
-            </p>
-            <p className="text-muted-foreground">
-              Transaction ID:{" "}
-              <span className="font-mono text-foreground">
-                {booking.transactionId}
+      {/* Cancel Request Status */}
+      {booking.cancelRequest?.status === "pending" && (
+        <div className="mb-3 rounded-lg bg-blue-50 border border-blue-200 p-3 flex items-center gap-2">
+          <Clock className="h-4 w-4 text-blue-600 flex-shrink-0" />
+          <p className="text-xs text-blue-900">
+            Cancellation request pending admin approval
+          </p>
+        </div>
+      )}
+
+      {/* Cancel Button - Show when conditions are met */}
+      {canCancel && (
+        <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 p-3">
+          <p className="text-xs text-amber-900 mb-2">
+            ⏰ You can cancel up to{" "}
+            <span className="font-semibold">{hoursLeft} hours</span> before
+            check-in
+          </p>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="w-full h-8"
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewDetails(booking._id);
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+            Request Cancellation
+          </Button>
+        </div>
+      )}
+
+      {/* Refund Status */}
+      {booking.status === "cancelled" && (
+        <div
+          className={`mt-3 rounded-lg p-3 text-sm ${
+            booking.refundStatus === "completed"
+              ? "bg-success/10 border border-success/20"
+              : booking.refundStatus === "in_progress"
+                ? "bg-yellow-50 border border-yellow-200"
+                : "bg-blue-50 border border-blue-200"
+          }`}
+        >
+          <p className="text-xs text-muted-foreground mb-1">Refund Status</p>
+          {booking.refundAmount && (
+            <p className="text-xs font-semibold mb-2">
+              Amount:{" "}
+              <span className="text-primary">
+                ৳{booking.refundAmount.toFixed(2)}
               </span>
             </p>
-            {booking.refundScreenshot && (
-              <a
-                href={imgUrl(booking.refundScreenshot)}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-1 inline-block text-xs text-primary underline"
-              >
-                View screenshot
-              </a>
-            )}
-          </div>
-        )}
+          )}
+          {booking.refundStatus === "completed" ? (
+            <p className="text-success flex items-center gap-1 text-xs font-medium">
+              <CheckCircle2 className="h-3 w-3" />
+              Refund Completed
+            </p>
+          ) : booking.refundStatus === "in_progress" ? (
+            <p className="text-yellow-700 flex items-center gap-1 text-xs">
+              <RefreshCw className="h-3 w-3 animate-spin" />
+              Refund in Progress
+            </p>
+          ) : (
+            <p className="text-blue-700 text-xs">
+              Cancellation approved. Awaiting refund initiation.
+            </p>
+          )}
+        </div>
+      )}
 
-      {booking.status === "cancelled" &&
-        booking.refundStatus === "in_progress" && (
-          <div className="mt-4 rounded-xl bg-yellow-50 p-3 text-sm text-yellow-700">
-            <Clock className="inline h-4 w-4 mr-1" />
-            Your refund is being processed. We'll notify you once completed.
-          </div>
-        )}
+      {/* Click to view details hint */}
+      <div className="text-xs text-muted-foreground mt-3 pt-3 border-t group-hover:text-primary transition-colors">
+        Click to view details and invoice
+      </div>
     </div>
   );
 };
@@ -165,9 +233,12 @@ const UserDashboard = () => {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [section, setSection] = useState("active"); // "active" or "completed"
   const [tab, setTab] = useState("hotel");
   const [hotelPage, setHotelPage] = useState(1);
   const [carPage, setCarPage] = useState(1);
+  const [selectedBookingId, setSelectedBookingId] = useState(null);
+  const [showDetails, setShowDetails] = useState(false);
   const ITEMS_PER_PAGE = 3;
 
   useEffect(() => {
@@ -224,11 +295,53 @@ const UserDashboard = () => {
       );
     };
 
+    const handleCancelApproved = ({ bookingId }) => {
+      setBookings((prev) =>
+        prev.map((b) =>
+          b._id === bookingId
+            ? {
+                ...b,
+                status: "cancelled",
+                refundStatus: "in_progress",
+                cancelRequest: { status: "approved" },
+              }
+            : b,
+        ),
+      );
+    };
+
+    const handleCancelRejected = ({ bookingId }) => {
+      setBookings((prev) =>
+        prev.map((b) =>
+          b._id === bookingId
+            ? { ...b, cancelRequest: { status: "rejected" } }
+            : b,
+        ),
+      );
+    };
+
+    const handleNewCancelRequest = ({ bookingId, cancelRequest }) => {
+      setBookings((prev) =>
+        prev.map((b) =>
+          b._id === bookingId
+            ? { ...b, cancelRequest: { status: "pending" } }
+            : b,
+        ),
+      );
+    };
+
     socket.on("booking-cancelled", handleCancelled);
     socket.on("booking-refunded", handleRefunded);
+    socket.on("cancel-approved", handleCancelApproved);
+    socket.on("cancel-rejected", handleCancelRejected);
+    socket.on("new-cancel-request", handleNewCancelRequest);
+
     return () => {
       socket.off("booking-cancelled", handleCancelled);
       socket.off("booking-refunded", handleRefunded);
+      socket.off("cancel-approved", handleCancelApproved);
+      socket.off("cancel-rejected", handleCancelRejected);
+      socket.off("new-cancel-request", handleNewCancelRequest);
     };
   }, [socket]);
 
@@ -252,14 +365,40 @@ const UserDashboard = () => {
     return new Date(endDate) > new Date();
   };
 
+  // Check if a booking is completed or cancelled
+  const isCompleted = (booking) => {
+    if (booking.status === "cancelled") return true;
+    const endDate =
+      booking.type === "hotel" ? booking.checkOut : booking.returnDate;
+    return new Date(endDate) <= new Date();
+  };
+
   const upcomingBookings = bookings.filter(isUpcoming);
+  const completedBookings = bookings.filter(isCompleted);
+
   const hotelBookings = bookings.filter(
     (b) => b.type === "hotel" && isUpcoming(b),
   );
   const carBookings = bookings.filter((b) => b.type === "car" && isUpcoming(b));
 
+  const completedHotelBookings = bookings.filter(
+    (b) => b.type === "hotel" && isCompleted(b),
+  );
+  const completedCarBookings = bookings.filter(
+    (b) => b.type === "car" && isCompleted(b),
+  );
+
   // Pagination
-  const shown = tab === "hotel" ? hotelBookings : carBookings;
+  const sourceBookings =
+    section === "active"
+      ? tab === "hotel"
+        ? hotelBookings
+        : carBookings
+      : tab === "hotel"
+        ? completedHotelBookings
+        : completedCarBookings;
+
+  const shown = sourceBookings;
   const totalPages = Math.ceil(shown.length / ITEMS_PER_PAGE);
   const currentPage = tab === "hotel" ? hotelPage : carPage;
   const startIdx = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -331,6 +470,40 @@ const UserDashboard = () => {
           </div>
         </div>
 
+        {/* Section Toggle - Active vs Completed */}
+        <div className="mb-6 flex gap-2">
+          <Button
+            variant={section === "active" ? "default" : "outline"}
+            onClick={() => {
+              setSection("active");
+              setHotelPage(1);
+              setCarPage(1);
+            }}
+            className={
+              section === "active"
+                ? "bg-gradient-primary text-primary-foreground"
+                : ""
+            }
+          >
+            Active Bookings
+          </Button>
+          <Button
+            variant={section === "completed" ? "default" : "outline"}
+            onClick={() => {
+              setSection("completed");
+              setHotelPage(1);
+              setCarPage(1);
+            }}
+            className={
+              section === "completed"
+                ? "bg-gradient-primary text-primary-foreground"
+                : ""
+            }
+          >
+            Completed & Cancelled
+          </Button>
+        </div>
+
         {/* Tabs */}
         <div className="mb-6 flex gap-2">
           <Button
@@ -364,22 +537,32 @@ const UserDashboard = () => {
         {shown.length === 0 ? (
           <div className="rounded-2xl border border-border bg-card py-20 text-center shadow-card">
             <p className="text-muted-foreground mb-4">
-              No {tab === "hotel" ? "hotel bookings" : "car rentals"} yet.
+              No {section === "active" ? "active" : "completed"}{" "}
+              {tab === "hotel" ? "hotel bookings" : "car rentals"} yet.
             </p>
-            <Button
-              asChild
-              className="bg-gradient-primary text-primary-foreground"
-            >
-              <Link to={tab === "hotel" ? "/hotels" : "/cars"}>
-                {tab === "hotel" ? "Browse Hotels" : "Browse Cars"}
-              </Link>
-            </Button>
+            {section === "active" && (
+              <Button
+                asChild
+                className="bg-gradient-primary text-primary-foreground"
+              >
+                <Link to={tab === "hotel" ? "/hotels" : "/cars"}>
+                  {tab === "hotel" ? "Browse Hotels" : "Browse Cars"}
+                </Link>
+              </Button>
+            )}
           </div>
         ) : (
           <>
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
               {paginatedShown.map((b) => (
-                <BookingCard key={b._id} booking={b} />
+                <BookingCard
+                  key={b._id}
+                  booking={b}
+                  onViewDetails={(id) => {
+                    setSelectedBookingId(id);
+                    setShowDetails(true);
+                  }}
+                />
               ))}
             </div>
 
@@ -414,6 +597,19 @@ const UserDashboard = () => {
           </>
         )}
       </div>
+
+      {/* Booking Detail Modal */}
+      {selectedBookingId && (
+        <BookingDetail
+          isOpen={showDetails}
+          onClose={() => {
+            setShowDetails(false);
+            setSelectedBookingId(null);
+          }}
+          bookingId={selectedBookingId}
+        />
+      )}
+
       <Footer />
     </div>
   );

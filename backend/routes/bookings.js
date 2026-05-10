@@ -259,4 +259,254 @@ router.get("/my", auth, async (req, res) => {
   }
 });
 
+// POST /api/bookings/:id/cancel-request — user requests to cancel booking
+router.post("/:id/cancel-request", auth, async (req, res) => {
+  try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid booking ID" });
+    }
+
+    const db = await getDb();
+    const booking = await db
+      .collection("bookings")
+      .findOne({ _id: new ObjectId(req.params.id) });
+
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    // Only booking owner can request cancellation
+    if (booking.userId !== req.user.id) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    // Only confirmed bookings can be cancelled
+    if (booking.status !== "confirmed") {
+      return res
+        .status(400)
+        .json({ message: "Only confirmed bookings can be cancelled" });
+    }
+
+    // Calculate time until check-in/pickup
+    const checkInTime = new Date(booking.checkIn || booking.pickupDate);
+    const now = new Date();
+    const hoursUntilCheckIn = (checkInTime - now) / (1000 * 60 * 60);
+
+    // Must be at least 23 hours before check-in
+    if (hoursUntilCheckIn < 23) {
+      return res.status(400).json({
+        message:
+          "Cancellations must be requested at least 23 hours before check-in",
+        hoursUntilCheckIn: Math.max(0, hoursUntilCheckIn),
+      });
+    }
+
+    // Check if cancel request already exists
+    const existingRequest = await db.collection("cancel_requests").findOne({
+      bookingId: new ObjectId(req.params.id),
+      status: "pending",
+    });
+
+    if (existingRequest) {
+      return res
+        .status(400)
+        .json({ message: "Cancel request already pending for this booking" });
+    }
+
+    // Create cancel request
+    const cancelRequest = {
+      bookingId: new ObjectId(req.params.id),
+      userId: new ObjectId(req.user.id),
+      status: "pending", // pending, approved, rejected
+      reason: req.body.reason || "",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const result = await db
+      .collection("cancel_requests")
+      .insertOne(cancelRequest);
+
+    // Emit socket event to admin - emit to admin room if available
+    try {
+      const serverModule = require("../server");
+      if (serverModule && serverModule.io) {
+        serverModule.io.to("admin").emit("new-cancel-request", {
+          _id: result.insertedId,
+          ...cancelRequest,
+        });
+        // Also emit to the current user so they see the cancel request on their booking card
+        serverModule.io.to(`user-${req.user.id}`).emit("new-cancel-request", {
+          bookingId: req.params.id,
+          cancelRequest: {
+            _id: result.insertedId,
+            status: "pending",
+          },
+        });
+      }
+    } catch (err) {
+      // Socket not available, continue anyway
+      console.log("Socket emit failed (non-critical):", err.message);
+    }
+
+    res.json({
+      _id: result.insertedId,
+      ...cancelRequest,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/bookings/:id — get booking details with invoice data
+router.get("/:id", auth, async (req, res) => {
+  try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid booking ID" });
+    }
+
+    const db = await getDb();
+    const booking = await db
+      .collection("bookings")
+      .findOne({ _id: new ObjectId(req.params.id) });
+
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    // Check if user owns this booking or is admin
+    if (booking.userId !== req.user.id && req.user.role !== "admin") {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    // Get user details for invoice
+    const user = await db
+      .collection("users")
+      .findOne({ _id: new ObjectId(booking.userId) });
+
+    // Get hotel/car details for invoice
+    let property;
+    if (booking.type === "hotel") {
+      property = await db
+        .collection("hotels")
+        .findOne({ _id: new ObjectId(booking.hotel) });
+    } else {
+      property = await db
+        .collection("cars")
+        .findOne({ _id: new ObjectId(booking.car) });
+    }
+
+    // Get cancel request if exists
+    const cancelRequest = await db
+      .collection("cancel_requests")
+      .findOne({ bookingId: req.params.id });
+
+    res.json({
+      ...booking,
+      user,
+      property,
+      cancelRequest,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/bookings/:id/invoice — get invoice data
+router.get("/:id/invoice", auth, async (req, res) => {
+  try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid booking ID" });
+    }
+
+    const db = await getDb();
+    const booking = await db
+      .collection("bookings")
+      .findOne({ _id: new ObjectId(req.params.id) });
+
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    // Check if user owns this booking or is admin
+    if (booking.userId !== req.user.id && req.user.role !== "admin") {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    // Get user details
+    const user = await db
+      .collection("users")
+      .findOne({ _id: new ObjectId(booking.userId) });
+
+    // Get property details
+    let property;
+    if (booking.type === "hotel") {
+      property = await db
+        .collection("hotels")
+        .findOne({ _id: new ObjectId(booking.hotel) });
+    } else {
+      property = await db
+        .collection("cars")
+        .findOne({ _id: new ObjectId(booking.car) });
+    }
+
+    // Create invoice object
+    const invoice = {
+      bookingId: booking._id,
+      bookingNumber: `BK${booking._id.toString().slice(-8).toUpperCase()}`,
+      invoiceDate: new Date().toISOString().split("T")[0],
+      bookingDate: booking.createdAt,
+      bookingType: booking.type === "hotel" ? "Hotel Booking" : "Car Rental",
+
+      // Customer info
+      customer: {
+        name: user?.name || "N/A",
+        email: user?.email || "N/A",
+        phone: booking.contactNumber || "N/A",
+      },
+
+      // Property info
+      property: {
+        name: booking.type === "hotel" ? booking.hotelName : booking.carName,
+        type: booking.type === "hotel" ? "Hotel" : "Car",
+        details:
+          booking.type === "hotel"
+            ? `Room ${booking.roomNumber}, ${property?.location || ""}`
+            : `${booking.carType} - ${booking.carModel || ""}`,
+        address: property?.location || "",
+      },
+
+      // Booking dates
+      dates: {
+        checkIn:
+          booking.type === "hotel" ? booking.checkIn : booking.pickupDate,
+        checkOut:
+          booking.type === "hotel" ? booking.checkOut : booking.returnDate,
+        days: booking.days,
+      },
+
+      // Pricing
+      pricing: {
+        basePrice: booking.basePrice || booking.totalAmount,
+        taxes: booking.taxes || 0,
+        discount: booking.discount || 0,
+        totalAmount: booking.totalAmount,
+        currency: "BDT",
+      },
+
+      // Payment info
+      payment: {
+        method: booking.paymentMethod,
+        status: booking.status,
+        transactionId: booking.transactionId,
+        paidAt: booking.paidAt,
+      },
+    };
+
+    res.json(invoice);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;

@@ -917,6 +917,93 @@ router.post("/bookings/:id/cancel", auth, role("admin"), async (req, res) => {
   }
 });
 
+// POST /api/admin/bookings/:id/initiate-refund — initiate refund for cancelled booking
+router.post(
+  "/bookings/:id/initiate-refund",
+  auth,
+  role("admin"),
+  async (req, res) => {
+    try {
+      const { refundAmount } = req.body;
+
+      if (!isValidObjectId(req.params.id)) {
+        return res.status(400).json({ message: "Invalid booking ID" });
+      }
+
+      if (!refundAmount || refundAmount <= 0) {
+        return res
+          .status(400)
+          .json({
+            message: "Refund amount is required and must be greater than 0",
+          });
+      }
+
+      const db = await getDb();
+      const booking = await db
+        .collection("bookings")
+        .findOne({ _id: new ObjectId(req.params.id) });
+
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+
+      if (booking.status !== "cancelled") {
+        return res
+          .status(400)
+          .json({
+            message: "Only cancelled bookings can have refunds initiated",
+          });
+      }
+
+      if (booking.refundStatus && booking.refundStatus !== "pending") {
+        return res
+          .status(400)
+          .json({ message: "Refund already initiated or completed" });
+      }
+
+      // Update booking with refund amount and set status to in_progress
+      await db.collection("bookings").updateOne(
+        { _id: new ObjectId(req.params.id) },
+        {
+          $set: {
+            refundStatus: "in_progress",
+            refundAmount: parseFloat(refundAmount),
+            refundInitiatedAt: new Date(),
+            refundInitiatedBy: req.user.id,
+          },
+        },
+      );
+
+      // Emit socket event to user
+      try {
+        const serverModule = require("../server");
+        if (serverModule && serverModule.io) {
+          const userIdStr = booking.userId.toString
+            ? booking.userId.toString()
+            : booking.userId;
+          serverModule.io.to(`user-${userIdStr}`).emit("refund-initiated", {
+            bookingId: req.params.id,
+            refundAmount: parseFloat(refundAmount),
+          });
+        }
+      } catch (err) {
+        console.log("Socket emit failed (non-critical):", err.message);
+      }
+
+      res.json({
+        message: "Refund initiated",
+        booking: {
+          _id: booking._id,
+          refundStatus: "in_progress",
+          refundAmount: parseFloat(refundAmount),
+        },
+      });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
+
 // POST /api/admin/bookings/:id/refund — confirm refund with screenshot/transaction
 router.post(
   "/bookings/:id/refund",
@@ -2338,5 +2425,299 @@ router.get("/todays-bookings", auth, role("admin"), async (req, res) => {
 // Kept comment for reference:
 // Previous: POST /api/admin/users/:userId/add-coins — Manually add coins to user wallet
 // New: POST /api/admin/add-coins — Add coins after email search
+
+// ─── BOOKING CANCELLATION MANAGEMENT ───────────────────────────────────────────
+
+// GET /api/admin/cancel-requests — get all pending cancel requests
+router.get("/cancel-requests", auth, role("admin"), async (req, res) => {
+  try {
+    const db = await getDb();
+
+    const cancelRequests = await db
+      .collection("cancel_requests")
+      .aggregate([
+        { $match: { status: "pending" } },
+        {
+          $lookup: {
+            from: "users",
+            localField: "userId",
+            foreignField: "_id",
+            as: "user",
+          },
+        },
+        {
+          $lookup: {
+            from: "bookings",
+            localField: "bookingId",
+            foreignField: "_id",
+            as: "booking",
+          },
+        },
+        { $unwind: "$user" },
+        { $unwind: "$booking" },
+        { $sort: { createdAt: -1 } },
+      ])
+      .toArray();
+
+    res.json(cancelRequests);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/cancel-requests/:requestId/approve — approve cancel request
+router.post(
+  "/cancel-requests/:requestId/approve",
+  auth,
+  role("admin"),
+  async (req, res) => {
+    try {
+      if (!isValidObjectId(req.params.requestId)) {
+        return res.status(400).json({ message: "Invalid request ID" });
+      }
+
+      const db = await getDb();
+
+      // Get cancel request
+      const cancelRequest = await db
+        .collection("cancel_requests")
+        .findOne({ _id: new ObjectId(req.params.requestId) });
+
+      if (!cancelRequest) {
+        return res.status(404).json({ message: "Cancel request not found" });
+      }
+
+      if (cancelRequest.status !== "pending") {
+        return res
+          .status(400)
+          .json({ message: "Cancel request already processed" });
+      }
+
+      // Get booking
+      const booking = await db
+        .collection("bookings")
+        .findOne({ _id: new ObjectId(cancelRequest.bookingId) });
+
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+
+      // Update cancel request status
+      await db.collection("cancel_requests").updateOne(
+        { _id: new ObjectId(req.params.requestId) },
+        {
+          $set: {
+            status: "approved",
+            approvedAt: new Date(),
+            approvedBy: req.user.id,
+          },
+        },
+      );
+
+      // Update booking status to cancelled (refund not yet initiated)
+      await db.collection("bookings").updateOne(
+        { _id: new ObjectId(cancelRequest.bookingId) },
+        {
+          $set: {
+            status: "cancelled",
+            refundStatus: "pending",
+            cancelledAt: new Date(),
+            cancelledBy: "admin",
+            cancelRequestId: req.params.requestId,
+          },
+        },
+      );
+
+      // Emit socket events
+      try {
+        const serverModule = require("../server");
+        if (serverModule && serverModule.io) {
+          // Notify admin of approval
+          serverModule.io.to("admin").emit("cancel-request-approved", {
+            requestId: req.params.requestId,
+            bookingId: cancelRequest.bookingId.toString(),
+          });
+
+          // Notify user their cancellation was approved
+          const userIdStr = booking.userId.toString
+            ? booking.userId.toString()
+            : booking.userId;
+          serverModule.io.to(`user-${userIdStr}`).emit("cancel-approved", {
+            bookingId: cancelRequest.bookingId.toString(),
+          });
+        }
+      } catch (err) {
+        console.log("Socket emit failed (non-critical):", err.message);
+      }
+
+      res.json({
+        message: "Cancel request approved",
+        cancelRequest: { ...cancelRequest, status: "approved" },
+      });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
+
+// POST /api/admin/cancel-requests/:requestId/reject — reject cancel request
+router.post(
+  "/cancel-requests/:requestId/reject",
+  auth,
+  role("admin"),
+  async (req, res) => {
+    try {
+      if (!isValidObjectId(req.params.requestId)) {
+        return res.status(400).json({ message: "Invalid request ID" });
+      }
+
+      const db = await getDb();
+
+      // Get cancel request
+      const cancelRequest = await db
+        .collection("cancel_requests")
+        .findOne({ _id: new ObjectId(req.params.requestId) });
+
+      if (!cancelRequest) {
+        return res.status(404).json({ message: "Cancel request not found" });
+      }
+
+      if (cancelRequest.status !== "pending") {
+        return res
+          .status(400)
+          .json({ message: "Cancel request already processed" });
+      }
+
+      // Update cancel request status
+      await db.collection("cancel_requests").updateOne(
+        { _id: new ObjectId(req.params.requestId) },
+        {
+          $set: {
+            status: "rejected",
+            rejectedAt: new Date(),
+            rejectionReason: req.body.reason || "",
+            rejectedBy: req.user.id,
+          },
+        },
+      );
+
+      // Emit socket event to user
+      try {
+        const serverModule = require("../server");
+        if (serverModule && serverModule.io) {
+          const userIdStr = cancelRequest.userId.toString
+            ? cancelRequest.userId.toString()
+            : cancelRequest.userId;
+
+          // Notify admin of rejection
+          serverModule.io.to("admin").emit("cancel-request-rejected", {
+            requestId: req.params.requestId,
+            bookingId: cancelRequest.bookingId.toString(),
+          });
+
+          // Notify user their cancellation was rejected
+          serverModule.io.to(`user-${userIdStr}`).emit("cancel-rejected", {
+            bookingId: cancelRequest.bookingId.toString(),
+            reason: req.body.reason || "",
+          });
+        }
+      } catch (err) {
+        console.log("Socket emit failed (non-critical):", err.message);
+      }
+
+      res.json({
+        message: "Cancel request rejected",
+        cancelRequest: { ...cancelRequest, status: "rejected" },
+      });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
+
+// POST /api/admin/bookings/:id/initiate-refund — initiate refund for cancelled booking
+router.post(
+  "/bookings/:id/initiate-refund",
+  auth,
+  role("admin"),
+  async (req, res) => {
+    try {
+      const { refundAmount } = req.body;
+
+      if (!isValidObjectId(req.params.id)) {
+        return res.status(400).json({ message: "Invalid booking ID" });
+      }
+
+      if (!refundAmount || refundAmount <= 0) {
+        return res
+          .status(400)
+          .json({ message: "Refund amount must be greater than 0" });
+      }
+
+      const db = await getDb();
+      const booking = await db
+        .collection("bookings")
+        .findOne({ _id: new ObjectId(req.params.id) });
+
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+
+      if (booking.status !== "cancelled") {
+        return res
+          .status(400)
+          .json({
+            message: "Only cancelled bookings can have refunds initiated",
+          });
+      }
+
+      if (booking.refundStatus && booking.refundStatus !== "pending") {
+        return res
+          .status(400)
+          .json({ message: "Refund already initiated or completed" });
+      }
+
+      // Update booking with refund amount and set status to in_progress
+      await db.collection("bookings").updateOne(
+        { _id: new ObjectId(req.params.id) },
+        {
+          $set: {
+            refundStatus: "in_progress",
+            refundAmount: parseFloat(refundAmount),
+            refundInitiatedAt: new Date(),
+            refundInitiatedBy: req.user.id,
+          },
+        },
+      );
+
+      // Emit socket event to user
+      try {
+        const serverModule = require("../server");
+        if (serverModule && serverModule.io) {
+          const userIdStr = booking.userId.toString
+            ? booking.userId.toString()
+            : booking.userId;
+          serverModule.io.to(`user-${userIdStr}`).emit("refund-initiated", {
+            bookingId: req.params.id,
+            refundAmount: parseFloat(refundAmount),
+          });
+        }
+      } catch (err) {
+        console.log("Socket emit failed (non-critical):", err.message);
+      }
+
+      res.json({
+        message: "Refund initiated",
+        booking: {
+          _id: booking._id,
+          refundStatus: "in_progress",
+          refundAmount: parseFloat(refundAmount),
+        },
+      });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
 
 module.exports = router;

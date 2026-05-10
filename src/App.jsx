@@ -6,12 +6,10 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import { useAuth } from "@/context/AuthContext";
 import Index from "./pages/Index";
-import Flights from "./pages/Flights";
 import Hotels from "./pages/Hotels";
 import HotelDetail from "./pages/HotelDetail";
 import HotelBooking from "./pages/HotelBooking";
 import Holidays from "./pages/Holidays";
-import Visa from "./pages/Visa";
 import Cars from "./pages/Cars";
 import CarBooking from "./pages/CarBooking";
 import Login from "./pages/Login";
@@ -54,12 +52,10 @@ const App = () => (
         >
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/flights" element={<Flights />} />
             <Route path="/hotels" element={<Hotels />} />
             <Route path="/hotels/:id" element={<HotelDetail />} />
             <Route path="/booking/hotel" element={<HotelBooking />} />
             <Route path="/holidays" element={<Holidays />} />
-            <Route path="/visa" element={<Visa />} />
             <Route path="/cars" element={<Cars />} />
             <Route path="/booking/car" element={<CarBooking />} />
             <Route path="/login" element={<Login />} />

@@ -61,7 +61,7 @@ export default function HotelDetail() {
   const [selectedRooms, setSelectedRooms] = useState([]);
   const [showGallery, setShowGallery] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState("rooms");
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -188,7 +188,7 @@ export default function HotelDetail() {
     "Free WiFi": <Wifi className="h-5 w-5" />,
     "Breakfast Included": <UtensilsCrossed className="h-5 w-5" />,
     "Swimming Pool": <Droplet className="h-5 w-5" />,
-    "Gym": <Dumbbell className="h-5 w-5" />,
+    Gym: <Dumbbell className="h-5 w-5" />,
     "24/7 Support": <Clock className="h-5 w-5" />,
   };
 
@@ -315,14 +315,19 @@ export default function HotelDetail() {
                   {availableRooms.length > 0 ? (
                     <div>
                       <p className="text-2xl font-bold text-foreground">
-                        ৳{Math.min(...availableRooms.map((r) => r.price || 0)).toLocaleString()}
+                        ৳
+                        {Math.min(
+                          ...availableRooms.map((r) => r.price || 0),
+                        ).toLocaleString()}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
                         From lowest available room
                       </p>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">No rooms available</p>
+                    <p className="text-sm text-muted-foreground">
+                      No rooms available
+                    </p>
                   )}
                 </div>
               </div>
@@ -368,9 +373,8 @@ export default function HotelDetail() {
                     <div className="flex items-end">
                       <Button
                         onClick={() => {
-                          const roomsSection = document.getElementById(
-                            "rooms-section",
-                          );
+                          const roomsSection =
+                            document.getElementById("rooms-section");
                           roomsSection?.scrollIntoView({ behavior: "smooth" });
                         }}
                         disabled={!checkIn || !checkOut}
@@ -464,13 +468,15 @@ export default function HotelDetail() {
                     {/* Amenities Tab */}
                     <TabsContent value="amenities" className="p-6">
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                        {(hotel.services || [
-                          "Free WiFi",
-                          "24/7 Support",
-                          "Swimming Pool",
-                          "Gym",
-                          "Breakfast Included",
-                        ]).map((service, idx) => (
+                        {(
+                          hotel.services || [
+                            "Free WiFi",
+                            "24/7 Support",
+                            "Swimming Pool",
+                            "Gym",
+                            "Breakfast Included",
+                          ]
+                        ).map((service, idx) => (
                           <div
                             key={idx}
                             className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
@@ -570,7 +576,10 @@ export default function HotelDetail() {
                   </h3>
                   <div className="space-y-4">
                     {[1, 2].map((idx) => (
-                      <div key={idx} className="border-b border-border pb-4 last:border-0">
+                      <div
+                        key={idx}
+                        className="border-b border-border pb-4 last:border-0"
+                      >
                         <div className="flex items-start justify-between mb-2">
                           <div>
                             <p className="font-semibold text-sm text-foreground">
@@ -628,7 +637,9 @@ export default function HotelDetail() {
                           </span>
                         </div>
                         <div className="flex justify-between text-sm pb-3 border-b border-border">
-                          <span className="text-muted-foreground">Duration:</span>
+                          <span className="text-muted-foreground">
+                            Duration:
+                          </span>
                           <span className="font-medium text-foreground">
                             {days} night{days > 1 ? "s" : ""}
                           </span>
@@ -662,7 +673,9 @@ export default function HotelDetail() {
 
                     <Button
                       onClick={handleProceed}
-                      disabled={selectedRooms.length === 0 || !checkIn || !checkOut}
+                      disabled={
+                        selectedRooms.length === 0 || !checkIn || !checkOut
+                      }
                       className="w-full bg-gradient-primary text-primary-foreground hover:opacity-90 py-3 text-base"
                     >
                       {selectedRooms.length > 0
@@ -749,7 +762,9 @@ function RoomCard({
                   className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-1 text-white hover:bg-black/70 transition-colors"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setCurrentImg((p) => (p - 1 + room.images.length) % room.images.length);
+                    setCurrentImg(
+                      (p) => (p - 1 + room.images.length) % room.images.length,
+                    );
                   }}
                 >
                   <ChevronLeft className="h-3 w-3" />
@@ -787,7 +802,9 @@ function RoomCard({
           </h4>
           <span className="text-lg font-bold text-primary">
             ৳{(room.price || 0).toLocaleString()}
-            <span className="text-xs font-normal text-muted-foreground">/night</span>
+            <span className="text-xs font-normal text-muted-foreground">
+              /night
+            </span>
           </span>
         </div>
 
@@ -806,7 +823,8 @@ function RoomCard({
 
         {days > 0 && !isBooked && (
           <p className="text-xs text-muted-foreground mb-3 pb-3 border-b border-border">
-            Total: <span className="font-semibold text-foreground">
+            Total:{" "}
+            <span className="font-semibold text-foreground">
               ৳{((room.price || 0) * days).toLocaleString()}
             </span>
           </p>
