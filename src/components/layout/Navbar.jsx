@@ -27,9 +27,7 @@ import { api } from "@/lib/api";
 const navLinks = [
   { path: "/hotels", label: "Hotels" },
   { path: "/cars", label: "Cars" },
-  { path: "/flights", label: "Flights" },
   { path: "/holidays", label: "Holidays" },
-  { path: "/visa", label: "Visa" },
 ];
 
 const Navbar = () => {
@@ -335,7 +333,7 @@ const Navbar = () => {
                   size="sm"
                   className="bg-gradient-primary text-primary-foreground hover:opacity-90"
                 >
-                 <User className="h-4 w-4" /> Login
+                  <User className="h-4 w-4" /> Login
                 </Button>
               </Link>
             </>
@@ -424,7 +422,7 @@ const Navbar = () => {
                 </Link> */}
                 <Link to="/login" onClick={() => setMobileOpen(false)}>
                   <Button className="w-full bg-gradient-primary text-primary-foreground">
-                     <User className="h-4 w-4" /> Login
+                    <User className="h-4 w-4" /> Login
                   </Button>
                 </Link>
               </>

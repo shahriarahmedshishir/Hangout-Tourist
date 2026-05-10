@@ -39,9 +39,7 @@ function makeTranId(prefix = "HT") {
 const PRODUCT_LABELS = {
   hotel: "Hotel Booking",
   car: "Car Rental",
-  flight: "Flight Booking",
   holiday: "Holiday Package",
-  visa: "Visa Application",
 };
 
 function getProductName(type, name) {

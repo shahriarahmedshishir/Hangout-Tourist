@@ -11,6 +11,7 @@ const xss = require("xss-clean");
 const rateLimit = require("express-rate-limit");
 const path = require("path");
 const jwt = require("jsonwebtoken");
+const { ObjectId } = require("mongodb");
 const { getDb } = require("./db");
 const { initCache } = require("./cache");
 
@@ -140,12 +141,25 @@ app.set("signupLimiter", signupLimiter);
 app.set("paymentLimiter", paymentLimiter);
 
 // Socket.io: authenticate user and join personal room
-io.use((socket, next) => {
+io.use(async (socket, next) => {
   const token = socket.handshake.auth?.token;
   if (token) {
     try {
       const decoded = jwt.verify(token, SECRET);
       socket.userId = decoded.id;
+
+      // Fetch user role from database
+      try {
+        const db = await getDb();
+        const user = await db
+          .collection("users")
+          .findOne({ _id: new ObjectId(decoded.id) });
+        if (user) {
+          socket.userRole = user.role;
+        }
+      } catch (err) {
+        console.log("Could not fetch user role:", err.message);
+      }
     } catch {}
   }
   next();
@@ -154,6 +168,11 @@ io.use((socket, next) => {
 io.on("connection", (socket) => {
   if (socket.userId) {
     socket.join(`user-${socket.userId}`);
+
+    // Join admin room if user is admin
+    if (socket.userRole === "admin") {
+      socket.join("admin");
+    }
   }
   socket.on("join-hotel", (hotelId) => socket.join(`hotel-${hotelId}`));
   socket.on("join-cars", () => socket.join("cars-room"));
@@ -194,3 +213,6 @@ Promise.all([getDb(), initCache()])
     console.error("Failed to start server:", err.message);
     process.exit(1);
   });
+
+// Export io and server for use in routes
+module.exports = { io, server };

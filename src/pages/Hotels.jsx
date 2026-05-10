@@ -17,10 +17,6 @@ import {
   Filter,
   Zap,
   Users,
-  Wifi,
-  Droplet,
-  Wind,
-  Coffee,
   LayoutList,
   Grid3x3,
 } from "lucide-react";
@@ -36,18 +32,9 @@ const Hotels = () => {
   const [favorites, setFavorites] = useState(new Set());
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [priceRange, setPriceRange] = useState([0, 50000]);
-  const [minRating, setMinRating] = useState(0);
-  const [selectedAmenities, setSelectedAmenities] = useState(new Set());
   const [viewMode, setViewMode] = useState("compact"); // compact or mirrored
 
   const itemsPerPage = viewMode === "compact" ? 12 : 6;
-
-  const amenitiesList = [
-    { id: "wifi", name: "Free WiFi", icon: Wifi },
-    { id: "pool", name: "Swimming Pool", icon: Droplet },
-    { id: "ac", name: "Air Conditioning", icon: Wind },
-    { id: "breakfast", name: "Breakfast Included", icon: Coffee },
-  ];
 
   useEffect(() => {
     if (!authLoading) {
@@ -71,14 +58,14 @@ const Hotels = () => {
         (h.name.toLowerCase().includes(search.toLowerCase()) ||
           (h.area || "").toLowerCase().includes(search.toLowerCase())) &&
         (h.minPrice || 0) >= priceRange[0] &&
-        (h.minPrice || 0) <= priceRange[1]
+        (h.minPrice || 0) <= priceRange[1],
     )
     .sort((a, b) =>
       sortBy === "price"
         ? (a.minPrice || 0) - (b.minPrice || 0)
         : sortBy === "popular"
           ? (b.roomCount || 0) - (a.roomCount || 0)
-          : 0
+          : 0,
     );
 
   const totalPages = Math.ceil(filtered.length / itemsPerPage);
@@ -99,18 +86,7 @@ const Hotels = () => {
     setFavorites(newFavorites);
   };
 
-  const toggleAmenity = (amenityId) => {
-    const newAmenities = new Set(selectedAmenities);
-    if (newAmenities.has(amenityId)) {
-      newAmenities.delete(amenityId);
-    } else {
-      newAmenities.add(amenityId);
-    }
-    setSelectedAmenities(newAmenities);
-  };
-
-  const hasActiveFilters =
-    search || priceRange[0] > 0 || priceRange[1] < 50000 || selectedAmenities.size > 0;
+  const hasActiveFilters = search || priceRange[0] > 0 || priceRange[1] < 50000;
 
   return (
     <div className="min-h-screen bg-background">
@@ -142,7 +118,9 @@ const Hotels = () => {
           {/* Sidebar */}
           <aside
             className={`fixed left-0 top-0 bottom-0 z-50 w-full max-w-xs bg-background overflow-auto transition-transform duration-300 lg:static lg:z-auto lg:bg-transparent lg:w-80 lg:max-w-none lg:overflow-visible ${
-              showMobileSidebar ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+              showMobileSidebar
+                ? "translate-x-0"
+                : "-translate-x-full lg:translate-x-0"
             }`}
           >
             <div className="bg-card rounded-2xl border border-border shadow-card p-4 md:p-6 lg:sticky lg:top-24">
@@ -230,81 +208,12 @@ const Hotels = () => {
                   </div>
                 </div>
 
-                {/* Amenities Filter */}
-                <div className="border-t border-border pt-6">
-                  <label className="block text-xs font-semibold text-foreground mb-4 uppercase tracking-wide">
-                    Amenities
-                  </label>
-                  <div className="space-y-3">
-                    {amenitiesList.map((amenity) => {
-                      const Icon = amenity.icon;
-                      return (
-                        <label
-                          key={amenity.id}
-                          className="flex items-center gap-3 p-3 rounded-lg border border-border cursor-pointer hover:bg-muted transition-colors"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedAmenities.has(amenity.id)}
-                            onChange={() => toggleAmenity(amenity.id)}
-                            className="w-4 h-4 rounded accent-primary cursor-pointer"
-                          />
-                          <Icon className="h-4 w-4 text-primary flex-shrink-0" />
-                          <span className="text-xs md:text-sm font-medium text-foreground">
-                            {amenity.name}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Rating Filter */}
-                <div className="border-t border-border pt-6">
-                  <label className="block text-xs font-semibold text-foreground mb-4 uppercase tracking-wide">
-                    Minimum Rating
-                  </label>
-                  <div className="space-y-2">
-                    {[0, 3, 3.5, 4, 4.5].map((rating) => (
-                      <label
-                        key={rating}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted cursor-pointer transition-colors"
-                      >
-                        <input
-                          type="radio"
-                          name="rating"
-                          checked={minRating === rating}
-                          onChange={() => setMinRating(rating)}
-                          className="w-4 h-4 accent-primary cursor-pointer"
-                        />
-                        <div className="flex items-center gap-1">
-                          {[...Array(5)].map((_, i) => (
-                            <Star
-                              key={i}
-                              className={`h-3 w-3 ${
-                                i < rating
-                                  ? "fill-amber-400 text-amber-400"
-                                  : "text-gray-300"
-                              }`}
-                            />
-                          ))}
-                        </div>
-                        <span className="text-xs text-muted-foreground ml-auto">
-                          {rating === 0 ? "All" : `${rating}+`}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
                 {/* Clear Filters */}
                 {hasActiveFilters && (
                   <Button
                     onClick={() => {
                       setSearch("");
                       setPriceRange([0, 50000]);
-                      setSelectedAmenities(new Set());
-                      setMinRating(0);
                     }}
                     variant="outline"
                     className="w-full border-red-200 text-red-600 hover:bg-red-50 text-xs md:text-sm"
@@ -402,9 +311,7 @@ const Hotels = () => {
                   <div key={i} className="animate-pulse">
                     <div
                       className={`${
-                        viewMode === "compact"
-                          ? "aspect-video"
-                          : "h-32 md:h-40"
+                        viewMode === "compact" ? "aspect-video" : "h-32 md:h-40"
                       } rounded-2xl bg-muted mb-3`}
                     />
                     <div className="space-y-2">
@@ -421,13 +328,13 @@ const Hotels = () => {
                   No hotels found
                 </h3>
                 <p className="text-xs md:text-base text-muted-foreground mb-4 md:mb-6 text-center max-w-md">
-                  Try adjusting your filters or search criteria to find more options.
+                  Try adjusting your filters or search criteria to find more
+                  options.
                 </p>
                 <Button
                   onClick={() => {
                     setSearch("");
                     setPriceRange([0, 50000]);
-                    setSelectedAmenities(new Set());
                   }}
                   variant="outline"
                   className="text-xs md:text-sm"
@@ -481,45 +388,46 @@ const Hotels = () => {
                       </button>
 
                       <div className="flex items-center gap-1">
-                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                          (page) => {
-                            if (
-                              page === 1 ||
-                              page === totalPages ||
-                              (page >= currentPage - 1 && page <= currentPage + 1)
-                            ) {
-                              return (
-                                <button
-                                  key={page}
-                                  onClick={() => {
-                                    setCurrentPage(page);
-                                    window.scrollTo({
-                                      top: 200,
-                                      behavior: "smooth",
-                                    });
-                                  }}
-                                  className={`min-w-9 md:min-w-10 h-9 md:h-10 rounded-lg text-xs md:text-sm font-medium transition-all ${
-                                    currentPage === page
-                                      ? "bg-primary text-primary-foreground"
-                                      : "bg-card border border-border hover:bg-muted"
-                                  }`}
-                                >
-                                  {page}
-                                </button>
-                              );
-                            } else if (page === 2 || page === totalPages - 1) {
-                              return (
-                                <span
-                                  key={`ellipsis-${page}`}
-                                  className="px-1 md:px-2 text-muted-foreground text-xs"
-                                >
-                                  ...
-                                </span>
-                              );
-                            }
-                            return null;
+                        {Array.from(
+                          { length: totalPages },
+                          (_, i) => i + 1,
+                        ).map((page) => {
+                          if (
+                            page === 1 ||
+                            page === totalPages ||
+                            (page >= currentPage - 1 && page <= currentPage + 1)
+                          ) {
+                            return (
+                              <button
+                                key={page}
+                                onClick={() => {
+                                  setCurrentPage(page);
+                                  window.scrollTo({
+                                    top: 200,
+                                    behavior: "smooth",
+                                  });
+                                }}
+                                className={`min-w-9 md:min-w-10 h-9 md:h-10 rounded-lg text-xs md:text-sm font-medium transition-all ${
+                                  currentPage === page
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-card border border-border hover:bg-muted"
+                                }`}
+                              >
+                                {page}
+                              </button>
+                            );
+                          } else if (page === 2 || page === totalPages - 1) {
+                            return (
+                              <span
+                                key={`ellipsis-${page}`}
+                                className="px-1 md:px-2 text-muted-foreground text-xs"
+                              >
+                                ...
+                              </span>
+                            );
                           }
-                        )}
+                          return null;
+                        })}
                       </div>
 
                       <button
@@ -555,7 +463,7 @@ function CompactHotelCard({ hotel, isFavorite, onToggleFavorite, index }) {
   return (
     <Link
       to={`/hotels/${hotel._id}`}
-      className="block group rounded-xl md:rounded-2xl border border-border bg-card shadow-card hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-fade-in overflow-hidden h-full flex flex-col"
+      className="group rounded-xl md:rounded-2xl border border-border bg-card shadow-card hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-fade-in overflow-hidden h-full flex flex-col"
       style={{ animationDelay: `${index * 0.05}s` }}
     >
       {/* Image Container */}
@@ -649,7 +557,13 @@ function CompactHotelCard({ hotel, isFavorite, onToggleFavorite, index }) {
 }
 
 // Mirrored Hotel Card Component
-function MirroredHotelCard({ hotel, isFavorite, onToggleFavorite, index, isEven }) {
+function MirroredHotelCard({
+  hotel,
+  isFavorite,
+  onToggleFavorite,
+  index,
+  isEven,
+}) {
   return (
     <Link
       to={`/hotels/${hotel._id}`}
@@ -729,7 +643,9 @@ function MirroredHotelCard({ hotel, isFavorite, onToggleFavorite, index, isEven 
               </div>
               <div className="inline-flex items-center gap-1 bg-amber-50 px-2 md:px-3 py-1 md:py-1.5 rounded-lg">
                 <Star className="h-3 w-3 md:h-3.5 md:w-3.5 fill-amber-400 text-amber-400" />
-                <span className="text-xs md:text-sm font-bold text-amber-700">4.5</span>
+                <span className="text-xs md:text-sm font-bold text-amber-700">
+                  4.5
+                </span>
               </div>
             </div>
           </div>

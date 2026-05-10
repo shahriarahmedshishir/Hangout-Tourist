@@ -59,6 +59,13 @@ async function createIndexes(db) {
       .collection("coin_topup_requests")
       .createIndex({ userId: 1, status: 1 });
 
+    // Cancel requests indexes
+    await db
+      .collection("cancel_requests")
+      .createIndex({ bookingId: 1, status: 1 });
+    await db.collection("cancel_requests").createIndex({ userId: 1 });
+    await db.collection("cancel_requests").createIndex({ createdAt: -1 });
+
     console.log("Database indexes created successfully");
   } catch (err) {
     console.warn("Index creation warning:", err.message);
