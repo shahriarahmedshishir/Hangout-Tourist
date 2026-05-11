@@ -6,8 +6,33 @@ const { ObjectId } = require("mongodb");
 const { auth, role } = require("../middleware/auth");
 const upload = require("../middleware/upload");
 
+const adminAuth = [auth, role("admin")];
+
 function isValidObjectId(id) {
   return /^[0-9a-fA-F]{24}$/.test(id);
+}
+
+async function findBookingAcrossCollections(db, bookingId) {
+  const objectId = new ObjectId(bookingId);
+
+  const legacyBooking = await db
+    .collection("bookings")
+    .findOne({ _id: objectId });
+  if (legacyBooking) {
+    return { booking: legacyBooking, collection: db.collection("bookings") };
+  }
+
+  const carRentBooking = await db
+    .collection("carrentBookings")
+    .findOne({ _id: objectId });
+  if (carRentBooking) {
+    return {
+      booking: carRentBooking,
+      collection: db.collection("carrentBookings"),
+    };
+  }
+
+  return { booking: null, collection: null };
 }
 
 // ─── STAFF MANAGEMENT ──────────────────────────────────────────────────────────
@@ -931,11 +956,9 @@ router.post(
       }
 
       if (!refundAmount || refundAmount <= 0) {
-        return res
-          .status(400)
-          .json({
-            message: "Refund amount is required and must be greater than 0",
-          });
+        return res.status(400).json({
+          message: "Refund amount is required and must be greater than 0",
+        });
       }
 
       const db = await getDb();
@@ -948,11 +971,9 @@ router.post(
       }
 
       if (booking.status !== "cancelled") {
-        return res
-          .status(400)
-          .json({
-            message: "Only cancelled bookings can have refunds initiated",
-          });
+        return res.status(400).json({
+          message: "Only cancelled bookings can have refunds initiated",
+        });
       }
 
       if (booking.refundStatus && booking.refundStatus !== "pending") {
@@ -2435,31 +2456,26 @@ router.get("/cancel-requests", auth, role("admin"), async (req, res) => {
 
     const cancelRequests = await db
       .collection("cancel_requests")
-      .aggregate([
-        { $match: { status: "pending" } },
-        {
-          $lookup: {
-            from: "users",
-            localField: "userId",
-            foreignField: "_id",
-            as: "user",
-          },
-        },
-        {
-          $lookup: {
-            from: "bookings",
-            localField: "bookingId",
-            foreignField: "_id",
-            as: "booking",
-          },
-        },
-        { $unwind: "$user" },
-        { $unwind: "$booking" },
-        { $sort: { createdAt: -1 } },
-      ])
+      .find({ status: "pending" })
+      .sort({ createdAt: -1 })
       .toArray();
 
-    res.json(cancelRequests);
+    const enriched = await Promise.all(
+      cancelRequests.map(async (request) => {
+        const [user, bookingLookup] = await Promise.all([
+          db.collection("users").findOne({ _id: request.userId }),
+          findBookingAcrossCollections(db, request.bookingId),
+        ]);
+
+        return {
+          ...request,
+          user,
+          booking: bookingLookup.booking,
+        };
+      }),
+    );
+
+    res.json(enriched.filter((request) => request.user && request.booking));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -2494,9 +2510,12 @@ router.post(
       }
 
       // Get booking
-      const booking = await db
-        .collection("bookings")
-        .findOne({ _id: new ObjectId(cancelRequest.bookingId) });
+      const bookingLookup = await findBookingAcrossCollections(
+        db,
+        cancelRequest.bookingId,
+      );
+      const booking = bookingLookup.booking;
+      const bookingCollection = bookingLookup.collection;
 
       if (!booking) {
         return res.status(404).json({ message: "Booking not found" });
@@ -2515,7 +2534,7 @@ router.post(
       );
 
       // Update booking status to cancelled (refund not yet initiated)
-      await db.collection("bookings").updateOne(
+      await bookingCollection.updateOne(
         { _id: new ObjectId(cancelRequest.bookingId) },
         {
           $set: {
@@ -2586,6 +2605,17 @@ router.post(
         return res
           .status(400)
           .json({ message: "Cancel request already processed" });
+      }
+
+      // Get booking so we can notify the correct user even for car-rent bookings
+      const bookingLookup = await findBookingAcrossCollections(
+        db,
+        cancelRequest.bookingId,
+      );
+      const booking = bookingLookup.booking;
+
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
       }
 
       // Update cancel request status
@@ -2664,11 +2694,9 @@ router.post(
       }
 
       if (booking.status !== "cancelled") {
-        return res
-          .status(400)
-          .json({
-            message: "Only cancelled bookings can have refunds initiated",
-          });
+        return res.status(400).json({
+          message: "Only cancelled bookings can have refunds initiated",
+        });
       }
 
       if (booking.refundStatus && booking.refundStatus !== "pending") {
@@ -2719,5 +2747,157 @@ router.post(
     }
   },
 );
+
+// GET /api/admin/carrent — all cars
+router.get("/carrent", adminAuth, async (req, res) => {
+  try {
+    const db = await getDb();
+    const cars = await db
+      .collection("carrent")
+      .find({})
+      .sort({ createdAt: -1 })
+      .toArray();
+    res.json(cars);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/carrent — create car
+router.post(
+  "/carrent",
+  adminAuth,
+  upload.array("images", 5),
+  async (req, res) => {
+    try {
+      const { name, seats, fuel, price, quantity, places, type, transmission } =
+        req.body;
+
+      if (!name || !price) {
+        return res.status(400).json({ message: "Name and price are required" });
+      }
+
+      const db = await getDb();
+      const images = req.files?.map((f) => `/uploads/${f.filename}`) || [];
+
+      const car = {
+        name,
+        seats: parseInt(seats) || 5,
+        fuel,
+        price: parseInt(price),
+        quantity: parseInt(quantity) || 1,
+        places: places ? places.split(",").map((p) => p.trim()) : [],
+        type,
+        transmission,
+        images,
+        isActive: true,
+        createdAt: new Date(),
+      };
+
+      const result = await db.collection("carrent").insertOne(car);
+
+      res.json({
+        _id: result.insertedId,
+        ...car,
+      });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
+
+// PUT /api/admin/carrent/:id — update car
+router.put(
+  "/carrent/:id",
+  adminAuth,
+  upload.array("images", 5),
+  async (req, res) => {
+    try {
+      const { name, seats, fuel, price, quantity, places, type, transmission } =
+        req.body;
+      const db = await getDb();
+
+      const car = await db
+        .collection("carrent")
+        .findOne({ _id: new ObjectId(req.params.id) });
+      if (!car) return res.status(404).json({ message: "Car not found" });
+
+      const images = req.files?.length
+        ? req.files.map((f) => `/uploads/${f.filename}`)
+        : car.images;
+
+      const updated = {
+        name,
+        seats: parseInt(seats),
+        fuel,
+        price: parseInt(price),
+        quantity: parseInt(quantity),
+        places: places ? places.split(",").map((p) => p.trim()) : [],
+        type,
+        transmission,
+        images,
+        updatedAt: new Date(),
+      };
+
+      await db
+        .collection("carrent")
+        .updateOne({ _id: new ObjectId(req.params.id) }, { $set: updated });
+
+      res.json({ _id: req.params.id, ...updated });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
+
+// DELETE /api/admin/carrent/:id
+router.delete("/carrent/:id", adminAuth, async (req, res) => {
+  try {
+    const db = await getDb();
+    const result = await db
+      .collection("carrent")
+      .deleteOne({ _id: new ObjectId(req.params.id) });
+    res.json({ message: "Car deleted", deletedCount: result.deletedCount });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/admin/carrent/:id/toggle — toggle availability
+router.patch("/carrent/:id/toggle", adminAuth, async (req, res) => {
+  try {
+    const db = await getDb();
+    const car = await db
+      .collection("carrent")
+      .findOne({ _id: new ObjectId(req.params.id) });
+    if (!car) return res.status(404).json({ message: "Car not found" });
+
+    await db
+      .collection("carrent")
+      .updateOne(
+        { _id: new ObjectId(req.params.id) },
+        { $set: { isActive: !car.isActive } },
+      );
+
+    res.json({ isActive: !car.isActive });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/carrent/:id/bookings — get car bookings
+router.get("/carrent/:id/bookings", adminAuth, async (req, res) => {
+  try {
+    const db = await getDb();
+    const bookings = await db
+      .collection("carrentBookings")
+      .find({ carId: req.params.id })
+      .sort({ createdAt: -1 })
+      .toArray();
+    res.json(bookings);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 module.exports = router;

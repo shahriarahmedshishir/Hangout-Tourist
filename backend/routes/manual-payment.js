@@ -156,17 +156,19 @@ router.post("/initiate/car", auth, async (req, res) => {
 
     const db = await getDb();
     const car = await db
-      .collection("cars")
+      .collection("carrent")
       .findOne({ _id: new ObjectId(carId) });
     if (!car) return res.status(404).json({ message: "Car not found" });
 
     const now = new Date();
-    const activeBookings = await db.collection("bookings").countDocuments({
-      carId,
-      type: "car",
-      status: "confirmed",
-      returnDate: { $gte: now },
-    });
+    const activeBookings = await db
+      .collection("carrentBookings")
+      .countDocuments({
+        carId,
+        type: "car",
+        status: "confirmed",
+        returnDate: { $gte: now },
+      });
 
     if (car.quantity > 0 && activeBookings >= car.quantity) {
       return res
@@ -229,7 +231,8 @@ router.post("/submit", auth, async (req, res) => {
     const db = await getDb();
 
     // Verify booking exists and belongs to user
-    const booking = await db.collection("bookings").findOne({
+    const bookingCollection = db.collection("carrentBookings");
+    const booking = await bookingCollection.findOne({
       _id: new ObjectId(bookingId),
       userId: req.user.id,
     });
@@ -265,7 +268,7 @@ router.post("/submit", auth, async (req, res) => {
     await db.collection("manual_payments").insertOne(manualPayment);
 
     // Update booking status to show pending manual payment
-    await db.collection("bookings").updateOne(
+    await bookingCollection.updateOne(
       { _id: booking._id },
       {
         $set: {

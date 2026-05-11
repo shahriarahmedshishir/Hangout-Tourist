@@ -8,6 +8,29 @@ function isValidObjectId(id) {
   return /^[0-9a-fA-F]{24}$/.test(id);
 }
 
+async function findBookingRecord(db, bookingId) {
+  const objectId = new ObjectId(bookingId);
+
+  const primaryBooking = await db
+    .collection("bookings")
+    .findOne({ _id: objectId });
+  if (primaryBooking) {
+    return { booking: primaryBooking, collection: db.collection("bookings") };
+  }
+
+  const carRentBooking = await db
+    .collection("carrentBookings")
+    .findOne({ _id: objectId });
+  if (carRentBooking) {
+    return {
+      booking: carRentBooking,
+      collection: db.collection("carrentBookings"),
+    };
+  }
+
+  return { booking: null, collection: null };
+}
+
 // POST /api/bookings/hotel — book one or more rooms
 router.post("/hotel", auth, async (req, res) => {
   try {
@@ -183,7 +206,7 @@ router.post("/car", auth, async (req, res) => {
 
     const db = await getDb();
     const car = await db
-      .collection("cars")
+      .collection("carrent")
       .findOne({ _id: new ObjectId(carId) });
     if (!car) return res.status(404).json({ message: "Car not found" });
     if (car.isActive === false || car.isAvailable === false) {
@@ -192,12 +215,14 @@ router.post("/car", auth, async (req, res) => {
 
     // Count active bookings (not yet returned)
     const now = new Date();
-    const activeBookings = await db.collection("bookings").countDocuments({
-      carId,
-      type: "car",
-      status: { $in: ["confirmed", "pending"] },
-      returnDate: { $gte: now },
-    });
+    const activeBookings = await db
+      .collection("carrentBookings")
+      .countDocuments({
+        carId,
+        type: "car",
+        status: { $in: ["confirmed", "pending"] },
+        returnDate: { $gte: now },
+      });
 
     if (activeBookings >= (car.quantity || 0)) {
       return res
@@ -229,7 +254,7 @@ router.post("/car", auth, async (req, res) => {
       createdAt: new Date(),
     };
 
-    const result = await db.collection("bookings").insertOne(booking);
+    const result = await db.collection("carrentBookings").insertOne(booking);
 
     const io = req.app.get("io");
     const remaining = Math.max(0, (car.quantity || 0) - activeBookings - 1);
@@ -248,12 +273,24 @@ router.post("/car", auth, async (req, res) => {
 router.get("/my", auth, async (req, res) => {
   try {
     const db = await getDb();
-    const bookings = await db
-      .collection("bookings")
-      .find({ userId: req.user.id })
-      .sort({ createdAt: -1 })
-      .toArray();
-    res.json(bookings);
+    const [bookings, carRentBookings] = await Promise.all([
+      db
+        .collection("bookings")
+        .find({ userId: req.user.id })
+        .sort({ createdAt: -1 })
+        .toArray(),
+      db
+        .collection("carrentBookings")
+        .find({ userId: req.user.id })
+        .sort({ createdAt: -1 })
+        .toArray(),
+    ]);
+
+    res.json(
+      [...bookings, ...carRentBookings].sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
+      ),
+    );
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -267,9 +304,7 @@ router.post("/:id/cancel-request", auth, async (req, res) => {
     }
 
     const db = await getDb();
-    const booking = await db
-      .collection("bookings")
-      .findOne({ _id: new ObjectId(req.params.id) });
+    const { booking } = await findBookingRecord(db, req.params.id);
 
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
@@ -389,11 +424,11 @@ router.get("/:id", auth, async (req, res) => {
     if (booking.type === "hotel") {
       property = await db
         .collection("hotels")
-        .findOne({ _id: new ObjectId(booking.hotel) });
+        .findOne({ _id: new ObjectId(booking.hotelId || booking.hotel) });
     } else {
       property = await db
-        .collection("cars")
-        .findOne({ _id: new ObjectId(booking.car) });
+        .collection("carrent")
+        .findOne({ _id: new ObjectId(booking.carId || booking.car) });
     }
 
     // Get cancel request if exists
@@ -420,9 +455,7 @@ router.get("/:id/invoice", auth, async (req, res) => {
     }
 
     const db = await getDb();
-    const booking = await db
-      .collection("bookings")
-      .findOne({ _id: new ObjectId(req.params.id) });
+    const { booking } = await findBookingRecord(db, req.params.id);
 
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
@@ -443,11 +476,11 @@ router.get("/:id/invoice", auth, async (req, res) => {
     if (booking.type === "hotel") {
       property = await db
         .collection("hotels")
-        .findOne({ _id: new ObjectId(booking.hotel) });
+        .findOne({ _id: new ObjectId(booking.hotelId || booking.hotel) });
     } else {
       property = await db
-        .collection("cars")
-        .findOne({ _id: new ObjectId(booking.car) });
+        .collection("carrent")
+        .findOne({ _id: new ObjectId(booking.carId || booking.car) });
     }
 
     // Create invoice object
@@ -472,7 +505,7 @@ router.get("/:id/invoice", auth, async (req, res) => {
         details:
           booking.type === "hotel"
             ? `Room ${booking.roomNumber}, ${property?.location || ""}`
-            : `${booking.carType} - ${booking.carModel || ""}`,
+            : booking.carName || booking.carType || "Car Rental",
         address: property?.location || "",
       },
 

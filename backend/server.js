@@ -183,6 +183,7 @@ io.on("connection", (socket) => {
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/hotels", require("./routes/hotels"));
 app.use("/api/cars", require("./routes/cars"));
+app.use("/api/carrent", require("./routes/carrent")); // Add this line
 app.use("/api/bookings", require("./routes/bookings"));
 app.use("/api/admin", require("./routes/admin"));
 app.use("/api/staff", require("./routes/staff"));

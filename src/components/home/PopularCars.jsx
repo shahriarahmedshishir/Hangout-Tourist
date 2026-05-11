@@ -10,7 +10,7 @@ export default function PopularCars() {
 
   useEffect(() => {
     api
-      .get("/api/cars")
+      .get("/api/carrent")
       .then((data) => setCars(data.slice(0, 6)))
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -59,7 +59,7 @@ export default function PopularCars() {
 
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {cars.map((car, i) => (
-            <Link key={car._id} to={`/cars/${car._id}`}>
+            <Link key={car._id} to="/booking/car" state={{ car }}>
               <div
                 className="group cursor-pointer overflow-hidden rounded-2xl bg-card shadow-card transition-all duration-300 hover:shadow-card-hover hover:-translate-y-1 animate-fade-in h-full"
                 style={{ animationDelay: `${i * 0.1}s` }}
