@@ -41,6 +41,7 @@ const sidebarItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "hotels", label: "Hotels", icon: Building2 },
   { id: "cars", label: "Cars", icon: Car },
+  { id: "cars rent", label: "Cars Rent", icon: Car },
   { id: "todays-bookings", label: "Today's Bookings", icon: CalendarRange },
   { id: "bookings", label: "Bookings", icon: ShoppingCart },
   { id: "cancel-requests", label: "Cancellation Requests", icon: XCircle },
@@ -157,6 +158,7 @@ const Admin = () => {
           {view === "dashboard" && <DashboardView />}
           {view === "hotels" && <HotelsView />}
           {view === "cars" && <CarsView />}
+          {view === "cars rent" && <CarsRentView />}
           {view === "todays-bookings" && <TodaysBookingsView />}
           {view === "bookings" && <BookingsView />}
           {view === "cancel-requests" && <CancelRequestsView />}
@@ -1414,6 +1416,600 @@ const CarsView = () => {
                 </th>
               </tr>
             </thead>
+            <tbody>
+              {cars.map((c) => (
+                <Fragment key={c._id}>
+                  <tr className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        {c.images?.[0] && (
+                          <img
+                            src={imgUrl(c.images[0])}
+                            alt=""
+                            className="h-8 w-12 rounded object-cover"
+                          />
+                        )}
+                        <span className="font-medium text-foreground">
+                          {c.name}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 text-muted-foreground">
+                      {c.type}
+                    </td>
+                    <td className="px-5 py-3 text-foreground">{c.seats}</td>
+                    <td className="px-5 py-3 font-medium text-primary">
+                      ৳{c.price?.toLocaleString()}
+                    </td>
+                    <td className="px-5 py-3 text-foreground">{c.quantity}</td>
+                    <td className="px-5 py-3">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${c.isAvailable ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}
+                      >
+                        {c.isAvailable ? "Active" : "Hidden"}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex gap-2">
+                        <button
+                          title="View bookings"
+                          className={`rounded-lg p-1.5 transition-colors ${
+                            bookingPanel === c._id
+                              ? "bg-primary/10 text-primary"
+                              : "text-muted-foreground hover:bg-accent"
+                          }`}
+                          onClick={() => toggleBookingPanel(c._id)}
+                        >
+                          <ShoppingCart className="h-4 w-4" />
+                        </button>
+                        <button
+                          title="Toggle"
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent transition-colors"
+                          onClick={() => handleToggle(c._id)}
+                        >
+                          {c.isAvailable ? (
+                            <ToggleRight className="h-4 w-4 text-success" />
+                          ) : (
+                            <ToggleLeft className="h-4 w-4" />
+                          )}
+                        </button>
+                        <button
+                          title="Edit"
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent transition-colors"
+                          onClick={() => setForm(c)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          title="Delete"
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                          onClick={() => handleDelete(c._id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {bookingPanel === c._id && (
+                    <tr className="bg-muted/20">
+                      <td colSpan={7} className="px-6 py-4">
+                        <p className="mb-3 text-xs font-semibold text-foreground uppercase tracking-wide">
+                          Bookings — {c.name}
+                        </p>
+
+                        {/* Refund confirmation form */}
+                        {carRefundForm && (
+                          <div className="mb-4 rounded-xl border border-border bg-card p-4">
+                            <p className="mb-3 text-xs font-semibold text-foreground uppercase tracking-wide">
+                              Confirm Refund — {carRefundForm._id.slice(-8)}
+                            </p>
+                            <form
+                              onSubmit={(e) => handleCarRefund(e, c._id)}
+                              className="grid gap-3 sm:grid-cols-2"
+                            >
+                              <div>
+                                <label className="mb-1 block text-xs text-muted-foreground">
+                                  Transaction ID *
+                                </label>
+                                <Input
+                                  name="transactionId"
+                                  required
+                                  className="bg-muted"
+                                />
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-xs text-muted-foreground">
+                                  Payment Method *
+                                </label>
+                                <Input
+                                  name="paymentMethod"
+                                  placeholder="e.g. bKash, Bank Transfer"
+                                  required
+                                  className="bg-muted"
+                                />
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-xs text-muted-foreground">
+                                  Screenshot (optional)
+                                </label>
+                                <input
+                                  type="file"
+                                  name="screenshot"
+                                  accept="image/*"
+                                  className="text-sm text-muted-foreground"
+                                />
+                              </div>
+                              <div className="sm:col-span-2 flex gap-2">
+                                <Button
+                                  type="submit"
+                                  className="bg-gradient-primary text-primary-foreground"
+                                >
+                                  Confirm Refund
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => setCarRefundForm(null)}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </form>
+                          </div>
+                        )}
+
+                        {bookingLoading === c._id ? (
+                          <p className="text-xs text-muted-foreground">
+                            Loading...
+                          </p>
+                        ) : !carBookings[c._id]?.length ? (
+                          <p className="text-xs text-muted-foreground">
+                            No bookings yet.
+                          </p>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="border-b border-border">
+                                  <th className="pb-2 text-left font-medium text-muted-foreground">
+                                    User
+                                  </th>
+                                  <th className="pb-2 text-left font-medium text-muted-foreground">
+                                    Pickup → Return
+                                  </th>
+                                  <th className="pb-2 text-left font-medium text-muted-foreground">
+                                    Location
+                                  </th>
+                                  <th className="pb-2 text-left font-medium text-muted-foreground">
+                                    Transaction ID
+                                  </th>
+                                  <th className="pb-2 text-left font-medium text-muted-foreground">
+                                    Amount
+                                  </th>
+                                  <th className="pb-2 text-left font-medium text-muted-foreground">
+                                    Status
+                                  </th>
+                                  <th className="pb-2 text-left font-medium text-muted-foreground">
+                                    Actions
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {carBookings[c._id].map((b) => (
+                                  <tr
+                                    key={b._id}
+                                    className="border-b border-border last:border-0"
+                                  >
+                                    <td className="py-2 pr-4">
+                                      <div className="font-medium text-foreground">
+                                        {b.userName || "—"}
+                                      </div>
+                                      <div className="text-muted-foreground">
+                                        {b.userEmail || ""}
+                                      </div>
+                                    </td>
+                                    <td className="py-2 pr-4 text-muted-foreground">
+                                      {b.pickupDate
+                                        ? new Date(
+                                            b.pickupDate,
+                                          ).toLocaleDateString()
+                                        : "—"}
+                                      {b.returnDate
+                                        ? " → " +
+                                          new Date(
+                                            b.returnDate,
+                                          ).toLocaleDateString()
+                                        : ""}
+                                      {b.days && (
+                                        <span className="ml-1 text-muted-foreground/70">
+                                          ({b.days}d)
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-2 pr-4 text-muted-foreground">
+                                      {b.pickupLocation || "—"}
+                                    </td>
+                                    <td
+                                      className="py-2 pr-4 font-mono text-xs text-muted-foreground"
+                                      title={b.transactionId}
+                                    >
+                                      {b.transactionId
+                                        ? b.transactionId.slice(-8)
+                                        : "—"}
+                                    </td>
+                                    <td className="py-2 pr-4 font-medium text-foreground">
+                                      ৳{b.totalAmount?.toLocaleString()}
+                                    </td>
+                                    <td className="py-2 pr-4">
+                                      <span
+                                        className={`rounded-full px-2 py-0.5 font-medium ${
+                                          STATUS_COLORS[b.status] ||
+                                          "bg-muted text-muted-foreground"
+                                        }`}
+                                      >
+                                        {b.status}
+                                      </span>
+                                      {b.refundStatus && (
+                                        <span
+                                          className={`ml-1 rounded-full px-2 py-0.5 font-medium ${
+                                            b.refundStatus === "completed"
+                                              ? "bg-success/10 text-success"
+                                              : "bg-warning/10 text-warning"
+                                          }`}
+                                        >
+                                          {b.refundStatus === "completed"
+                                            ? "refunded"
+                                            : b.refundStatus}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-2">
+                                      <div className="flex gap-1">
+                                        {b.status !== "cancelled" && (
+                                          <button
+                                            title="Cancel booking"
+                                            className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                                            onClick={() =>
+                                              handleCancelCarBooking(
+                                                b._id,
+                                                c._id,
+                                              )
+                                            }
+                                          >
+                                            <X className="h-3.5 w-3.5" />
+                                          </button>
+                                        )}
+                                        {b.refundStatus === "in_progress" && (
+                                          <button
+                                            title="Process refund"
+                                            className="rounded-lg p-1.5 text-muted-foreground hover:bg-success/10 hover:text-success transition-colors"
+                                            onClick={() => setCarRefundForm(b)}
+                                          >
+                                            <Check className="h-3.5 w-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+// ─── CARRent ────────────────────────────────────────────────────────────────────
+const CarsRentView = () => {
+  const [cars, setCars] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState(null);
+  const [bookingPanel, setBookingPanel] = useState(null);
+  const [carBookings, setCarBookings] = useState({});
+  const [bookingLoading, setBookingLoading] = useState(null);
+  const [carRefundForm, setCarRefundForm] = useState(null);
+
+  const load = () => {
+    setLoading(true);
+
+    api
+      .get("/api/admin/carrent")
+      .then(setCars)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    const fd = new FormData(e.target);
+
+    try {
+      form === "add"
+        ? await api.postForm("/api/admin/carrent", fd)
+        : await api.putForm(`/api/admin/carrent/${form._id}`, fd);
+
+      setForm(null);
+
+      load();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("Delete this car?")) return;
+
+    try {
+      await api.delete(`/api/admin/carrent/${id}`);
+
+      load();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleToggle = async (id) => {
+    try {
+      await api.patch(`/api/admin/carrent/${id}/toggle`, {});
+
+      load();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const loadCarBookings = async (carId) => {
+    setBookingLoading(carId);
+
+    try {
+      const data = await api.get(`/api/admin/carrent/${carId}/bookings`);
+
+      setCarBookings((prev) => ({
+        ...prev,
+        [carId]: data,
+      }));
+    } catch {}
+
+    setBookingLoading(null);
+  };
+
+  const toggleBookingPanel = async (carId) => {
+    if (bookingPanel === carId) {
+      setBookingPanel(null);
+      return;
+    }
+
+    setBookingPanel(carId);
+
+    setCarRefundForm(null);
+
+    await loadCarBookings(carId);
+  };
+
+  const handleCancelCarBooking = async (bookingId, carId) => {
+    if (!confirm("Cancel this booking and initiate refund?")) return;
+
+    try {
+      await api.post(`/api/admin/bookings/${bookingId}/cancel`, {});
+
+      await loadCarBookings(carId);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleCarRefund = async (e, carId) => {
+    e.preventDefault();
+
+    const fd = new FormData(e.target);
+
+    try {
+      await api.postForm(`/api/admin/bookings/${carRefundForm._id}/refund`, fd);
+
+      setCarRefundForm(null);
+
+      await loadCarBookings(carId);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="font-heading text-lg font-bold text-foreground">
+          Cars Rent
+        </h2>
+        <Button
+          className="gap-2 bg-gradient-primary text-primary-foreground"
+          onClick={() => setForm("add")}
+        >
+          <Plus className="h-4 w-4" /> Add Car
+        </Button>
+      </div>
+
+      {form && (
+        <div className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-card">
+          <h3 className="mb-4 font-heading font-bold text-foreground">
+            {form === "add" ? "Add New Car" : `Edit: ${form.name}`}
+          </h3>
+          <form
+            onSubmit={handleSubmit}
+            className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+          >
+            {/* Car Name */}
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Car Name <span className="text-destructive">*</span>
+              </label>
+              <Input
+                name="name"
+                defaultValue={form?.name || ""}
+                placeholder="e.g. Toyota Camry"
+                required
+                className="bg-muted border-0 focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            {/* Seats */}
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Seats
+              </label>
+              <Input
+                name="seats"
+                type="number"
+                min="1"
+                defaultValue={form?.seats || 5}
+                placeholder="5"
+                className="bg-muted border-0 focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Fuel Type
+              </label>
+              <Input
+                name="fuel"
+                defaultValue={form?.fuel || "Petrol"}
+                placeholder="e.g. Petrol, Diesel"
+                className="bg-muted border-0 focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            {/* Rental Price */}
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Rental Price/Day (BDT){" "}
+                <span className="text-destructive">*</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  ৳
+                </span>
+                <Input
+                  name="price"
+                  type="number"
+                  min="0"
+                  defaultValue={form?.price || ""}
+                  placeholder="5000"
+                  required
+                  className="bg-muted border-0 focus:ring-2 focus:ring-primary pl-8"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Quantity Available
+              </label>
+              <Input
+                name="quantity"
+                type="number"
+                min="1"
+                defaultValue={form?.quantity || 1}
+                placeholder="1"
+                className="bg-muted border-0 focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            {/* Traveling Routes */}
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Available Routes (comma separated)
+              </label>
+              <Input
+                name="places"
+                defaultValue={form?.places?.join(", ") || ""}
+                placeholder="e.g. Dhaka, Chittagong, Sylhet"
+                className="bg-muted border-0 focus:ring-2 focus:ring-primary"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Enter multiple routes separated by commas
+              </p>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Images
+              </label>
+              <input
+                type="file"
+                name="images"
+                accept="image/*"
+                multiple
+                className="text-sm text-muted-foreground"
+              />
+            </div>
+            <div className="sm:col-span-2 lg:col-span-3 flex gap-2">
+              <Button
+                type="submit"
+                className="bg-gradient-primary text-primary-foreground"
+              >
+                {form === "add" ? "Add Car" : "Update Car"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setForm(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="text-muted-foreground">Loading...</div>
+      ) : cars.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card p-10 text-center text-muted-foreground">
+          No cars yet. Add one above.
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-border bg-card shadow-card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50">
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Carname
+                </th>
+
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Type
+                </th>
+
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Seats
+                </th>
+
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Price/day
+                </th>
+
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Qty
+                </th>
+
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Status
+                </th>
+
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+
             <tbody>
               {cars.map((c) => (
                 <Fragment key={c._id}>

@@ -38,19 +38,23 @@ async function createIndexes(db) {
     // Cars indexes
     await db.collection("cars").createIndex({ isActive: 1 });
     await db.collection("cars").createIndex({ createdAt: -1 });
-
-    // Bookings indexes
-    await db
-      .collection("bookings")
-      .createIndex({ roomId: 1, status: 1, checkIn: 1, checkOut: 1 });
-    await db.collection("bookings").createIndex({ userId: 1, status: 1 });
-    await db.collection("bookings").createIndex({ hotel: 1, status: 1 });
-
+    
     // Car bookings indexes
     await db
       .collection("carBookings")
       .createIndex({ carId: 1, status: 1, pickUpDate: 1, dropOffDate: 1 });
     await db.collection("carBookings").createIndex({ userId: 1, status: 1 });
+
+     // CarRent indexes
+    await db.collection("carrent").createIndex({ isActive: 1 });
+    await db.collection("carrent").createIndex({ createdAt: -1 });
+
+    // CarRent Bookings indexes
+    await db
+      .collection("carrentBookings")
+      .createIndex({ carId: 1, status: 1, pickupDate: 1, returnDate: 1 });
+    await db.collection("carrentBookings").createIndex({ userId: 1, status: 1 });
+    await db.collection("carrentBookings").createIndex({ createdAt: -1 });
 
     // Payments indexes
     await db.collection("revenue").createIndex({ createdAt: -1 });

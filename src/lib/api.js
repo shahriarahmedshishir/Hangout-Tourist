@@ -46,5 +46,6 @@ export const api = {
 export function imgUrl(path) {
   if (!path) return null;
   if (path.startsWith("http")) return path;
-  return `${BASE_URL}${path}`;
+  if (path.startsWith("/")) return `${BASE_URL}${path}`;
+  return `${BASE_URL}/uploads/${path}`;
 }

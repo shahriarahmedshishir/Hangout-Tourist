@@ -255,17 +255,19 @@ router.post("/initiate-booking/car", auth, async (req, res) => {
 
     const db = await getDb();
     const car = await db
-      .collection("cars")
+      .collection("carrent")
       .findOne({ _id: new ObjectId(carId) });
     if (!car) return res.status(404).json({ message: "Car not found" });
 
     const now = new Date();
-    const activeBookings = await db.collection("bookings").countDocuments({
-      carId,
-      type: "car",
-      status: "confirmed",
-      returnDate: { $gte: now },
-    });
+    const activeBookings = await db
+      .collection("carrentBookings")
+      .countDocuments({
+        carId,
+        type: "car",
+        status: "confirmed",
+        returnDate: { $gte: now },
+      });
 
     if (car.quantity > 0 && activeBookings >= car.quantity) {
       return res
@@ -314,10 +316,21 @@ router.post("/pay-booking/:bookingId", auth, async (req, res) => {
     const db = await getDb();
 
     // Get booking
-    const booking = await db.collection("bookings").findOne({
-      _id: new ObjectId(bookingId),
-      userId: req.user.id,
-    });
+    const bookingCollections = ["bookings", "carrentBookings"];
+    let booking = null;
+    let bookingCollection = null;
+
+    for (const collectionName of bookingCollections) {
+      const candidate = await db.collection(collectionName).findOne({
+        _id: new ObjectId(bookingId),
+        userId: req.user.id,
+      });
+      if (candidate) {
+        booking = candidate;
+        bookingCollection = db.collection(collectionName);
+        break;
+      }
+    }
 
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
@@ -367,7 +380,7 @@ router.post("/pay-booking/:bookingId", auth, async (req, res) => {
 
     // Update booking to confirmed
     const now = new Date();
-    await db.collection("bookings").updateOne(
+    await bookingCollection.updateOne(
       { _id: booking._id },
       {
         $set: {

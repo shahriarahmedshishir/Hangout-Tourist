@@ -281,7 +281,7 @@ router.post("/initiate/car", auth, async (req, res) => {
 
     const db = await getDb();
     const car = await db
-      .collection("cars")
+      .collection("carrent")
       .findOne({ _id: new ObjectId(carId) });
     if (!car) return res.status(404).json({ message: "Car not found" });
     if (car.isActive === false || car.isAvailable === false) {
@@ -289,12 +289,14 @@ router.post("/initiate/car", auth, async (req, res) => {
     }
 
     const now = new Date();
-    const activeBookings = await db.collection("bookings").countDocuments({
-      carId,
-      type: "car",
-      status: "confirmed",
-      returnDate: { $gte: now },
-    });
+    const activeBookings = await db
+      .collection("carrentBookings")
+      .countDocuments({
+        carId,
+        type: "car",
+        status: "confirmed",
+        returnDate: { $gte: now },
+      });
     if (car.quantity > 0 && activeBookings >= car.quantity) {
       return res
         .status(409)
@@ -751,16 +753,18 @@ async function _confirmBooking(tran_id, validation = null) {
     await db.collection("bookings").insertMany(bookings);
   } else if (session.type === "car") {
     // Double-check: Ensure car is still available (prevent race condition)
-    const conflictingBookings = await db.collection("bookings").countDocuments({
-      carId: session.carId,
-      type: "car",
-      status: "confirmed",
-      pickupDate: { $lt: session.returnDate },
-      returnDate: { $gt: session.pickupDate },
-    });
+    const conflictingBookings = await db
+      .collection("carrentBookings")
+      .countDocuments({
+        carId: session.carId,
+        type: "car",
+        status: "confirmed",
+        pickupDate: { $lt: session.returnDate },
+        returnDate: { $gt: session.pickupDate },
+      });
 
     const car = await db
-      .collection("cars")
+      .collection("carrent")
       .findOne({ _id: new ObjectId(session.carId) });
 
     if (car && car.quantity > 0 && conflictingBookings >= car.quantity) {
@@ -771,7 +775,7 @@ async function _confirmBooking(tran_id, validation = null) {
     }
 
     console.log("Creating car booking");
-    await db.collection("bookings").insertOne({
+    await db.collection("carrentBookings").insertOne({
       userId: session.userId,
       type: "car",
       carId: session.carId,
