@@ -316,7 +316,7 @@ router.post("/pay-booking/:bookingId", auth, async (req, res) => {
     const db = await getDb();
 
     // Get booking
-    const bookingCollections = ["bookings", "carrentBookings"];
+    const bookingCollections = ["bookings", "carrentBookings", "busBookings"];
     let booking = null;
     let bookingCollection = null;
 
@@ -400,6 +400,216 @@ router.post("/pay-booking/:bookingId", auth, async (req, res) => {
         coinsUsed: coinsRequired,
         remainingCoins: coinBalance - coinsRequired,
       },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// BUS HANGCOIN BOOKING
+// ─────────────────────────────────────────────────────────────────────────
+
+// POST /api/hangcoin/initiate-booking/bus — Create pending bus booking for hangcoin payment
+router.post("/initiate-booking/bus", auth, async (req, res) => {
+  try {
+    // Prevent staff and admin from booking
+    if (req.user.role === "hotel_staff" || req.user.role === "admin") {
+      return res
+        .status(403)
+        .json({ message: "Staff and admin accounts cannot book buses" });
+    }
+
+    const { busId, travelDate, seats, pickupLocation, contactNumber } =
+      req.body;
+
+    if (!busId || !travelDate || !seats) {
+      return res.status(400).json({
+        message: "busId, travelDate, and seats are required",
+      });
+    }
+
+    if (!isValidObjectId(busId)) {
+      return res.status(400).json({ message: "Invalid bus id" });
+    }
+
+    const travelDateObj = new Date(travelDate);
+    if (isNaN(travelDateObj)) {
+      return res.status(400).json({ message: "Invalid travel date" });
+    }
+
+    const seatsCount = parseInt(seats, 10);
+    if (seatsCount <= 0) {
+      return res.status(400).json({ message: "Seats must be at least 1" });
+    }
+
+    const db = await getDb();
+    const bus = await db
+      .collection("buses")
+      .findOne({ _id: new ObjectId(busId) });
+    if (!bus) return res.status(404).json({ message: "Bus not found" });
+
+    const now = new Date();
+    const activeBookings = await db.collection("busBookings").countDocuments({
+      busId,
+      status: "confirmed",
+      travelDate: {
+        $gte: new Date(travelDateObj.getTime() - 24 * 60 * 60 * 1000),
+        $lt: new Date(travelDateObj.getTime() + 24 * 60 * 60 * 1000),
+      },
+    });
+
+    const availableSeats = bus.quantity - activeBookings;
+    if (availableSeats < seatsCount) {
+      return res.status(409).json({
+        message: `Only ${availableSeats} seat(s) available for this bus on this date`,
+      });
+    }
+
+    const totalAmount = bus.price * seatsCount;
+
+    // Create pending booking for hangcoin payment
+    const booking = {
+      userId: req.user.id,
+      type: "bus",
+      busId: bus._id.toString(),
+      busName: bus.name,
+      travelDate: travelDateObj,
+      seats: seatsCount,
+      pickupLocation: pickupLocation || "",
+      contactNumber: contactNumber || "",
+      pricePerSeat: bus.price,
+      totalAmount,
+      status: "pending", // Pending hangcoin payment
+      paymentMethod: "hangcoin",
+      createdAt: now,
+    };
+
+    const result = await db.collection("busBookings").insertOne(booking);
+
+    res.json({
+      message: "Bus booking initiated for hangcoin payment",
+      bookingId: result.insertedId,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/hangcoin/initiate-booking/carrent — Cox's Bazar booking with hangcoin
+router.post("/initiate-booking/carrent", auth, async (req, res) => {
+  try {
+    // Prevent staff and admin from booking
+    if (req.user.role === "hotel_staff" || req.user.role === "admin") {
+      return res
+        .status(403)
+        .json({ message: "Staff and admin accounts cannot book services" });
+    }
+
+    const {
+      serviceId,
+      pickupDate,
+      returnDate,
+      seatsBooked,
+      pickupLocation,
+      contactNumber,
+    } = req.body;
+
+    if (!serviceId || !pickupDate || !returnDate || !seatsBooked) {
+      return res.status(400).json({
+        message:
+          "serviceId, pickupDate, returnDate, and seatsBooked are required",
+      });
+    }
+
+    if (!isValidObjectId(serviceId)) {
+      return res.status(400).json({ message: "Invalid service id" });
+    }
+
+    const pickupDateObj = new Date(pickupDate);
+    const returnDateObj = new Date(returnDate);
+    if (
+      isNaN(pickupDateObj) ||
+      isNaN(returnDateObj) ||
+      returnDateObj <= pickupDateObj
+    ) {
+      return res.status(400).json({ message: "Invalid dates" });
+    }
+
+    const seatsCount = parseInt(seatsBooked, 10);
+    if (seatsCount <= 0) {
+      return res.status(400).json({ message: "Seats must be at least 1" });
+    }
+
+    const db = await getDb();
+    const service = await db
+      .collection("carrent")
+      .findOne({ _id: new ObjectId(serviceId) });
+    if (!service) return res.status(404).json({ message: "Service not found" });
+
+    const now = new Date();
+    const bookedSeatsData = await db
+      .collection("carrentBookings")
+      .aggregate([
+        {
+          $match: {
+            serviceId: serviceId.toString(),
+            status: "confirmed",
+            returnDate: { $gte: now },
+            $or: [
+              {
+                pickupDate: { $lt: returnDateObj },
+                returnDate: { $gt: pickupDateObj },
+              },
+            ],
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: { $toInt: "$seatsBooked" } },
+          },
+        },
+      ])
+      .toArray();
+
+    const bookedSeats = bookedSeatsData[0]?.total || 0;
+    const availableSeats =
+      (service.quantity || service.totalSeats || 0) - bookedSeats;
+    if (availableSeats < seatsCount) {
+      return res.status(409).json({
+        message: `Only ${availableSeats} car(s) available for this service during selected dates`,
+      });
+    }
+
+    const totalAmount = service.price * seatsCount;
+
+    // Create pending booking for hangcoin payment
+    const booking = {
+      userId: req.user.id,
+      type: "carrent",
+      serviceId: service._id.toString(),
+      serviceName: service.name,
+      carName: service.name, // For frontend display
+      carType: service.type || "Standard", // For frontend display
+      pickupDate: pickupDateObj,
+      returnDate: returnDateObj,
+      days: Math.ceil((returnDateObj - pickupDateObj) / (1000 * 60 * 60 * 24)), // Calculate days
+      seatsBooked: seatsCount,
+      pickupLocation: pickupLocation || "",
+      contactNumber: contactNumber || "",
+      pricePerSeat: service.price,
+      totalAmount,
+      status: "pending", // Pending hangcoin payment
+      paymentMethod: "hangcoin",
+      createdAt: now,
+    };
+
+    const result = await db.collection("carrentBookings").insertOne(booking);
+
+    res.json({
+      message: "Service booking initiated for hangcoin payment",
+      bookingId: result.insertedId,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });

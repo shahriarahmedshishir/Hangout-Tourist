@@ -12,6 +12,7 @@ import Invoice from "./Invoice";
 import {
   Hotel,
   Car,
+  BusFront,
   X,
   FileText,
   AlertCircle,
@@ -72,11 +73,34 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
     try {
       setLoading(true);
       setCancelError("");
-      const data = await api.get(`/api/bookings/${bookingId}`);
+
+      // Try to fetch from bookings endpoint first
+      let data;
+      let isCarRental = false;
+
+      try {
+        data = await api.get(`/api/bookings/${bookingId}`);
+      } catch (err) {
+        // If not in bookings collection, try carrent bookings
+        if (err.status === 404) {
+          data = await api.get(`/api/carrent/booking/${bookingId}`);
+          isCarRental = true;
+        } else {
+          throw err;
+        }
+      }
+
       setBooking(data);
 
-      // Fetch invoice data
-      const invoiceData = await api.get(`/api/bookings/${bookingId}/invoice`);
+      // Fetch invoice from correct endpoint based on booking type
+      let invoiceData;
+      if (isCarRental || data.type === "car") {
+        invoiceData = await api.get(
+          `/api/carrent/booking/${bookingId}/invoice`,
+        );
+      } else {
+        invoiceData = await api.get(`/api/bookings/${bookingId}/invoice`);
+      }
       setInvoice(invoiceData);
     } catch (err) {
       setCancelError(err.message || "Failed to load booking details");
@@ -136,6 +160,8 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
   };
 
   const isHotel = booking?.type === "hotel";
+  const isCar = booking?.type === "car";
+  const isBus = booking?.type === "bus";
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -165,21 +191,35 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
               <div className="flex items-center gap-3">
                 <div
                   className={`rounded-lg p-3 ${
-                    isHotel ? "bg-primary/10" : "bg-secondary/10"
+                    isHotel
+                      ? "bg-primary/10"
+                      : isBus
+                        ? "bg-blue/10"
+                        : "bg-secondary/10"
                   }`}
                 >
                   {isHotel ? (
                     <Hotel className="h-6 w-6 text-primary" />
+                  ) : isBus ? (
+                    <BusFront className="h-6 w-6 text-blue-600" />
                   ) : (
                     <Car className="h-6 w-6 text-secondary" />
                   )}
                 </div>
                 <div>
                   <h3 className="font-bold text-lg">
-                    {isHotel ? booking.hotelName : booking.carName}
+                    {isHotel
+                      ? booking.hotelName
+                      : isBus
+                        ? booking.busName
+                        : booking.carName}
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    {isHotel ? `Room ${booking.roomNumber}` : booking.carType}
+                    {isHotel
+                      ? `Room ${booking.roomNumber}`
+                      : isBus
+                        ? `Seats: ${booking.seats}`
+                        : booking.carType}
                   </p>
                 </div>
               </div>
@@ -207,28 +247,94 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
 
             {/* Dates */}
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">
-                  {isHotel ? "Check-in" : "Pick-up"} Date
-                </p>
-                <p className="font-semibold">
-                  {formatDate(isHotel ? booking.checkIn : booking.pickupDate)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">
-                  {isHotel ? "Check-out" : "Return"} Date
-                </p>
-                <p className="font-semibold">
-                  {formatDate(isHotel ? booking.checkOut : booking.returnDate)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Duration</p>
-                <p className="font-semibold">
-                  {booking.days} day{booking.days !== 1 ? "s" : ""}
-                </p>
-              </div>
+              {isHotel && (
+                <>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Check-in Date
+                    </p>
+                    <p className="font-semibold">
+                      {formatDate(booking.checkIn)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Check-out Date
+                    </p>
+                    <p className="font-semibold">
+                      {formatDate(booking.checkOut)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Duration
+                    </p>
+                    <p className="font-semibold">
+                      \n {booking.days} day{booking.days !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                </>
+              )}
+              {isCar && (
+                <>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Pick-up Date
+                    </p>
+                    <p className="font-semibold">
+                      {formatDate(booking.pickupDate)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Return Date
+                    </p>
+                    <p className="font-semibold">
+                      {formatDate(booking.returnDate)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Duration
+                    </p>
+                    <p className="font-semibold">
+                      {booking.days} day{booking.days !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                </>
+              )}
+              {isBus && (
+                <>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Travel Date
+                    </p>
+                    <p className="font-semibold">
+                      {formatDate(booking.travelDate)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Departure Time
+                    </p>
+                    <p className="font-semibold">
+                      {booking.departureTime || "N/A"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Pickup Location
+                    </p>
+                    <p className="font-semibold">
+                      {booking.pickupLocation || "N/A"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Seats</p>
+                    <p className="font-semibold">{booking.seats || "N/A"}</p>
+                  </div>
+                </>
+              )}
               <div>
                 <p className="text-xs text-muted-foreground mb-1">
                   Total Amount

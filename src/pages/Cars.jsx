@@ -19,6 +19,7 @@ import {
   Route,
   Landmark,
   Info,
+  Clock,
 } from "lucide-react";
 import { api, imgUrl } from "@/lib/api";
 
@@ -26,7 +27,8 @@ const COXS_BAZAR_TRANSPORTS = [
   {
     title: "Chander Gari",
     icon: <Truck className="h-8 w-8 text-primary" />,
-    description: "The unique jeep better known as Chander Gari for hilly tracks.",
+    description:
+      "The unique jeep better known as Chander Gari for hilly tracks.",
     routes: [
       { from: "Cox's Bazar", to: "Himchhari", price: 800 },
       { from: "Cox's Bazar", to: "Inani", price: 1200 },
@@ -42,7 +44,8 @@ const COXS_BAZAR_TRANSPORTS = [
   {
     title: "Micro Bus",
     icon: <Car className="h-8 w-8 text-primary" />,
-    description: "Comfortable travel for families or groups in and around Cox’s Bazar.",
+    description:
+      "Comfortable travel for families or groups in and around Cox’s Bazar.",
     routes: [
       { from: "Cox's Bazar", to: "Laboni", price: 700 },
       { from: "Cox's Bazar", to: "Marine Drive", price: 1200 },
@@ -72,6 +75,10 @@ const Cars = () => {
   // Bus data and loading state
   const [buses, setBuses] = useState([]);
   const [busesLoading, setBusesLoading] = useState(false);
+
+  // Cox's Bazar data and loading state
+  const [coxsBazarServices, setCoxsBazarServices] = useState([]);
+  const [coxsBazarLoading, setCoxsBazarLoading] = useState(false);
 
   // UI state for option switching
   const [selectedTab, setSelectedTab] = useState("car"); // car | bus | coxs_bazar
@@ -126,7 +133,7 @@ const Cars = () => {
     if (selectedTab === "car") {
       setLoading(true);
       api
-        .get("/api/carrent")
+        .get("/api/cars")
         .then((data) => setCars(data))
         .catch(() => setCars([]))
         .finally(() => setLoading(false));
@@ -137,10 +144,21 @@ const Cars = () => {
     if (selectedTab === "bus") {
       setBusesLoading(true);
       api
-        .get("/api/busrent")
+        .get("/api/buses")
         .then((data) => setBuses(data))
         .catch(() => setBuses([]))
         .finally(() => setBusesLoading(false));
+    }
+  }, [selectedTab]);
+
+  useEffect(() => {
+    if (selectedTab === "coxs_bazar") {
+      setCoxsBazarLoading(true);
+      api
+        .get("/api/carrent")
+        .then((data) => setCoxsBazarServices(data))
+        .catch(() => setCoxsBazarServices([]))
+        .finally(() => setCoxsBazarLoading(false));
     }
   }, [selectedTab]);
 
@@ -154,7 +172,7 @@ const Cars = () => {
       !search ||
       car.name?.toLowerCase().includes(search.toLowerCase()) ||
       car.type?.toLowerCase().includes(search.toLowerCase()) ||
-      car.places?.some((p) => p.toLowerCase().includes(search.toLowerCase()))
+      car.places?.some((p) => p.toLowerCase().includes(search.toLowerCase())),
   );
   const totalPages = Math.ceil(filtered.length / itemsPerPage);
   const startIdx = (currentPage - 1) * itemsPerPage;
@@ -176,7 +194,11 @@ const Cars = () => {
           <div className="mt-6 flex flex-wrap gap-5 justify-center">
             <Button
               size="lg"
-              className={selectedTab === "car" ? "bg-white text-primary" : "bg-card border shadow hover:bg-secondary"}
+              className={
+                selectedTab === "car"
+                  ? "bg-white text-primary"
+                  : "bg-card border shadow hover:bg-secondary"
+              }
               variant={selectedTab === "car" ? "default" : "outline"}
               onClick={() => {
                 setSelectedTab("car");
@@ -188,7 +210,11 @@ const Cars = () => {
             </Button>
             <Button
               size="lg"
-              className={selectedTab === "bus" ? "bg-white text-primary" : "bg-card border shadow hover:bg-secondary"}
+              className={
+                selectedTab === "bus"
+                  ? "bg-white text-primary"
+                  : "bg-card border shadow hover:bg-secondary"
+              }
               variant={selectedTab === "bus" ? "default" : "outline"}
               onClick={() => {
                 setSelectedTab("bus");
@@ -200,7 +226,11 @@ const Cars = () => {
             </Button>
             <Button
               size="lg"
-              className={selectedTab === "coxs_bazar" ? "bg-white text-primary" : "bg-card border shadow hover:bg-secondary"}
+              className={
+                selectedTab === "coxs_bazar"
+                  ? "bg-white text-primary"
+                  : "bg-card border shadow hover:bg-secondary"
+              }
               variant={selectedTab === "coxs_bazar" ? "default" : "outline"}
               onClick={() => {
                 setSelectedTab("coxs_bazar");
@@ -342,9 +372,11 @@ const Cars = () => {
                       <h3 className="font-heading text-lg font-bold text-foreground">
                         {car.name}
                       </h3>
-                      <p className="mb-1 text-xs text-muted-foreground">
-                        {car.type}
-                      </p>
+                      <div className="mb-3 flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                          {car.type === "CC" ? "🚗 CC" : "🏎️ MC"}
+                        </span>
+                      </div>
                       {car.places?.length > 0 && (
                         <p className="mb-3 text-xs text-primary">
                           📍 {car.places.join(" · ")}
@@ -440,7 +472,7 @@ const Cars = () => {
                             );
                           }
                           return null;
-                        }
+                        },
                       )}
                     </div>
                     <Button
@@ -469,7 +501,9 @@ const Cars = () => {
             <div className="mb-8 rounded-2xl border border-border bg-card p-5 shadow-card text-center">
               <BusFront className="mx-auto my-2 h-8 w-8 text-primary" />
               <div className="text-lg font-bold">Available Bus Services</div>
-              <div className="text-muted-foreground text-sm mb-2">View all buses operating on various routes.</div>
+              <div className="text-muted-foreground text-sm mb-2">
+                View all buses operating on various routes.
+              </div>
             </div>
             {busesLoading ? (
               <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
@@ -492,33 +526,119 @@ const Cars = () => {
               </div>
             ) : (
               <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-                {buses.map((bus) => (
+                {buses.map((bus, i) => (
                   <div
                     key={bus._id}
-                    className="rounded-xl border border-border bg-card p-6 shadow-card flex flex-col justify-between hover:-translate-y-1 transition-transform"
+                    className="rounded-2xl border border-border bg-card p-5 shadow-card transition-all hover:shadow-card-hover hover:-translate-y-1 animate-fade-in"
+                    style={{ animationDelay: `${i * 0.05}s` }}
                   >
-                    <div className="mb-2 flex items-center gap-2 border-b border-border pb-2">
-                      <BusFront className="text-primary" />
-                      <span className="font-semibold text-lg">{bus.name}</span>
+                    <div className="mb-4 flex h-44 items-center justify-center rounded-xl bg-muted overflow-hidden relative">
+                      {bus.images?.length > 0 ? (
+                        <>
+                          <img
+                            src={imgUrl(bus.images[activeImg[bus._id] || 0])}
+                            alt={bus.name}
+                            className="h-full w-full object-cover"
+                          />
+                          {bus.images.length > 1 && (
+                            <>
+                              <button
+                                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-1 text-white hover:bg-black/60 transition-colors"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveImg((p) => ({
+                                    ...p,
+                                    [bus._id]:
+                                      ((p[bus._id] || 0) -
+                                        1 +
+                                        bus.images.length) %
+                                      bus.images.length,
+                                  }));
+                                }}
+                              >
+                                <ChevronLeft className="h-3 w-3" />
+                              </button>
+                              <button
+                                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-1 text-white hover:bg-black/60 transition-colors"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveImg((p) => ({
+                                    ...p,
+                                    [bus._id]:
+                                      ((p[bus._id] || 0) + 1) %
+                                      bus.images.length,
+                                  }));
+                                }}
+                              >
+                                <ChevronRight className="h-3 w-3" />
+                              </button>
+                              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                                {bus.images.map((_, idx) => (
+                                  <button
+                                    key={idx}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveImg((p) => ({
+                                        ...p,
+                                        [bus._id]: idx,
+                                      }));
+                                    }}
+                                    className={`h-1.5 w-1.5 rounded-full transition-all ${
+                                      idx === (activeImg[bus._id] || 0)
+                                        ? "bg-white scale-125"
+                                        : "bg-white/50"
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <BusFront className="h-12 w-12 text-muted-foreground opacity-50" />
+                      )}
                     </div>
-                    <div className="mb-2 text-muted-foreground flex items-center gap-2">
-                      <Route className="h-4 w-4" /> {bus.route}
+                    <h3 className="font-heading text-lg font-bold text-foreground">
+                      {bus.name}
+                    </h3>
+                    <p className="mb-1 text-xs text-muted-foreground">
+                      {bus.busType}
+                    </p>
+                    {bus.routes?.length > 0 && (
+                      <p className="mb-3 text-xs text-primary">
+                        📍 {bus.routes.join(" • ")}
+                      </p>
+                    )}
+                    <div className="mb-4 flex gap-3 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3 w-3" /> {bus.seats} seats
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" /> {bus.departureTime}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Settings2 className="h-3 w-3" /> {bus.acType}
+                      </span>
                     </div>
-                    <div className="mb-1 text-xs text-muted-foreground">
-                      {bus.features?.join(", ")}
-                    </div>
-                    <div className="flex items-center justify-between mt-3 border-t border-border pt-2">
+                    <div className="flex items-end justify-between border-t border-border pt-3">
                       <div>
                         <span className="font-heading text-xl font-bold text-primary">
                           ৳{bus.price?.toLocaleString()}
                         </span>
-                        <span className="text-xs text-muted-foreground"> /trip</span>
+                        <span className="text-sm text-muted-foreground">
+                          {" "}
+                          /seat
+                        </span>
                       </div>
-                      <Button size="sm"
+                      <Button
+                        size="sm"
                         className="bg-gradient-primary text-primary-foreground"
                         onClick={() => handleBusBookNow(bus)}
+                        disabled={(bus.availableSeats || 0) === 0}
                       >
-                        Book Now
+                        {(bus.availableSeats || 0) > 0
+                          ? "Book Now"
+                          : "Unavailable"}
                       </Button>
                     </div>
                   </div>
@@ -531,96 +651,87 @@ const Cars = () => {
         {/* Cox's Bazar Tab */}
         {selectedTab === "coxs_bazar" && (
           <>
-            {!selectedCoxsBazar ? (
-              <>
-                <div className="mb-8 rounded-2xl border border-border bg-card p-5 shadow-card text-center">
-                  <Landmark className="mx-auto my-2 h-8 w-8 text-primary" />
-                  <div className="text-lg font-bold">Cox's Bazar Special Transportation</div>
-                  <div className="text-muted-foreground text-sm mb-2">
-                    Explore Cox’s Bazar with local transports. Select an option below:
-                  </div>
-                </div>
-                <div className="grid gap-7 md:grid-cols-2">
-                  {COXS_BAZAR_TRANSPORTS.map((item) => (
-                    <div
-                      key={item.title}
-                      className="rounded-xl border border-border bg-card p-8 shadow-card flex flex-col items-center cursor-pointer hover:border-primary hover:bg-secondary/30 transition"
-                      onClick={() => setSelectedCoxsBazar(item.title)}
-                    >
-                      {item.icon}
-                      <div className="mt-3 font-heading text-lg font-bold">{item.title}</div>
-                      <div className="text-sm text-muted-foreground">{item.description}</div>
-                    </div>
-                  ))}
-                </div>
-              </>
+            {coxsBazarLoading ? (
+              <div className="text-center text-muted-foreground">
+                Loading Cox's Bazar services...
+              </div>
+            ) : coxsBazarServices.length === 0 ? (
+              <div className="rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">
+                No Cox's Bazar services available at the moment.
+              </div>
             ) : (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mb-4"
-                  onClick={() => setSelectedCoxsBazar(null)}
-                >
-                  <ChevronLeft className="h-4 w-4" /> Back
-                </Button>
-                {COXS_BAZAR_TRANSPORTS.filter((t) => t.title === selectedCoxsBazar).map((item) => (
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {coxsBazarServices.map((service) => (
                   <div
-                    key={item.title}
-                    className="rounded-2xl border border-border bg-card p-8 shadow-card flex flex-col md:flex-row md:items-stretch gap-8"
+                    key={service._id}
+                    className="rounded-2xl border border-border bg-card overflow-hidden shadow-card hover:shadow-lg transition-shadow"
                   >
-                    <div className="flex-shrink-0 w-full md:w-1/3 flex flex-col items-center">
-                      <img
-                        src={item.image}
-                        alt={item.title}
-                        className="rounded-lg w-full h-36 object-cover mb-4"
-                      />
-                      {item.icon}
-                      <div className="font-heading text-lg font-bold mt-3">
-                        {item.title}
+                    {service.images?.[0] && (
+                      <div className="relative h-48 overflow-hidden">
+                        <img
+                          src={imgUrl(
+                            service.images[activeImg[service._id] || 0] ||
+                              service.images[0],
+                          )}
+                          alt={service.name}
+                          className="w-full h-full object-cover"
+                        />
                       </div>
-                      <div className="text-muted-foreground text-sm">{item.description}</div>
-                    </div>
-                    <div className="flex-grow">
-                      <div className="mb-2 font-semibold">
-                        <Route className="inline-block h-5 w-5 mr-1" />
-                        Route-wise Price List
+                    )}
+                    <div className="p-4">
+                      <h3 className="font-heading text-lg font-bold text-foreground">
+                        {service.name}
+                      </h3>
+                      <div className="mb-3 flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                          {service.type || "Standard"}
+                        </span>
                       </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left border-t border-border">
-                          <thead>
-                            <tr>
-                              <th className="py-2 px-3 font-medium text-muted-foreground">From</th>
-                              <th className="py-2 px-3 font-medium text-muted-foreground">To</th>
-                              <th className="py-2 px-3 font-medium text-muted-foreground">Price (৳)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {item.routes.map((r, idx) => (
-                              <tr key={idx}>
-                                <td className="py-2 px-3">{r.from}</td>
-                                <td className="py-2 px-3">{r.to}</td>
-                                <td className="py-2 px-3">{r.price.toLocaleString()}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                      <div className="mb-4 flex gap-3 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Fuel className="h-3 w-3" />{" "}
+                          {service.fuel || "Petrol"}
+                        </span>
                       </div>
-                      <div className="mt-4">
-                        <div className="font-semibold mb-1">
-                          <Info className="inline-block h-4 w-4 mr-1" />
-                          Features
+                      <div className="flex items-end justify-between border-t border-border pt-3">
+                        <div>
+                          <span className="font-heading text-xl font-bold text-primary">
+                            ৳{service.price?.toLocaleString()}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            {" "}
+                            /seat
+                          </span>
                         </div>
-                        <ul className="list-disc ml-6 text-sm">
-                          {item.features.map((f, idx) => (
-                            <li key={idx}>{f}</li>
-                          ))}
-                        </ul>
+                        <Button
+                          size="sm"
+                          className="bg-gradient-primary text-primary-foreground"
+                          onClick={() => {
+                            if (!user) {
+                              toast({
+                                title: "Please Login First",
+                                description:
+                                  "You need to log in before booking.",
+                                duration: 3000,
+                              });
+                              setTimeout(() => navigate("/login"), 500);
+                              return;
+                            }
+                            navigate("/booking/coxs-bazar", {
+                              state: { service },
+                            });
+                          }}
+                          disabled={(service.availableCars || 0) === 0}
+                        >
+                          {(service.availableCars || 0) > 0
+                            ? "Book Now"
+                            : "Unavailable"}
+                        </Button>
                       </div>
                     </div>
                   </div>
                 ))}
-              </>
+              </div>
             )}
           </>
         )}

@@ -32,6 +32,7 @@ import {
   CheckCircle,
   XCircle,
   RotateCcw,
+  BusFront,
 } from "lucide-react";
 import { api, imgUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -40,8 +41,10 @@ import logo from "@/assets/logo.png";
 const sidebarItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "hotels", label: "Hotels", icon: Building2 },
-  { id: "cars", label: "Cars", icon: Car },
-  { id: "cars rent", label: "Cars Rent", icon: Car },
+  { id: "cars", label: "Car Rental", icon: Car },
+  { id: "cars rent", label: "Cox's Bazar", icon: Car },
+  { id: "buses", label: "Buses", icon: BusFront },
+  { id: "bus-tickets", label: "Bus Tickets", icon: BusFront },
   { id: "todays-bookings", label: "Today's Bookings", icon: CalendarRange },
   { id: "bookings", label: "Bookings", icon: ShoppingCart },
   { id: "cancel-requests", label: "Cancellation Requests", icon: XCircle },
@@ -159,6 +162,8 @@ const Admin = () => {
           {view === "hotels" && <HotelsView />}
           {view === "cars" && <CarsView />}
           {view === "cars rent" && <CarsRentView />}
+          {view === "buses" && <BusesView />}
+          {view === "bus-tickets" && <BusTicketsView />}
           {view === "todays-bookings" && <TodaysBookingsView />}
           {view === "bookings" && <BookingsView />}
           {view === "cancel-requests" && <CancelRequestsView />}
@@ -1246,7 +1251,9 @@ const CarsView = () => {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="font-heading text-lg font-bold text-foreground">Cars</h2>
+        <h2 className="font-heading text-lg font-bold text-foreground">
+          Car Rental Services
+        </h2>
         <Button
           className="gap-2 bg-gradient-primary text-primary-foreground"
           onClick={() => setForm("add")}
@@ -1258,7 +1265,7 @@ const CarsView = () => {
       {form && (
         <div className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-card">
           <h3 className="mb-4 font-heading font-bold text-foreground">
-            {form === "add" ? "Add New Car" : `Edit: ${form.name}`}
+            {form === "add" ? "Add New Car Rental" : `Edit: ${form.name}`}
           </h3>
           <form
             onSubmit={handleSubmit}
@@ -1333,9 +1340,9 @@ const CarsView = () => {
                 Quantity *
               </label>
               <Input
-                name="quantity"
+                name="totalSeats"
                 type="number"
-                defaultValue={form?.quantity || 1}
+                defaultValue={form?.totalSeats || form?.quantity || 1}
                 required
                 className="bg-muted"
               />
@@ -1441,7 +1448,11 @@ const CarsView = () => {
                     <td className="px-5 py-3 font-medium text-primary">
                       ৳{c.price?.toLocaleString()}
                     </td>
-                    <td className="px-5 py-3 text-foreground">{c.quantity}</td>
+                    <td className="px-5 py-3">
+                      <span className="rounded-full px-2.5 py-1 text-xs font-medium bg-primary/10 text-primary">
+                        {c.quantity || 1}
+                      </span>
+                    </td>
                     <td className="px-5 py-3">
                       <span
                         className={`rounded-full px-2.5 py-1 text-xs font-medium ${c.isAvailable ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}
@@ -1832,20 +1843,22 @@ const CarsRentView = () => {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-heading text-lg font-bold text-foreground">
-          Cars Rent
+          Cox's Bazar Services
         </h2>
         <Button
           className="gap-2 bg-gradient-primary text-primary-foreground"
           onClick={() => setForm("add")}
         >
-          <Plus className="h-4 w-4" /> Add Car
+          <Plus className="h-4 w-4" /> Add Service
         </Button>
       </div>
 
       {form && (
         <div className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-card">
           <h3 className="mb-4 font-heading font-bold text-foreground">
-            {form === "add" ? "Add New Car" : `Edit: ${form.name}`}
+            {form === "add"
+              ? "Add New Cox's Bazar Service"
+              : `Edit: ${form.name}`}
           </h3>
           <form
             onSubmit={handleSubmit}
@@ -1864,19 +1877,20 @@ const CarsRentView = () => {
                 className="bg-muted border-0 focus:ring-2 focus:ring-primary"
               />
             </div>
-            {/* Seats */}
+            {/* Car Type */}
             <div>
               <label className="mb-2 block text-sm font-medium text-foreground">
-                Seats
+                Car Type <span className="text-destructive">*</span>
               </label>
-              <Input
-                name="seats"
-                type="number"
-                min="1"
-                defaultValue={form?.seats || 5}
-                placeholder="5"
-                className="bg-muted border-0 focus:ring-2 focus:ring-primary"
-              />
+              <select
+                name="type"
+                defaultValue={form?.type || "Chander Gari"}
+                required
+                className="w-full bg-muted border-0 focus:ring-2 focus:ring-primary rounded-md px-3 py-2 text-foreground"
+              >
+                <option value="Chander Gari">Chander Gari</option>
+                <option value="Micro Bus">Micro Bus</option>
+              </select>
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium text-foreground">
@@ -1892,7 +1906,7 @@ const CarsRentView = () => {
             {/* Rental Price */}
             <div>
               <label className="mb-2 block text-sm font-medium text-foreground">
-                Rental Price/Day (BDT){" "}
+                Rental Price/Car (BDT){" "}
                 <span className="text-destructive">*</span>
               </label>
               <div className="relative">
@@ -1909,19 +1923,6 @@ const CarsRentView = () => {
                   className="bg-muted border-0 focus:ring-2 focus:ring-primary pl-8"
                 />
               </div>
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-foreground">
-                Quantity Available
-              </label>
-              <Input
-                name="quantity"
-                type="number"
-                min="1"
-                defaultValue={form?.quantity || 1}
-                placeholder="1"
-                className="bg-muted border-0 focus:ring-2 focus:ring-primary"
-              />
             </div>
             {/* Traveling Routes */}
             <div>
@@ -1989,15 +1990,7 @@ const CarsRentView = () => {
                 </th>
 
                 <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
-                  Seats
-                </th>
-
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
-                  Price/day
-                </th>
-
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
-                  Qty
+                  Price/Car
                 </th>
 
                 <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
@@ -2031,16 +2024,14 @@ const CarsRentView = () => {
                     <td className="px-5 py-3 text-muted-foreground">
                       {c.type}
                     </td>
-                    <td className="px-5 py-3 text-foreground">{c.seats}</td>
                     <td className="px-5 py-3 font-medium text-primary">
                       ৳{c.price?.toLocaleString()}
                     </td>
-                    <td className="px-5 py-3 text-foreground">{c.quantity}</td>
                     <td className="px-5 py-3">
                       <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${c.isAvailable ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}
+                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${c.isActive ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}
                       >
-                        {c.isAvailable ? "Active" : "Hidden"}
+                        {c.isActive ? "Active" : "Hidden"}
                       </span>
                     </td>
                     <td className="px-5 py-3">
@@ -2061,7 +2052,7 @@ const CarsRentView = () => {
                           className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent transition-colors"
                           onClick={() => handleToggle(c._id)}
                         >
-                          {c.isAvailable ? (
+                          {c.isActive ? (
                             <ToggleRight className="h-4 w-4 text-success" />
                           ) : (
                             <ToggleLeft className="h-4 w-4" />
@@ -4278,21 +4269,23 @@ const TodaysBookingsView = () => {
           </p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground mb-1">Hotel Check-outs</p>
-          <p className="text-2xl font-bold text-foreground">
-            {summary.hotelCheckOut || 0}
-          </p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-xs text-muted-foreground mb-1">Car Pickups</p>
           <p className="text-2xl font-bold text-foreground">
             {summary.carPickup || 0}
           </p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground mb-1">Car Returns</p>
+          <p className="text-xs text-muted-foreground mb-1">
+            Cox's Bazar Pickups
+          </p>
           <p className="text-2xl font-bold text-foreground">
-            {summary.carReturn || 0}
+            {summary.carrentPickup || 0}
+          </p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4">
+          <p className="text-xs text-muted-foreground mb-1">Bus Bookings</p>
+          <p className="text-2xl font-bold text-foreground">
+            {summary.busBookings || 0}
           </p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
@@ -4322,9 +4315,6 @@ const TodaysBookingsView = () => {
                   <th className="text-left py-3 px-4 font-semibold">Room</th>
                   <th className="text-left py-3 px-4 font-semibold">
                     Check-in
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold">
-                    Check-out
                   </th>
                   <th className="text-left py-3 px-4 font-semibold">Status</th>
                 </tr>
@@ -4357,9 +4347,6 @@ const TodaysBookingsView = () => {
                         </td>
                         <td className="py-3 px-4 text-sm">
                           {new Date(booking.checkIn).toLocaleDateString()}
-                        </td>
-                        <td className="py-3 px-4 text-sm">
-                          {new Date(booking.checkOut).toLocaleDateString()}
                         </td>
                         <td className="py-3 px-4">
                           <span
@@ -4394,9 +4381,6 @@ const TodaysBookingsView = () => {
                   <th className="text-left py-3 px-4 font-semibold">
                     Pickup Date
                   </th>
-                  <th className="text-left py-3 px-4 font-semibold">
-                    Return Date
-                  </th>
                   <th className="text-left py-3 px-4 font-semibold">Status</th>
                 </tr>
               </thead>
@@ -4425,9 +4409,6 @@ const TodaysBookingsView = () => {
                         </td>
                         <td className="py-3 px-4 text-sm">
                           {new Date(booking.pickupDate).toLocaleDateString()}
-                        </td>
-                        <td className="py-3 px-4 text-sm">
-                          {new Date(booking.returnDate).toLocaleDateString()}
                         </td>
                         <td className="py-3 px-4">
                           <span
@@ -4883,6 +4864,641 @@ const RefundInitiationView = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── BUSES MANAGEMENT ──────────────────────────────────────────────────────────
+const BusesView = () => {
+  const [buses, setBuses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState(null);
+  const [bookingPanel, setBookingPanel] = useState(null);
+  const [busBookings, setBusBookings] = useState({});
+  const [bookingLoading, setBookingLoading] = useState(null);
+
+  const load = () => {
+    setLoading(true);
+    api
+      .get("/api/admin/buses")
+      .then(setBuses)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+
+    try {
+      form === "add"
+        ? await api.postForm("/api/admin/buses", fd)
+        : await api.putForm(`/api/admin/buses/${form._id}`, fd);
+
+      setForm(null);
+      load();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("Delete this bus?")) return;
+
+    try {
+      await api.delete(`/api/admin/buses/${id}`);
+      load();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleToggle = async (id) => {
+    try {
+      await api.patch(`/api/admin/buses/${id}/toggle`, {});
+      load();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const loadBusBookings = async (busId) => {
+    setBookingLoading(busId);
+    try {
+      const data = await api.get(`/api/admin/buses/${busId}/bookings`);
+      setBusBookings((prev) => ({ ...prev, [busId]: data }));
+    } catch {}
+    setBookingLoading(null);
+  };
+
+  const toggleBookingPanel = async (busId) => {
+    if (bookingPanel === busId) {
+      setBookingPanel(null);
+      return;
+    }
+    setBookingPanel(busId);
+    await loadBusBookings(busId);
+  };
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="font-heading text-lg font-bold text-foreground">
+          Bus Services
+        </h2>
+        <Button
+          className="gap-2 bg-gradient-primary text-primary-foreground"
+          onClick={() => setForm("add")}
+        >
+          <Plus className="h-4 w-4" /> Add Bus
+        </Button>
+      </div>
+
+      {form && (
+        <div className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-card">
+          <h3 className="mb-4 font-heading font-bold text-foreground">
+            {form === "add" ? "Add New Bus" : `Edit: ${form.name}`}
+          </h3>
+          <form
+            onSubmit={handleSubmit}
+            className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+          >
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Bus Name <span className="text-destructive">*</span>
+              </label>
+              <Input
+                name="name"
+                defaultValue={form?.name || ""}
+                placeholder="e.g. Bus A1"
+                required
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Bus Type
+              </label>
+              <Input
+                name="busType"
+                defaultValue={form?.busType || "Standard Bus"}
+                placeholder="e.g. Standard Bus, Luxury"
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Total Seats
+              </label>
+              <Input
+                name="seats"
+                type="number"
+                min="1"
+                defaultValue={form?.seats || 45}
+                placeholder="45"
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                AC Type <span className="text-destructive">*</span>
+              </label>
+              <select
+                name="acType"
+                defaultValue={form?.acType || "AC"}
+                required
+                className="rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground"
+              >
+                <option value="AC">AC</option>
+                <option value="Non-AC">Non-AC</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Departure Time <span className="text-destructive">*</span>
+              </label>
+              <Input
+                name="departureTime"
+                type="time"
+                defaultValue={form?.departureTime || ""}
+                required
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Date <span className="text-destructive">*</span>
+              </label>
+              <Input
+                name="date"
+                type="date"
+                defaultValue={form?.date || ""}
+                required
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Price per Seat (BDT) <span className="text-destructive">*</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  ৳
+                </span>
+                <Input
+                  name="price"
+                  type="number"
+                  min="0"
+                  defaultValue={form?.price || ""}
+                  placeholder="500"
+                  required
+                  className="bg-muted pl-8"
+                />
+              </div>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Routes (comma separated){" "}
+                <span className="text-destructive">*</span>
+              </label>
+              <Input
+                name="routes"
+                defaultValue={form?.routes?.join(", ") || ""}
+                placeholder="e.g. Dhaka → Chittagong, Chittagong → Sylhet"
+                required
+                className="bg-muted"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Enter routes separated by commas (e.g. route 1, route 2, route
+                3)
+              </p>
+            </div>
+            <div className="sm:col-span-2 lg:col-span-3">
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Images
+              </label>
+              <input
+                type="file"
+                name="images"
+                accept="image/*"
+                multiple
+                className="text-sm text-muted-foreground"
+              />
+            </div>
+            <div className="sm:col-span-2 lg:col-span-3 flex gap-2">
+              <Button
+                type="submit"
+                className="bg-gradient-primary text-primary-foreground"
+              >
+                {form === "add" ? "Add Bus" : "Update Bus"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setForm(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="text-muted-foreground">Loading...</div>
+      ) : buses.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card p-10 text-center text-muted-foreground">
+          No buses yet. Add one above.
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-border bg-card shadow-card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50">
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Bus Name
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  AC Type
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Seats
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Time
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Price/Seat
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Status
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {buses.map((b) => (
+                <Fragment key={b._id}>
+                  <tr className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        {b.images?.[0] && (
+                          <img
+                            src={imgUrl(b.images[0])}
+                            alt=""
+                            className="h-8 w-12 rounded object-cover"
+                          />
+                        )}
+                        <span className="font-medium text-foreground">
+                          {b.name}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 text-muted-foreground">
+                      {b.acType}
+                    </td>
+                    <td className="px-5 py-3 text-foreground">{b.seats}</td>
+                    <td className="px-5 py-3 text-foreground">
+                      {b.departureTime}
+                    </td>
+                    <td className="px-5 py-3 font-medium text-primary">
+                      ৳{b.price?.toLocaleString()}
+                    </td>
+                    <td className="px-5 py-3">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                          b.isActive
+                            ? "bg-success/10 text-success"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {b.isActive ? "Active" : "Hidden"}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex gap-2">
+                        <button
+                          title="View bookings"
+                          className={`rounded-lg p-1.5 transition-colors ${
+                            bookingPanel === b._id
+                              ? "bg-primary/10 text-primary"
+                              : "text-muted-foreground hover:bg-accent"
+                          }`}
+                          onClick={() => toggleBookingPanel(b._id)}
+                        >
+                          <ShoppingCart className="h-4 w-4" />
+                        </button>
+                        <button
+                          title="Toggle"
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent transition-colors"
+                          onClick={() => handleToggle(b._id)}
+                        >
+                          {b.isActive ? (
+                            <ToggleRight className="h-4 w-4 text-success" />
+                          ) : (
+                            <ToggleLeft className="h-4 w-4" />
+                          )}
+                        </button>
+                        <button
+                          title="Edit"
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent transition-colors"
+                          onClick={() => setForm(b)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          title="Delete"
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                          onClick={() => handleDelete(b._id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {bookingPanel === b._id && (
+                    <tr className="bg-muted/20">
+                      <td colSpan={7} className="px-6 py-4">
+                        <p className="mb-3 text-xs font-semibold text-foreground uppercase tracking-wide">
+                          Bookings — {b.name}
+                        </p>
+                        {bookingLoading === b._id ? (
+                          <p className="text-xs text-muted-foreground">
+                            Loading...
+                          </p>
+                        ) : !busBookings[b._id]?.length ? (
+                          <p className="text-xs text-muted-foreground">
+                            No bookings yet.
+                          </p>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="border-b border-border">
+                                  <th className="pb-2 text-left font-medium text-muted-foreground">
+                                    User
+                                  </th>
+                                  <th className="pb-2 text-left font-medium text-muted-foreground">
+                                    Travel Date
+                                  </th>
+                                  <th className="pb-2 text-left font-medium text-muted-foreground">
+                                    Seats
+                                  </th>
+                                  <th className="pb-2 text-left font-medium text-muted-foreground">
+                                    Route
+                                  </th>
+                                  <th className="pb-2 text-left font-medium text-muted-foreground">
+                                    Amount
+                                  </th>
+                                  <th className="pb-2 text-left font-medium text-muted-foreground">
+                                    Status
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {busBookings[b._id].map((bk) => (
+                                  <tr
+                                    key={bk._id}
+                                    className="border-b border-border last:border-0"
+                                  >
+                                    <td className="py-2 pr-4">
+                                      <div className="font-medium text-foreground">
+                                        {bk.userName || "—"}
+                                      </div>
+                                      <div className="text-muted-foreground">
+                                        {bk.userEmail || ""}
+                                      </div>
+                                    </td>
+                                    <td className="py-2 pr-4 text-muted-foreground">
+                                      {bk.travelDate
+                                        ? new Date(
+                                            bk.travelDate,
+                                          ).toLocaleDateString()
+                                        : "—"}
+                                    </td>
+                                    <td className="py-2 pr-4 text-foreground">
+                                      {bk.seats}
+                                    </td>
+                                    <td className="py-2 pr-4 text-muted-foreground">
+                                      {bk.pickupLocation || "—"}
+                                    </td>
+                                    <td className="py-2 pr-4 font-medium text-foreground">
+                                      ৳{bk.totalAmount?.toLocaleString()}
+                                    </td>
+                                    <td className="py-2 pr-4">
+                                      <span
+                                        className={`rounded-full px-2 py-0.5 font-medium ${
+                                          STATUS_COLORS[bk.status] ||
+                                          "bg-muted text-muted-foreground"
+                                        }`}
+                                      >
+                                        {bk.status}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Bus Tickets Management View - Admin approval of user bus ticket applications
+const BusTicketsView = () => {
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState("pending"); // pending, approved, rejected, all
+
+  useEffect(() => {
+    fetchTickets();
+  }, [filter]);
+
+  const fetchTickets = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get(`/api/admin/bus-tickets?status=${filter}`);
+      setTickets(response || []);
+    } catch (err) {
+      console.error("Failed to fetch bus tickets", err);
+      setTickets([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApproveTicket = async (ticketId) => {
+    try {
+      await api.post(`/api/admin/bus-tickets/${ticketId}/approve`);
+      setTickets(
+        tickets.map((t) =>
+          t._id === ticketId ? { ...t, status: "approved" } : t,
+        ),
+      );
+      alert("Ticket approved and booking confirmed!");
+    } catch (err) {
+      alert("Failed to approve ticket: " + err.message);
+    }
+  };
+
+  const handleRejectTicket = async (ticketId) => {
+    try {
+      await api.post(`/api/admin/bus-tickets/${ticketId}/reject`);
+      setTickets(
+        tickets.map((t) =>
+          t._id === ticketId ? { ...t, status: "rejected" } : t,
+        ),
+      );
+      alert("Ticket rejected");
+    } catch (err) {
+      alert("Failed to reject ticket: " + err.message);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Bus Ticket Applications</h2>
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="flex gap-2 border-b border-border">
+        {["pending", "approved", "rejected", "all"].map((status) => (
+          <button
+            key={status}
+            onClick={() => setFilter(status)}
+            className={`px-4 py-2 font-medium capitalize transition-colors ${
+              filter === status
+                ? "border-b-2 border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {status === "all" ? "All" : status}
+          </button>
+        ))}
+      </div>
+
+      {/* Loading State */}
+      {loading && <p className="text-muted-foreground">Loading tickets...</p>}
+
+      {/* Tickets Table */}
+      {!loading && tickets.length > 0 && (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <thead className="border-b border-border bg-muted">
+              <tr>
+                <th className="px-5 py-3 text-left font-medium">User</th>
+                <th className="px-5 py-3 text-left font-medium">Bus</th>
+                <th className="px-5 py-3 text-left font-medium">Date</th>
+                <th className="px-5 py-3 text-left font-medium">Seats</th>
+                <th className="px-5 py-3 text-left font-medium">
+                  Pickup Location
+                </th>
+                <th className="px-5 py-3 text-left font-medium">Status</th>
+                <th className="px-5 py-3 text-left font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tickets.map((ticket) => (
+                <tr
+                  key={ticket._id}
+                  className="border-b border-border hover:bg-muted/50"
+                >
+                  <td className="px-5 py-3">
+                    <div>
+                      <p className="font-medium">
+                        {ticket.userName || "Unknown"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {ticket.userEmail}
+                      </p>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3">{ticket.busName}</td>
+                  <td className="px-5 py-3">
+                    {new Date(ticket.travelDate).toLocaleDateString()}
+                  </td>
+                  <td className="px-5 py-3">{ticket.seats}</td>
+                  <td className="px-5 py-3">
+                    <div>
+                      <p className="text-sm font-medium">
+                        {ticket.pickupLocation}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Call: {ticket.contactNumber}
+                      </p>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3">
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                        ticket.status === "approved"
+                          ? "bg-success/10 text-success"
+                          : ticket.status === "rejected"
+                            ? "bg-destructive/10 text-destructive"
+                            : "bg-warning/10 text-warning"
+                      }`}
+                    >
+                      {ticket.status}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3">
+                    {ticket.status === "pending" && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleApproveTicket(ticket._id)}
+                          className="rounded-lg bg-success/10 px-3 py-1 text-xs font-medium text-success hover:bg-success/20 transition-colors"
+                        >
+                          <CheckCircle className="inline h-3 w-3 mr-1" />
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleRejectTicket(ticket._id)}
+                          className="rounded-lg bg-destructive/10 px-3 py-1 text-xs font-medium text-destructive hover:bg-destructive/20 transition-colors"
+                        >
+                          <XCircle className="inline h-3 w-3 mr-1" />
+                          Reject
+                        </button>
+                      </div>
+                    )}
+                    {ticket.status !== "pending" && (
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(ticket.updatedAt).toLocaleDateString()}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && tickets.length === 0 && (
+        <div className="rounded-lg border border-border bg-muted/50 p-8 text-center">
+          <BusFront className="mx-auto h-12 w-12 text-muted-foreground mb-2" />
+          <p className="text-muted-foreground">
+            No {filter !== "all" ? filter : ""} bus tickets
+          </p>
         </div>
       )}
     </div>

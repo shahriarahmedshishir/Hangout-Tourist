@@ -11,24 +11,55 @@ function isValidObjectId(id) {
 router.get("/", async (req, res) => {
   try {
     const db = await getDb();
+    const { date } = req.query; // Optional: ?date=YYYY-MM-DD for specific date availability
+
     const cars = await db
       .collection("cars")
       .find({ isActive: { $ne: false } })
       .sort({ createdAt: -1 })
       .toArray();
 
-    const now = new Date();
+    const checkDate = date ? new Date(date) : null;
+
     const enriched = await Promise.all(
       cars.map(async (car) => {
-        const activeBookings = await db.collection("bookings").countDocuments({
-          carId: car._id.toString(),
-          type: "car",
-          status: { $in: ["confirmed", "pending"] },
-          returnDate: { $gte: now },
-        });
+        let available;
+        const quantity = car.quantity || 1; // Default to 1
+
+        if (checkDate) {
+          // Date-specific availability: count bookings that overlap this date
+          checkDate.setHours(0, 0, 0, 0);
+          const nextDay = new Date(checkDate);
+          nextDay.setDate(nextDay.getDate() + 1);
+
+          const activeBookings = await db
+            .collection("bookings")
+            .countDocuments({
+              carId: car._id.toString(),
+              type: "car",
+              status: { $in: ["confirmed", "pending"] },
+              pickupDate: { $lt: nextDay },
+              returnDate: { $gt: checkDate },
+            });
+          available = Math.max(0, quantity - activeBookings);
+        } else {
+          // Overall availability: count any future bookings
+          const now = new Date();
+          const activeBookings = await db
+            .collection("bookings")
+            .countDocuments({
+              carId: car._id.toString(),
+              type: "car",
+              status: { $in: ["confirmed", "pending"] },
+              returnDate: { $gte: now },
+            });
+          available = Math.max(0, quantity - activeBookings);
+        }
+
         return {
           ...car,
-          available: Math.max(0, (car.quantity || 0) - activeBookings),
+          quantity,
+          available,
         };
       }),
     );
@@ -45,22 +76,47 @@ router.get("/:id", async (req, res) => {
     if (!isValidObjectId(req.params.id))
       return res.status(400).json({ message: "Invalid id" });
     const db = await getDb();
+    const { date } = req.query; // Optional: ?date=YYYY-MM-DD for specific date availability
+
     const car = await db
       .collection("cars")
       .findOne({ _id: new ObjectId(req.params.id) });
     if (!car) return res.status(404).json({ message: "Car not found" });
 
-    const now = new Date();
-    const activeBookings = await db.collection("bookings").countDocuments({
-      carId: req.params.id,
-      type: "car",
-      status: { $in: ["confirmed", "pending"] },
-      returnDate: { $gte: now },
-    });
+    const quantity = car.quantity || 1; // Default to 1
+    let available;
+
+    if (date) {
+      // Date-specific availability
+      const checkDate = new Date(date);
+      checkDate.setHours(0, 0, 0, 0);
+      const nextDay = new Date(checkDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+
+      const activeBookings = await db.collection("bookings").countDocuments({
+        carId: req.params.id,
+        type: "car",
+        status: { $in: ["confirmed", "pending"] },
+        pickupDate: { $lt: nextDay },
+        returnDate: { $gt: checkDate },
+      });
+      available = Math.max(0, quantity - activeBookings);
+    } else {
+      // Overall availability
+      const now = new Date();
+      const activeBookings = await db.collection("bookings").countDocuments({
+        carId: req.params.id,
+        type: "car",
+        status: { $in: ["confirmed", "pending"] },
+        returnDate: { $gte: now },
+      });
+      available = Math.max(0, quantity - activeBookings);
+    }
 
     res.json({
       ...car,
-      available: Math.max(0, (car.quantity || 0) - activeBookings),
+      quantity,
+      available,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });

@@ -184,8 +184,10 @@ app.use("/api/auth", require("./routes/auth"));
 app.use("/api/hotels", require("./routes/hotels"));
 app.use("/api/cars", require("./routes/cars"));
 app.use("/api/carrent", require("./routes/carrent")); // Add this line
+app.use("/api/buses", require("./routes/buses")); // Bus services routes
 app.use("/api/bookings", require("./routes/bookings"));
 app.use("/api/admin", require("./routes/admin"));
+app.use("/api/admin/bus-tickets", require("./routes/admin-bus-tickets"));
 app.use("/api/staff", require("./routes/staff"));
 app.use("/api/manual-payment", require("./routes/manual-payment"));
 app.use("/api/hangcoin", require("./routes/hangcoin"));
