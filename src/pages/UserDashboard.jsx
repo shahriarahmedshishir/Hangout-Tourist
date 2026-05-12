@@ -19,6 +19,7 @@ import {
   FileText,
   Trash2,
   AlertCircle,
+  BusFront,
 } from "lucide-react";
 
 const statusBadge = (booking) => {
@@ -76,8 +77,17 @@ const getHoursUntilCheckIn = (booking) => {
 
 const BookingCard = ({ booking, onViewDetails }) => {
   const isHotel = booking.type === "hotel";
-  const dateStart = isHotel ? booking.checkIn : booking.pickupDate;
-  const dateEnd = isHotel ? booking.checkOut : booking.returnDate;
+  const isBus = booking.type === "bus";
+  const dateStart = isBus
+    ? booking.travelDate
+    : isHotel
+      ? booking.checkIn
+      : booking.pickupDate;
+  const dateEnd = isBus
+    ? booking.travelDate
+    : isHotel
+      ? booking.checkOut
+      : booking.returnDate;
   const fmt = (d) =>
     d
       ? new Date(d).toLocaleDateString("en-GB", {
@@ -98,56 +108,95 @@ const BookingCard = ({ booking, onViewDetails }) => {
       <div className="flex items-start justify-between gap-4 mb-4">
         <div className="flex items-center gap-3">
           <div
-            className={`rounded-xl p-2.5 ${isHotel ? "bg-primary/10" : "bg-secondary/10"}`}
+            className={`rounded-xl p-2.5 ${
+              isHotel
+                ? "bg-primary/10"
+                : isBus
+                  ? "bg-blue-100"
+                  : "bg-secondary/10"
+            }`}
           >
             {isHotel ? (
               <Hotel className="h-5 w-5 text-primary" />
+            ) : isBus ? (
+              <BusFront className="h-5 w-5 text-blue-600" />
             ) : (
               <Car className="h-5 w-5 text-secondary" />
             )}
           </div>
           <div>
             <h3 className="font-heading font-bold text-foreground">
-              {isHotel
-                ? booking.hotelName || "Hotel Booking"
-                : booking.carName || "Car Rental"}
+              {isBus
+                ? booking.busName || "Bus Booking"
+                : isHotel
+                  ? booking.hotelName || "Hotel Booking"
+                  : booking.carName || "Car Rental"}
             </h3>
             <p className="text-xs text-muted-foreground">
-              {isHotel
-                ? `Room ${booking.roomNumber || ""}`
-                : booking.carType || ""}
+              {isBus
+                ? booking.acType || ""
+                : isHotel
+                  ? `Room ${booking.roomNumber || ""}`
+                  : booking.carType || ""}
             </p>
           </div>
         </div>
         {statusBadge(booking)}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 text-sm mb-4">
+      <div
+        className={`grid gap-3 text-sm mb-4 ${isBus ? "grid-cols-4" : "grid-cols-2"}`}
+      >
         <div>
           <p className="text-xs text-muted-foreground">
-            {isHotel ? "Check-in" : "Pick-up"}
+            {isBus ? "Travel Date" : isHotel ? "Check-in" : "Pick-up"}
           </p>
           <p className="font-medium text-foreground">{fmt(dateStart)}</p>
         </div>
+        {isBus && (
+          <div>
+            <p className="text-xs text-muted-foreground">Departure Time</p>
+            <p className="font-medium text-foreground">
+              {booking.departureTime || "-"}
+            </p>
+          </div>
+        )}
         <div>
           <p className="text-xs text-muted-foreground">
-            {isHotel ? "Check-out" : "Return"}
+            {isBus ? "Pickup Location" : isHotel ? "Check-out" : "Return"}
           </p>
-          <p className="font-medium text-foreground">{fmt(dateEnd)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Duration</p>
           <p className="font-medium text-foreground">
-            {booking.days} day{booking.days !== 1 ? "s" : ""}
+            {isBus ? booking.pickupLocation || "-" : fmt(dateEnd)}
           </p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">Total</p>
-          <p className="font-heading font-bold text-primary">
+          <p className="text-xs text-muted-foreground">
+            {isBus ? "Seats" : "Duration"}
+          </p>
+          <p className="font-medium text-foreground">
+            {isBus
+              ? booking.seats
+              : `${booking.days} day${booking.days !== 1 ? "s" : ""}`}
+          </p>
+        </div>
+        {!isBus && (
+          <div>
+            <p className="text-xs text-muted-foreground">Total</p>
+            <p className="font-heading font-bold text-primary">
+              ৳{(booking.totalAmount || 0).toLocaleString()}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {isBus && (
+        <div className="mb-4">
+          <p className="text-xs text-muted-foreground">Total Amount</p>
+          <p className="font-heading font-bold text-primary text-lg">
             ৳{(booking.totalAmount || 0).toLocaleString()}
           </p>
         </div>
-      </div>
+      )}
 
       {/* Cancel Request Status */}
       {booking.cancelRequest?.status === "pending" && (
@@ -165,7 +214,7 @@ const BookingCard = ({ booking, onViewDetails }) => {
           <p className="text-xs text-amber-900 mb-2">
             ⏰ You can cancel up to{" "}
             <span className="font-semibold">{hoursLeft} hours</span> before
-            check-in
+            {isBus ? " travel" : isHotel ? " check-in" : " pickup"}
           </p>
           <Button
             variant="destructive"
@@ -232,11 +281,14 @@ const UserDashboard = () => {
   const { user, socket, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
+  const [busBookings, setBusBookings] = useState([]);
+  const [pendingBusTickets, setPendingBusTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [section, setSection] = useState("active"); // "active" or "completed"
   const [tab, setTab] = useState("hotel");
   const [hotelPage, setHotelPage] = useState(1);
   const [carPage, setCarPage] = useState(1);
+  const [busPage, setBusPage] = useState(1);
   const [selectedBookingId, setSelectedBookingId] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
   const ITEMS_PER_PAGE = 3;
@@ -255,9 +307,23 @@ const UserDashboard = () => {
     if (!user) return;
     api
       .get("/api/bookings/my")
-      .then((data) => setBookings(data))
+      .then((data) => {
+        setBookings(data);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
+    api
+      .get("/api/bookings/user/bus-bookings")
+      .then((data) => {
+        setBusBookings(data);
+      })
+      .catch(() => {});
+    api
+      .get("/api/bookings/user/bus-tickets/pending")
+      .then((data) => {
+        setPendingBusTickets(data);
+      })
+      .catch(() => {});
   }, [user]);
 
   useEffect(() => {
@@ -373,34 +439,57 @@ const UserDashboard = () => {
     return new Date(endDate) <= new Date();
   };
 
+  // Check if a bus booking is upcoming
+  const isBusUpcoming = (booking) => {
+    if (booking.status !== "confirmed") return false; // Only show confirmed bookings
+    return new Date(booking.travelDate) > new Date();
+  };
+
+  // Check if a bus booking is completed
+  const isBusCompleted = (booking) => {
+    if (booking.status === "cancelled" || booking.status === "rejected")
+      return true;
+    if (booking.status !== "confirmed") return false; // Only show confirmed bookings
+    return new Date(booking.travelDate) <= new Date();
+  };
+
   const upcomingBookings = bookings.filter(isUpcoming);
   const completedBookings = bookings.filter(isCompleted);
 
   const hotelBookings = bookings.filter(
     (b) => b.type === "hotel" && isUpcoming(b),
   );
-  const carBookings = bookings.filter((b) => b.type === "car" && isUpcoming(b));
+  const carBookings = bookings.filter(
+    (b) => (b.type === "car" || b.type === "carrent") && isUpcoming(b),
+  );
+  const busBookingsUpcoming = busBookings.filter(isBusUpcoming);
 
   const completedHotelBookings = bookings.filter(
     (b) => b.type === "hotel" && isCompleted(b),
   );
   const completedCarBookings = bookings.filter(
-    (b) => b.type === "car" && isCompleted(b),
+    (b) => (b.type === "car" || b.type === "carrent") && isCompleted(b),
   );
+  const busBookingsCompleted = busBookings.filter(isBusCompleted);
 
   // Pagination
   const sourceBookings =
     section === "active"
       ? tab === "hotel"
         ? hotelBookings
-        : carBookings
+        : tab === "car"
+          ? carBookings
+          : busBookingsUpcoming
       : tab === "hotel"
         ? completedHotelBookings
-        : completedCarBookings;
+        : tab === "car"
+          ? completedCarBookings
+          : busBookingsCompleted;
 
   const shown = sourceBookings;
   const totalPages = Math.ceil(shown.length / ITEMS_PER_PAGE);
-  const currentPage = tab === "hotel" ? hotelPage : carPage;
+  const currentPage =
+    tab === "hotel" ? hotelPage : tab === "car" ? carPage : busPage;
   const startIdx = (currentPage - 1) * ITEMS_PER_PAGE;
   const paginatedShown = shown.slice(startIdx, startIdx + ITEMS_PER_PAGE);
 
@@ -420,7 +509,7 @@ const UserDashboard = () => {
 
       <div className="container py-10">
         {/* Stats */}
-        <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-3">
+        <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
           {[
             {
               label: "Hotel Bookings",
@@ -433,6 +522,12 @@ const UserDashboard = () => {
               value: carBookings.length,
               icon: <Car className="h-5 w-5" />,
               color: "text-secondary",
+            },
+            {
+              label: "Bus Bookings",
+              value: busBookingsUpcoming.length,
+              icon: <BusFront className="h-5 w-5" />,
+              color: "text-blue-500",
             },
             {
               label: "Confirmed",
@@ -478,6 +573,7 @@ const UserDashboard = () => {
               setSection("active");
               setHotelPage(1);
               setCarPage(1);
+              setBusPage(1);
             }}
             className={
               section === "active"
@@ -493,6 +589,7 @@ const UserDashboard = () => {
               setSection("completed");
               setHotelPage(1);
               setCarPage(1);
+              setBusPage(1);
             }}
             className={
               section === "completed"
@@ -532,21 +629,103 @@ const UserDashboard = () => {
           >
             <Car className="h-4 w-4 mr-2" /> Car Rentals
           </Button>
+          <Button
+            variant={tab === "bus" ? "default" : "outline"}
+            onClick={() => {
+              setTab("bus");
+              setBusPage(1);
+            }}
+            className={
+              tab === "bus" ? "bg-gradient-primary text-primary-foreground" : ""
+            }
+          >
+            <BusFront className="h-4 w-4 mr-2" /> Bus Bookings
+          </Button>
         </div>
+
+        {/* Pending Bus Tickets Section - Show when in bus tab and active section */}
+        {tab === "bus" &&
+          section === "active" &&
+          pendingBusTickets.length > 0 && (
+            <div className="mb-8">
+              <h3 className="mb-4 text-lg font-semibold flex items-center gap-2">
+                <Clock className="h-5 w-5 text-warning" />
+                Pending Ticket Requests
+              </h3>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {pendingBusTickets.map((ticket) => (
+                  <div
+                    key={ticket._id}
+                    className="rounded-lg border border-warning/30 bg-warning/5 p-4"
+                  >
+                    <div className="mb-3 flex items-start justify-between">
+                      <div>
+                        <p className="font-semibold text-foreground">
+                          {ticket.busName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(ticket.travelDate).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning">
+                        <Clock className="inline h-3 w-3 mr-1" />
+                        Pending
+                      </span>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Seats Requested
+                        </p>
+                        <p className="font-medium">{ticket.seats}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Pickup Location
+                        </p>
+                        <p className="font-medium">{ticket.pickupLocation}</p>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-xs text-warning bg-warning/10 rounded px-2 py-2">
+                      Awaiting admin confirmation. We'll notify you once your
+                      request is approved.
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
         {shown.length === 0 ? (
           <div className="rounded-2xl border border-border bg-card py-20 text-center shadow-card">
             <p className="text-muted-foreground mb-4">
               No {section === "active" ? "active" : "completed"}{" "}
-              {tab === "hotel" ? "hotel bookings" : "car rentals"} yet.
+              {tab === "hotel"
+                ? "hotel bookings"
+                : tab === "car"
+                  ? "car rentals"
+                  : "bus bookings"}{" "}
+              yet.
             </p>
             {section === "active" && (
               <Button
                 asChild
                 className="bg-gradient-primary text-primary-foreground"
               >
-                <Link to={tab === "hotel" ? "/hotels" : "/cars"}>
-                  {tab === "hotel" ? "Browse Hotels" : "Browse Cars"}
+                <Link
+                  to={
+                    tab === "hotel"
+                      ? "/hotels"
+                      : tab === "car"
+                        ? "/cars"
+                        : "/cars"
+                  }
+                >
+                  {tab === "hotel"
+                    ? "Browse Hotels"
+                    : tab === "car"
+                      ? "Browse Cars"
+                      : "Browse Buses"}
                 </Link>
               </Button>
             )}
@@ -578,8 +757,10 @@ const UserDashboard = () => {
                       onClick={() => {
                         if (tab === "hotel") {
                           setHotelPage(page);
-                        } else {
+                        } else if (tab === "car") {
                           setCarPage(page);
+                        } else {
+                          setBusPage(page);
                         }
                       }}
                       className={

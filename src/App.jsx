@@ -12,6 +12,8 @@ import HotelBooking from "./pages/HotelBooking";
 import Holidays from "./pages/Holidays";
 import Cars from "./pages/Cars";
 import CarBooking from "./pages/CarBooking";
+import BusBooking from "./pages/BusBooking";
+import CoxsBazarBooking from "./pages/CoxsBazarBooking";
 import Login from "./pages/Login";
 import VerifyEmail from "./pages/VerifyEmail";
 import ResetPassword from "./pages/ResetPassword";
@@ -58,6 +60,8 @@ const App = () => (
             <Route path="/holidays" element={<Holidays />} />
             <Route path="/cars" element={<Cars />} />
             <Route path="/booking/car" element={<CarBooking />} />
+            <Route path="/booking/bus" element={<BusBooking />} />
+            <Route path="/booking/coxs-bazar" element={<CoxsBazarBooking />} />
             <Route path="/login" element={<Login />} />
             <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="/reset-password" element={<ResetPassword />} />

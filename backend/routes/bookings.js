@@ -28,6 +28,16 @@ async function findBookingRecord(db, bookingId) {
     };
   }
 
+  const busBooking = await db
+    .collection("busBookings")
+    .findOne({ _id: objectId });
+  if (busBooking) {
+    return {
+      booking: busBooking,
+      collection: db.collection("busBookings"),
+    };
+  }
+
   return { booking: null, collection: null };
 }
 
@@ -273,7 +283,7 @@ router.post("/car", auth, async (req, res) => {
 router.get("/my", auth, async (req, res) => {
   try {
     const db = await getDb();
-    const [bookings, carRentBookings] = await Promise.all([
+    const [bookings, carRentBookings, busBookings] = await Promise.all([
       db
         .collection("bookings")
         .find({ userId: req.user.id })
@@ -284,13 +294,53 @@ router.get("/my", auth, async (req, res) => {
         .find({ userId: req.user.id })
         .sort({ createdAt: -1 })
         .toArray(),
+      db
+        .collection("busBookings")
+        .find({ userId: new ObjectId(req.user.id) })
+        .sort({ createdAt: -1 })
+        .toArray(),
     ]);
 
     res.json(
-      [...bookings, ...carRentBookings].sort(
+      [...bookings, ...carRentBookings, ...busBookings].sort(
         (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
       ),
     );
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/user/bus-bookings — user's bus bookings
+router.get("/user/bus-bookings", auth, async (req, res) => {
+  try {
+    const db = await getDb();
+    const busBookings = await db
+      .collection("busBookings")
+      .find({ userId: new ObjectId(req.user.id) })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.json(busBookings);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/user/bus-tickets/pending — user's pending bus ticket requests
+router.get("/user/bus-tickets/pending", auth, async (req, res) => {
+  try {
+    const db = await getDb();
+    const pendingTickets = await db
+      .collection("busTicketRequests")
+      .find({
+        userId: new ObjectId(req.user.id),
+        status: "pending",
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.json(pendingTickets);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -401,34 +451,43 @@ router.get("/:id", auth, async (req, res) => {
     }
 
     const db = await getDb();
-    const booking = await db
-      .collection("bookings")
-      .findOne({ _id: new ObjectId(req.params.id) });
+    const { booking } = await findBookingRecord(db, req.params.id);
 
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
     }
 
     // Check if user owns this booking or is admin
-    if (booking.userId !== req.user.id && req.user.role !== "admin") {
+    // Note: bus bookings have userId as ObjectId, others as string
+    const userIdToCompare =
+      booking.userId instanceof ObjectId
+        ? booking.userId.toString()
+        : booking.userId;
+    if (userIdToCompare !== req.user.id && req.user.role !== "admin") {
       return res.status(403).json({ message: "Not authorized" });
     }
 
     // Get user details for invoice
-    const user = await db
-      .collection("users")
-      .findOne({ _id: new ObjectId(booking.userId) });
+    const userId =
+      booking.userId instanceof ObjectId
+        ? booking.userId
+        : new ObjectId(booking.userId);
+    const user = await db.collection("users").findOne({ _id: userId });
 
-    // Get hotel/car details for invoice
+    // Get hotel/car/bus details for invoice
     let property;
     if (booking.type === "hotel") {
       property = await db
         .collection("hotels")
         .findOne({ _id: new ObjectId(booking.hotelId || booking.hotel) });
-    } else {
+    } else if (booking.type === "car") {
       property = await db
         .collection("carrent")
         .findOne({ _id: new ObjectId(booking.carId || booking.car) });
+    } else if (booking.type === "bus") {
+      property = await db
+        .collection("buses")
+        .findOne({ _id: new ObjectId(booking.busId) });
     }
 
     // Get cancel request if exists
@@ -462,14 +521,21 @@ router.get("/:id/invoice", auth, async (req, res) => {
     }
 
     // Check if user owns this booking or is admin
-    if (booking.userId !== req.user.id && req.user.role !== "admin") {
+    // Note: bus bookings have userId as ObjectId, others as string
+    const userIdToCompare =
+      booking.userId instanceof ObjectId
+        ? booking.userId.toString()
+        : booking.userId;
+    if (userIdToCompare !== req.user.id && req.user.role !== "admin") {
       return res.status(403).json({ message: "Not authorized" });
     }
 
     // Get user details
-    const user = await db
-      .collection("users")
-      .findOne({ _id: new ObjectId(booking.userId) });
+    const userId =
+      booking.userId instanceof ObjectId
+        ? booking.userId
+        : new ObjectId(booking.userId);
+    const user = await db.collection("users").findOne({ _id: userId });
 
     // Get property details
     let property;
@@ -477,19 +543,28 @@ router.get("/:id/invoice", auth, async (req, res) => {
       property = await db
         .collection("hotels")
         .findOne({ _id: new ObjectId(booking.hotelId || booking.hotel) });
-    } else {
+    } else if (booking.type === "car") {
       property = await db
         .collection("carrent")
         .findOne({ _id: new ObjectId(booking.carId || booking.car) });
+    } else if (booking.type === "bus") {
+      property = await db
+        .collection("buses")
+        .findOne({ _id: new ObjectId(booking.busId) });
     }
 
     // Create invoice object
+    let bookingTypeLabel = "Booking";
+    if (booking.type === "hotel") bookingTypeLabel = "Hotel Booking";
+    else if (booking.type === "car") bookingTypeLabel = "Car Rental";
+    else if (booking.type === "bus") bookingTypeLabel = "Bus Ticket";
+
     const invoice = {
       bookingId: booking._id,
       bookingNumber: `BK${booking._id.toString().slice(-8).toUpperCase()}`,
       invoiceDate: new Date().toISOString().split("T")[0],
       bookingDate: booking.createdAt,
-      bookingType: booking.type === "hotel" ? "Hotel Booking" : "Car Rental",
+      bookingType: bookingTypeLabel,
 
       // Customer info
       customer: {
@@ -500,23 +575,38 @@ router.get("/:id/invoice", auth, async (req, res) => {
 
       // Property info
       property: {
-        name: booking.type === "hotel" ? booking.hotelName : booking.carName,
-        type: booking.type === "hotel" ? "Hotel" : "Car",
+        name:
+          booking.type === "hotel"
+            ? booking.hotelName
+            : booking.type === "car"
+              ? booking.carName
+              : booking.busName,
+        type:
+          booking.type === "hotel"
+            ? "Hotel"
+            : booking.type === "car"
+              ? "Car"
+              : "Bus",
         details:
           booking.type === "hotel"
             ? `Room ${booking.roomNumber}, ${property?.location || ""}`
-            : booking.carName || booking.carType || "Car Rental",
+            : booking.type === "car"
+              ? booking.carName || booking.carType || "Car Rental"
+              : `${booking.busName}, Route: ${booking.pickupLocation}`,
         address: property?.location || "",
       },
 
       // Booking dates
       dates: {
-        checkIn:
-          booking.type === "hotel" ? booking.checkIn : booking.pickupDate,
-        checkOut:
-          booking.type === "hotel" ? booking.checkOut : booking.returnDate,
-        days: booking.days,
+        checkIn: booking.checkIn || booking.pickupDate || booking.travelDate,
+        checkOut: booking.checkOut || booking.returnDate,
+        days: booking.days || 1,
       },
+
+      // Additional info for buses
+      ...(booking.type === "bus" && {
+        departureTime: booking.departureTime,
+      }),
 
       // Pricing
       pricing: {

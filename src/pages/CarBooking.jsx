@@ -39,6 +39,10 @@ const CarBooking = () => {
   const [error, setError] = useState("");
   const [activeImg, setActiveImg] = useState(0);
   const [activeTab, setActiveTab] = useState("online");
+  const [dateAvailableCars, setDateAvailableCars] = useState(
+    car?.available || 0,
+  );
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
 
   // Manual Payment states
   const [manualTransactionId, setManualTransactionId] = useState("");
@@ -55,6 +59,26 @@ const CarBooking = () => {
       fetchCoinBalance();
     }
   }, [user]);
+
+  // Fetch availability for selected date
+  useEffect(() => {
+    if (pickupDate && car?._id) {
+      checkDateAvailability();
+    }
+  }, [pickupDate]);
+
+  const checkDateAvailability = async () => {
+    try {
+      setCheckingAvailability(true);
+      const response = await api.get(`/api/cars/${car._id}?date=${pickupDate}`);
+      setDateAvailableCars(response.available || 0);
+    } catch (err) {
+      console.error("Failed to check availability:", err);
+      setDateAvailableCars(0);
+    } finally {
+      setCheckingAvailability(false);
+    }
+  };
 
   const fetchCoinBalance = async () => {
     try {
@@ -96,6 +120,10 @@ const CarBooking = () => {
     }
     if (!daysCount || parseInt(daysCount, 10) <= 0) {
       setError("Please enter number of days (at least 1).");
+      return false;
+    }
+    if (dateAvailableCars <= 0) {
+      setError(`No cars available for the selected date.`);
       return false;
     }
     if (!pickupArea.trim() && !pickupAddress.trim()) {
@@ -383,6 +411,14 @@ const CarBooking = () => {
               </span>
             </div>
 
+            <div
+              className={`mt-2 text-xs font-medium ${dateAvailableCars > 0 ? "text-success" : "text-destructive"}`}
+            >
+              {pickupDate
+                ? `${dateAvailableCars} car(s) available on ${pickupDate}`
+                : "Select a date to check availability"}
+            </div>
+
             <div className="mt-4 rounded-xl bg-primary/5 p-4">
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-muted-foreground">Price per day</span>
@@ -476,6 +512,15 @@ const CarBooking = () => {
                       className="pl-9"
                     />
                   </div>
+                  {pickupDate && (
+                    <p
+                      className={`mt-1 text-xs font-medium ${dateAvailableCars > 0 ? "text-success" : "text-destructive"}`}
+                    >
+                      {checkingAvailability
+                        ? "Checking availability..."
+                        : `${dateAvailableCars} car(s) available on this date`}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-foreground">
@@ -490,6 +535,7 @@ const CarBooking = () => {
                   />
                 </div>
               </div>
+
               {returnDate && (
                 <p className="text-xs text-muted-foreground">
                   Return date:{" "}
@@ -573,7 +619,12 @@ const CarBooking = () => {
                     </div>
                     <Button
                       onClick={handleOnlinePayment}
-                      disabled={loading || !days}
+                      disabled={
+                        loading ||
+                        !days ||
+                        !pickupDate ||
+                        dateAvailableCars <= 0
+                      }
                       className="w-full bg-gradient-primary text-primary-foreground py-5 text-base font-semibold"
                     >
                       {loading
@@ -655,7 +706,12 @@ const CarBooking = () => {
 
                       <Button
                         onClick={handleManualPayment}
-                        disabled={loading || !days}
+                        disabled={
+                          loading ||
+                          !days ||
+                          !pickupDate ||
+                          dateAvailableCars <= 0
+                        }
                         className="w-full bg-gradient-primary text-primary-foreground py-5 text-base font-semibold"
                       >
                         {loading
@@ -693,7 +749,12 @@ const CarBooking = () => {
                         </div>
                         <Button
                           onClick={handleCoinPayment}
-                          disabled={coinLoading || !days}
+                          disabled={
+                            coinLoading ||
+                            !days ||
+                            !pickupDate ||
+                            dateAvailableCars <= 0
+                          }
                           className="w-full bg-gradient-primary text-primary-foreground py-5 text-base font-semibold"
                         >
                           {coinLoading

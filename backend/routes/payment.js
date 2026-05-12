@@ -281,23 +281,22 @@ router.post("/initiate/car", auth, async (req, res) => {
 
     const db = await getDb();
     const car = await db
-      .collection("carrent")
+      .collection("cars")
       .findOne({ _id: new ObjectId(carId) });
     if (!car) return res.status(404).json({ message: "Car not found" });
+    const carQuantity = car.quantity || car.totalSeats || 0;
     if (car.isActive === false || car.isAvailable === false) {
       return res.status(400).json({ message: "Car is not available" });
     }
 
     const now = new Date();
-    const activeBookings = await db
-      .collection("carrentBookings")
-      .countDocuments({
-        carId,
-        type: "car",
-        status: "confirmed",
-        returnDate: { $gte: now },
-      });
-    if (car.quantity > 0 && activeBookings >= car.quantity) {
+    const activeBookings = await db.collection("bookings").countDocuments({
+      carId,
+      type: "car",
+      status: "confirmed",
+      returnDate: { $gte: now },
+    });
+    if (carQuantity > 0 && activeBookings >= carQuantity) {
       return res
         .status(409)
         .json({ message: "No cars of this model are currently available" });
@@ -787,6 +786,119 @@ async function _confirmBooking(tran_id, validation = null) {
       days: session.days,
       pricePerDay: session.pricePerDay,
       totalAmount: session.totalAmount,
+      seatsBooked: session.seatsBooked || 1,
+      status: "confirmed",
+      transactionId: tran_id,
+      paymentMethod: "SSLCommerz",
+      paidAt: now,
+      refundStatus: null,
+      createdAt: now,
+    });
+  } else if (session.type === "bus") {
+    // Double-check: Ensure bus seats are still available (prevent race condition)
+    const conflictingBookings = await db
+      .collection("busBookings")
+      .countDocuments({
+        busId: session.busId,
+        status: "confirmed",
+        travelDate: {
+          $gte: new Date(session.travelDate.getTime() - 24 * 60 * 60 * 1000),
+          $lt: new Date(session.travelDate.getTime() + 24 * 60 * 60 * 1000),
+        },
+      });
+
+    const bus = await db
+      .collection("buses")
+      .findOne({ _id: new ObjectId(session.busId) });
+
+    const availableSeats = bus.quantity - conflictingBookings;
+    if (availableSeats < session.seats) {
+      console.error(`Bus ${session.busName} has insufficient seats remaining`);
+      // Payment succeeded but bus is no longer available
+      await db.collection("payment_sessions").deleteOne({ tran_id });
+      return false; // Fail the confirmation
+    }
+
+    console.log("Creating bus booking");
+    await db.collection("busBookings").insertOne({
+      userId: session.userId,
+      type: "bus",
+      busId: session.busId,
+      busName: session.busName,
+      travelDate: session.travelDate,
+      seats: session.seats,
+      pickupLocation: session.pickupLocation,
+      contactNumber: session.contactNumber,
+      pricePerSeat: session.pricePerSeat,
+      totalAmount: session.totalAmount,
+      status: "confirmed",
+      transactionId: tran_id,
+      paymentMethod: "SSLCommerz",
+      paidAt: now,
+      refundStatus: null,
+      createdAt: now,
+    });
+  } else if (session.type === "carrent") {
+    // Double-check: Ensure carrent seats are still available (prevent race condition)
+    const bookedSeatsData = await db
+      .collection("carrentBookings")
+      .aggregate([
+        {
+          $match: {
+            serviceId: session.serviceId,
+            status: "confirmed",
+            returnDate: { $gte: now },
+            $or: [
+              {
+                pickupDate: { $lt: session.returnDate },
+                returnDate: { $gt: session.pickupDate },
+              },
+            ],
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: { $toInt: "$seatsBooked" } },
+          },
+        },
+      ])
+      .toArray();
+
+    const bookedSeats = bookedSeatsData[0]?.total || 0;
+    const service = await db
+      .collection("carrent")
+      .findOne({ _id: new ObjectId(session.serviceId) });
+
+    const availableSeats =
+      (service.quantity || service.totalSeats || 0) - bookedSeats;
+    if (availableSeats < session.seatsBooked) {
+      console.error(
+        `Service ${session.serviceName} has insufficient cars remaining`,
+      );
+      // Payment succeeded but service is no longer available
+      await db.collection("payment_sessions").deleteOne({ tran_id });
+      return false; // Fail the confirmation
+    }
+
+    console.log("Creating carrent booking");
+    await db.collection("carrentBookings").insertOne({
+      userId: session.userId,
+      type: "carrent",
+      serviceId: session.serviceId,
+      serviceName: session.serviceName,
+      carName: session.serviceName, // For frontend display
+      carType: service.type || "Standard", // For frontend display
+      pickupDate: session.pickupDate,
+      returnDate: session.returnDate,
+      days: Math.ceil(
+        (session.returnDate - session.pickupDate) / (1000 * 60 * 60 * 24),
+      ), // Calculate days
+      seatsBooked: session.seatsBooked,
+      pickupLocation: session.pickupLocation,
+      contactNumber: session.contactNumber,
+      pricePerSeat: session.pricePerSeat,
+      totalAmount: session.totalAmount,
       status: "confirmed",
       transactionId: tran_id,
       paymentMethod: "SSLCommerz",
@@ -914,6 +1026,330 @@ router.post("/submit/manual-coin-topup", auth, async (req, res) => {
       transactionId: tran_id,
       status: "pending",
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BUS BOOKING PAYMENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+// POST /api/payment/initiate/bus
+// Initiates a bus booking payment through SSL Commerz
+router.post("/initiate/bus", auth, async (req, res) => {
+  try {
+    // Prevent staff and admin from booking
+    if (req.user.role === "hotel_staff" || req.user.role === "admin") {
+      return res
+        .status(403)
+        .json({ message: "Staff and admin accounts cannot book buses" });
+    }
+
+    const { busId, travelDate, seats, pickupLocation, contactNumber } =
+      req.body;
+
+    if (!busId || !travelDate || !seats) {
+      return res
+        .status(400)
+        .json({ message: "busId, travelDate, and seats are required" });
+    }
+    if (!isValidObjectId(busId)) {
+      return res.status(400).json({ message: "Invalid bus id" });
+    }
+
+    const travelDateObj = new Date(travelDate);
+    if (isNaN(travelDateObj)) {
+      return res.status(400).json({ message: "Invalid travel date" });
+    }
+
+    const seatsCount = parseInt(seats, 10);
+    if (seatsCount <= 0) {
+      return res.status(400).json({ message: "Seats must be at least 1" });
+    }
+
+    const db = await getDb();
+    const bus = await db
+      .collection("buses")
+      .findOne({ _id: new ObjectId(busId) });
+    if (!bus) return res.status(404).json({ message: "Bus not found" });
+    if (bus.isActive === false) {
+      return res.status(400).json({ message: "Bus is not available" });
+    }
+
+    const now = new Date();
+    const bookedSeatsData = await db
+      .collection("busBookings")
+      .aggregate([
+        {
+          $match: {
+            busId: busId.toString(),
+            status: { $in: ["confirmed", "pending"] },
+            travelDate: {
+              $gte: new Date(travelDateObj.getTime() - 24 * 60 * 60 * 1000),
+              $lt: new Date(travelDateObj.getTime() + 24 * 60 * 60 * 1000),
+            },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: { $toInt: "$seats" } },
+          },
+        },
+      ])
+      .toArray();
+
+    const bookedSeats = bookedSeatsData[0]?.total || 0;
+    const availableSeats = (bus.totalSeats || 0) - bookedSeats;
+    if (availableSeats < seatsCount) {
+      return res.status(409).json({
+        message: `Only ${availableSeats} seat(s) available for this bus on this date`,
+      });
+    }
+
+    const totalAmount = bus.price * seatsCount;
+
+    // ✅ SECURITY: Validate total amount hasn't been tampered with
+    const clientTotalAmount = parseFloat(req.body.totalAmount) || 0;
+    if (!validatePrice(clientTotalAmount, totalAmount, 1)) {
+      console.warn(
+        `Price mismatch for user ${req.user.id}: client=${clientTotalAmount}, server=${totalAmount}`,
+      );
+      return res.status(400).json({
+        message: `Price mismatch. Expected ${totalAmount} BDT, got ${clientTotalAmount} BDT. Please refresh and try again.`,
+        expectedAmount: totalAmount,
+      });
+    }
+
+    const tran_id = makeTranId("HT-BUS");
+
+    // Store booking intent in payment_sessions — NOT in bookings yet
+    await db.collection("payment_sessions").insertOne({
+      tran_id,
+      type: "bus",
+      userId: req.user.id,
+      busId,
+      busName: bus.name,
+      travelDate: travelDateObj,
+      seats: seatsCount,
+      pickupLocation: pickupLocation || "",
+      contactNumber: contactNumber || "",
+      pricePerSeat: bus.price,
+      totalAmount,
+      createdAt: new Date(),
+    });
+
+    const userDoc = await db
+      .collection("users")
+      .findOne({ _id: new ObjectId(req.user.id) });
+
+    const sslData = {
+      total_amount: totalAmount,
+      currency: "BDT",
+      tran_id,
+      success_url: `${BACKEND_URL}/api/payment/success`,
+      fail_url: `${BACKEND_URL}/api/payment/fail`,
+      cancel_url: `${BACKEND_URL}/api/payment/cancel`,
+      ipn_url: `${BACKEND_URL}/api/payment/ipn`,
+      product_name: getProductName("bus", bus.name),
+      product_category: "bus",
+      product_profile: "general",
+      cus_name: userDoc?.name || "Guest",
+      cus_email: userDoc?.email || "guest@example.com",
+      cus_add1: "Bangladesh",
+      cus_city: "Dhaka",
+      cus_country: "Bangladesh",
+      cus_phone: contactNumber || "01700000000",
+      ship_name: userDoc?.name || "Guest",
+      ship_add1: "Bangladesh",
+      ship_city: "Dhaka",
+      ship_country: "Bangladesh",
+      shipping_method: "NO",
+      num_of_item: seatsCount,
+    };
+
+    const sslcz = new SSLCommerzPayment(STORE_ID, STORE_PASSWORD, IS_LIVE);
+    const apiResponse = await sslcz.init(sslData);
+
+    if (apiResponse?.GatewayPageURL) {
+      return res.json({ paymentUrl: apiResponse.GatewayPageURL, tran_id });
+    }
+
+    // Gateway init failed — clean up session
+    await db.collection("payment_sessions").deleteOne({ tran_id });
+    res
+      .status(502)
+      .json({ message: "Failed to initiate payment gateway. Try again." });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/payment/initiate/carrent — Cox's Bazar service booking
+router.post("/initiate/carrent", auth, async (req, res) => {
+  try {
+    // Prevent staff and admin from booking
+    if (req.user.role === "hotel_staff" || req.user.role === "admin") {
+      return res
+        .status(403)
+        .json({ message: "Staff and admin accounts cannot book services" });
+    }
+
+    const {
+      serviceId,
+      pickupDate,
+      returnDate,
+      seatsBooked,
+      pickupLocation,
+      contactNumber,
+    } = req.body;
+
+    if (!serviceId || !pickupDate || !returnDate || !seatsBooked) {
+      return res.status(400).json({
+        message:
+          "serviceId, pickupDate, returnDate, and seatsBooked are required",
+      });
+    }
+    if (!isValidObjectId(serviceId)) {
+      return res.status(400).json({ message: "Invalid service id" });
+    }
+
+    const pickupDateObj = new Date(pickupDate);
+    const returnDateObj = new Date(returnDate);
+    if (
+      isNaN(pickupDateObj) ||
+      isNaN(returnDateObj) ||
+      returnDateObj <= pickupDateObj
+    ) {
+      return res.status(400).json({ message: "Invalid dates" });
+    }
+
+    const seatsCount = parseInt(seatsBooked, 10);
+    if (seatsCount <= 0) {
+      return res.status(400).json({ message: "Seats must be at least 1" });
+    }
+
+    const db = await getDb();
+    const service = await db
+      .collection("carrent")
+      .findOne({ _id: new ObjectId(serviceId) });
+    if (!service) return res.status(404).json({ message: "Service not found" });
+    if (service.isActive === false) {
+      return res.status(400).json({ message: "Service is not available" });
+    }
+
+    // Calculate available seats for the booking period
+    const now = new Date();
+    const bookedSeatsData = await db
+      .collection("carrentBookings")
+      .aggregate([
+        {
+          $match: {
+            serviceId: serviceId.toString(),
+            status: { $in: ["confirmed", "pending"] },
+            returnDate: { $gte: now },
+            $or: [
+              {
+                pickupDate: { $lt: returnDateObj },
+                returnDate: { $gt: pickupDateObj },
+              },
+            ],
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: { $toInt: "$seatsBooked" } },
+          },
+        },
+      ])
+      .toArray();
+
+    const bookedSeats = bookedSeatsData[0]?.total || 0;
+    const availableSeats =
+      (service.quantity || service.totalSeats || 0) - bookedSeats;
+
+    if (availableSeats < seatsCount) {
+      return res.status(409).json({
+        message: `Only ${availableSeats} car(s) available for this service during selected dates`,
+      });
+    }
+
+    const totalAmount = service.price * seatsCount;
+
+    // ✅ SECURITY: Validate total amount hasn't been tampered with
+    const clientTotalAmount = parseFloat(req.body.totalAmount) || 0;
+    if (!validatePrice(clientTotalAmount, totalAmount, 1)) {
+      console.warn(
+        `Price mismatch for user ${req.user.id}: client=${clientTotalAmount}, server=${totalAmount}`,
+      );
+      return res.status(400).json({
+        message: `Price mismatch. Expected ${totalAmount} BDT, got ${clientTotalAmount} BDT. Please refresh and try again.`,
+        expectedAmount: totalAmount,
+      });
+    }
+
+    const tran_id = makeTranId("HT-CARRENT");
+
+    // Store booking intent in payment_sessions — NOT in bookings yet
+    await db.collection("payment_sessions").insertOne({
+      tran_id,
+      type: "carrent",
+      userId: req.user.id,
+      serviceId: serviceId.toString(),
+      serviceName: service.name,
+      pickupDate: pickupDateObj,
+      returnDate: returnDateObj,
+      seatsBooked: seatsCount,
+      pickupLocation: pickupLocation || "",
+      contactNumber: contactNumber || "",
+      pricePerSeat: service.price,
+      totalAmount,
+      createdAt: new Date(),
+    });
+
+    const userDoc = await db
+      .collection("users")
+      .findOne({ _id: new ObjectId(req.user.id) });
+
+    const sslData = {
+      total_amount: totalAmount,
+      currency: "BDT",
+      tran_id,
+      success_url: `${BACKEND_URL}/api/payment/success`,
+      fail_url: `${BACKEND_URL}/api/payment/fail`,
+      cancel_url: `${BACKEND_URL}/api/payment/cancel`,
+      ipn_url: `${BACKEND_URL}/api/payment/ipn`,
+      product_name: getProductName("carrent", service.name),
+      product_category: "carrent",
+      product_profile: "general",
+      cus_name: userDoc?.name || "Guest",
+      cus_email: userDoc?.email || "guest@example.com",
+      cus_add1: "Bangladesh",
+      cus_city: "Dhaka",
+      cus_country: "Bangladesh",
+      cus_phone: contactNumber || "01700000000",
+      ship_name: userDoc?.name || "Guest",
+      ship_add1: "Bangladesh",
+      ship_city: "Dhaka",
+      ship_country: "Bangladesh",
+      shipping_method: "NO",
+      num_of_item: seatsCount,
+    };
+
+    const sslcz = new SSLCommerzPayment(STORE_ID, STORE_PASSWORD, IS_LIVE);
+    const apiResponse = await sslcz.init(sslData);
+
+    if (apiResponse?.GatewayPageURL) {
+      return res.json({ paymentUrl: apiResponse.GatewayPageURL, tran_id });
+    }
+
+    // Gateway init failed — clean up session
+    await db.collection("payment_sessions").deleteOne({ tran_id });
+    res
+      .status(502)
+      .json({ message: "Failed to initiate payment gateway. Try again." });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

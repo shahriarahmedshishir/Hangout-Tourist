@@ -160,6 +160,7 @@ router.post("/initiate/car", auth, async (req, res) => {
       .findOne({ _id: new ObjectId(carId) });
     if (!car) return res.status(404).json({ message: "Car not found" });
 
+    const carQuantity = car.quantity || car.totalSeats || 0;
     const now = new Date();
     const activeBookings = await db
       .collection("carrentBookings")
@@ -170,7 +171,7 @@ router.post("/initiate/car", auth, async (req, res) => {
         returnDate: { $gte: now },
       });
 
-    if (car.quantity > 0 && activeBookings >= car.quantity) {
+    if (carQuantity > 0 && activeBookings >= carQuantity) {
       return res
         .status(409)
         .json({ message: "No cars of this model are currently available" });
@@ -336,6 +337,7 @@ router.post("/:id/resubmit", auth, async (req, res) => {
       bookingType: oldSubmission.bookingType,
       hotelId: oldSubmission.hotelId,
       carId: oldSubmission.carId,
+      busId: oldSubmission.busId,
       totalAmount: oldSubmission.totalAmount,
       paymentMethod,
       transactionId,
@@ -354,6 +356,294 @@ router.post("/:id/resubmit", auth, async (req, res) => {
     res.json({
       message: "Resubmission successful",
       manualPaymentId: result.insertedId,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// BUS MANUAL PAYMENT
+// ─────────────────────────────────────────────────────────────────────────
+
+// POST /api/manual-payment/initiate/bus — Initiate bus booking with pending status
+router.post("/initiate/bus", auth, async (req, res) => {
+  try {
+    // Prevent staff and admin from booking
+    if (req.user.role === "hotel_staff" || req.user.role === "admin") {
+      return res
+        .status(403)
+        .json({ message: "Staff and admin accounts cannot book buses" });
+    }
+
+    const { busId, travelDate, seats, pickupLocation, contactNumber } =
+      req.body;
+
+    if (!busId || !travelDate || !seats) {
+      return res.status(400).json({
+        message: "busId, travelDate, and seats are required",
+      });
+    }
+
+    if (!isValidObjectId(busId)) {
+      return res.status(400).json({ message: "Invalid bus id" });
+    }
+
+    const travelDateObj = new Date(travelDate);
+    if (isNaN(travelDateObj)) {
+      return res.status(400).json({ message: "Invalid travel date" });
+    }
+
+    const seatsCount = parseInt(seats, 10);
+    if (seatsCount <= 0) {
+      return res.status(400).json({ message: "Seats must be at least 1" });
+    }
+
+    const db = await getDb();
+    const bus = await db
+      .collection("buses")
+      .findOne({ _id: new ObjectId(busId) });
+    if (!bus) return res.status(404).json({ message: "Bus not found" });
+
+    const now = new Date();
+    const activeBookings = await db.collection("busBookings").countDocuments({
+      busId,
+      status: "confirmed",
+      travelDate: {
+        $gte: new Date(travelDateObj.getTime() - 24 * 60 * 60 * 1000),
+        $lt: new Date(travelDateObj.getTime() + 24 * 60 * 60 * 1000),
+      },
+    });
+
+    const availableSeats = bus.quantity - activeBookings;
+    if (availableSeats < seatsCount) {
+      return res.status(409).json({
+        message: `Only ${availableSeats} seat(s) available for this bus on this date`,
+      });
+    }
+
+    const totalAmount = bus.price * seatsCount;
+
+    // Create pending booking for manual payment
+    const booking = {
+      userId: req.user.id,
+      type: "bus",
+      busId: bus._id.toString(),
+      busName: bus.name,
+      travelDate: travelDateObj,
+      seats: seatsCount,
+      pickupLocation: pickupLocation || "",
+      contactNumber: contactNumber || "",
+      pricePerSeat: bus.price,
+      totalAmount,
+      status: "pending", // Pending manual payment verification
+      paymentMethod: "manual",
+      createdAt: now,
+    };
+
+    const result = await db.collection("busBookings").insertOne(booking);
+
+    res.json({
+      message: "Bus booking initiated for manual payment",
+      bookingId: result.insertedId,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/manual-payment/initiate/carrent — Cox's Bazar service manual payment
+router.post("/initiate/carrent", auth, async (req, res) => {
+  try {
+    // Prevent staff and admin from booking
+    if (req.user.role === "hotel_staff" || req.user.role === "admin") {
+      return res
+        .status(403)
+        .json({ message: "Staff and admin accounts cannot book services" });
+    }
+
+    const {
+      serviceId,
+      pickupDate,
+      returnDate,
+      seatsBooked,
+      pickupLocation,
+      contactNumber,
+    } = req.body;
+
+    if (!serviceId || !pickupDate || !returnDate || !seatsBooked) {
+      return res.status(400).json({
+        message:
+          "serviceId, pickupDate, returnDate, and seatsBooked are required",
+      });
+    }
+
+    if (!isValidObjectId(serviceId)) {
+      return res.status(400).json({ message: "Invalid service id" });
+    }
+
+    const pickupDateObj = new Date(pickupDate);
+    const returnDateObj = new Date(returnDate);
+    if (
+      isNaN(pickupDateObj) ||
+      isNaN(returnDateObj) ||
+      returnDateObj <= pickupDateObj
+    ) {
+      return res.status(400).json({ message: "Invalid dates" });
+    }
+
+    const seatsCount = parseInt(seatsBooked, 10);
+    if (seatsCount <= 0) {
+      return res.status(400).json({ message: "Seats must be at least 1" });
+    }
+
+    const db = await getDb();
+    const service = await db
+      .collection("carrent")
+      .findOne({ _id: new ObjectId(serviceId) });
+    if (!service) return res.status(404).json({ message: "Service not found" });
+
+    const now = new Date();
+    const bookedSeatsData = await db
+      .collection("carrentBookings")
+      .aggregate([
+        {
+          $match: {
+            serviceId: serviceId.toString(),
+            status: "confirmed",
+            returnDate: { $gte: now },
+            $or: [
+              {
+                pickupDate: { $lt: returnDateObj },
+                returnDate: { $gt: pickupDateObj },
+              },
+            ],
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: { $toInt: "$seatsBooked" } },
+          },
+        },
+      ])
+      .toArray();
+
+    const bookedSeats = bookedSeatsData[0]?.total || 0;
+    const availableSeats =
+      (service.quantity || service.totalSeats || 0) - bookedSeats;
+    if (availableSeats < seatsCount) {
+      return res.status(409).json({
+        message: `Only ${availableSeats} car(s) available for this service during selected dates`,
+      });
+    }
+
+    const totalAmount = service.price * seatsCount;
+
+    // Create pending booking for manual payment
+    const booking = {
+      userId: req.user.id,
+      type: "carrent",
+      serviceId: service._id.toString(),
+      serviceName: service.name,
+      carName: service.name, // For frontend display
+      carType: service.type || "Standard", // For frontend display
+      pickupDate: pickupDateObj,
+      returnDate: returnDateObj,
+      days: Math.ceil((returnDateObj - pickupDateObj) / (1000 * 60 * 60 * 24)), // Calculate days
+      seatsBooked: seatsCount,
+      pickupLocation: pickupLocation || "",
+      contactNumber: contactNumber || "",
+      pricePerSeat: service.price,
+      totalAmount,
+      status: "pending", // Pending manual payment verification
+      paymentMethod: "manual",
+      createdAt: now,
+    };
+
+    const result = await db.collection("carrentBookings").insertOne(booking);
+
+    res.json({
+      message: "Service booking initiated for manual payment",
+      bookingId: result.insertedId,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/manual-payment/request/bus — Submit bus ticket application for admin verification
+router.post("/request/bus", auth, async (req, res) => {
+  try {
+    // Prevent staff and admin from booking
+    if (req.user.role === "hotel_staff" || req.user.role === "admin") {
+      return res.status(403).json({
+        message: "Staff and admin accounts cannot apply for bus tickets",
+      });
+    }
+
+    const {
+      busId,
+      travelDate,
+      seats,
+      pickupLocation,
+      contactNumber,
+      totalAmount,
+    } = req.body;
+
+    // Validation
+    if (!busId || !travelDate || !seats || !pickupLocation || !contactNumber) {
+      return res.status(400).json({
+        message:
+          "All fields are required (busId, travelDate, seats, pickupLocation, contactNumber)",
+      });
+    }
+
+    if (!isValidObjectId(busId)) {
+      return res.status(400).json({ message: "Invalid bus id" });
+    }
+
+    const travelDateObj = new Date(travelDate);
+    if (isNaN(travelDateObj)) {
+      return res.status(400).json({ message: "Invalid travel date" });
+    }
+
+    const seatsCount = parseInt(seats, 10);
+    if (seatsCount <= 0) {
+      return res.status(400).json({ message: "Seats must be at least 1" });
+    }
+
+    const db = await getDb();
+    const bus = await db
+      .collection("buses")
+      .findOne({ _id: new ObjectId(busId) });
+    if (!bus) return res.status(404).json({ message: "Bus not found" });
+
+    // Create bus ticket request (pending admin verification)
+    const ticketRequest = {
+      userId: new ObjectId(req.user.id),
+      userName: req.user.name || "Unknown",
+      userEmail: req.user.email || "",
+      busId: busId,
+      busName: bus.name || "Unknown Bus",
+      travelDate: travelDateObj,
+      seats: seatsCount,
+      pickupLocation,
+      contactNumber,
+      totalAmount: totalAmount || 0,
+      status: "pending", // pending, approved, rejected
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const result = await db
+      .collection("busTicketRequests")
+      .insertOne(ticketRequest);
+
+    res.json({
+      ticketRequestId: result.insertedId,
+      message: "Ticket application submitted for admin verification",
+      status: "pending",
     });
   } catch (err) {
     res.status(500).json({ message: err.message });

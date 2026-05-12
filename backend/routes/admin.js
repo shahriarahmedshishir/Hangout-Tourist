@@ -1,12 +1,29 @@
 const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcryptjs");
+const fs = require("fs");
+const path = require("path");
 const { getDb } = require("../db");
 const { ObjectId } = require("mongodb");
 const { auth, role } = require("../middleware/auth");
 const upload = require("../middleware/upload");
 
 const adminAuth = [auth, role("admin")];
+
+// Helper function to delete image files from /uploads
+function deleteImageFiles(imageUrls) {
+  if (!imageUrls || !Array.isArray(imageUrls)) return;
+  imageUrls.forEach((url) => {
+    if (url && typeof url === "string" && url.startsWith("/uploads/")) {
+      const filename = path.basename(url);
+      const filepath = path.join(__dirname, "..", "uploads", filename);
+      fs.unlink(filepath, (err) => {
+        if (err && err.code !== "ENOENT")
+          console.error(`Failed to delete file ${filepath}:`, err.message);
+      });
+    }
+  });
+}
 
 function isValidObjectId(id) {
   return /^[0-9a-fA-F]{24}$/.test(id);
@@ -489,16 +506,33 @@ router.get("/cars", auth, role("admin"), async (req, res) => {
     const now = new Date();
     const enriched = await Promise.all(
       cars.map(async (car) => {
-        const active = await db.collection("bookings").countDocuments({
-          carId: car._id.toString(),
-          type: "car",
-          status: { $in: ["confirmed", "pending"] },
-          returnDate: { $gte: now },
-        });
+        const bookedSeats = await db
+          .collection("bookings")
+          .aggregate([
+            {
+              $match: {
+                carId: car._id.toString(),
+                type: "car",
+                status: { $in: ["confirmed", "pending"] },
+                returnDate: { $gte: now },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                total: { $sum: { $toInt: "$seatsBooked" } },
+              },
+            },
+          ])
+          .toArray();
+        const totalBooked = bookedSeats[0]?.total || 0;
         return {
           ...car,
-          activeBookings: active,
-          available: Math.max(0, (car.quantity || 0) - active),
+          bookedSeats: totalBooked,
+          availableSeats: Math.max(
+            0,
+            (car.quantity || car.totalSeats || 0) - totalBooked,
+          ),
         };
       }),
     );
@@ -516,12 +550,20 @@ router.post(
   upload.array("images", 10),
   async (req, res) => {
     try {
-      const { name, type, seats, transmission, fuel, price, quantity, places } =
-        req.body;
-      if (!name || !price || !quantity) {
+      const {
+        name,
+        type,
+        seats,
+        transmission,
+        fuel,
+        price,
+        totalSeats,
+        places,
+      } = req.body;
+      if (!name || !price || !totalSeats) {
         return res
           .status(400)
-          .json({ message: "name, price, quantity are required" });
+          .json({ message: "name, price, totalSeats are required" });
       }
       const images = req.files
         ? req.files.map((f) => `/uploads/${f.filename}`)
@@ -540,7 +582,7 @@ router.post(
         transmission: transmission || "Automatic",
         fuel: fuel || "Petrol",
         price: parseFloat(price),
-        quantity: parseInt(quantity),
+        totalSeats: parseInt(totalSeats),
         places: placesArr,
         images,
         isAvailable: true,
@@ -564,9 +606,23 @@ router.put(
     try {
       if (!isValidObjectId(req.params.id))
         return res.status(400).json({ message: "Invalid id" });
-      const { name, type, seats, transmission, fuel, price, quantity, places } =
-        req.body;
+      const {
+        name,
+        type,
+        seats,
+        transmission,
+        fuel,
+        price,
+        totalSeats,
+        places,
+      } = req.body;
       const db = await getDb();
+
+      // Get existing car to delete old images if new ones are uploaded
+      const existingCar = await db
+        .collection("cars")
+        .findOne({ _id: new ObjectId(req.params.id) });
+
       const update = {
         name,
         type,
@@ -574,7 +630,7 @@ router.put(
         transmission,
         fuel,
         price: parseFloat(price),
-        quantity: parseInt(quantity),
+        totalSeats: parseInt(totalSeats),
         places: places
           ? places
               .split(",")
@@ -582,9 +638,15 @@ router.put(
               .filter(Boolean)
           : [],
       };
+
+      // If new images are uploaded, delete old ones
       if (req.files && req.files.length > 0) {
+        if (existingCar?.images) {
+          deleteImageFiles(existingCar.images);
+        }
         update.images = req.files.map((f) => `/uploads/${f.filename}`);
       }
+
       await db
         .collection("cars")
         .updateOne({ _id: new ObjectId(req.params.id) }, { $set: update });
@@ -601,6 +663,17 @@ router.delete("/cars/:id", auth, role("admin"), async (req, res) => {
     if (!isValidObjectId(req.params.id))
       return res.status(400).json({ message: "Invalid id" });
     const db = await getDb();
+
+    // Get car before deleting to retrieve image paths
+    const car = await db
+      .collection("cars")
+      .findOne({ _id: new ObjectId(req.params.id) });
+
+    // Delete associated images from filesystem
+    if (car?.images) {
+      deleteImageFiles(car.images);
+    }
+
     await db
       .collection("bookings")
       .updateMany(
@@ -798,6 +871,133 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
       .aggregate(bookingsPipeline)
       .toArray();
 
+    // Get car rentals
+    let carRentals = [];
+    if (!type || type === "car") {
+      const carMatch = {};
+      if (status) carMatch.status = status;
+
+      // Add startDate for filtering
+      const carPipeline = [
+        {
+          $addFields: {
+            startDate: "$pickupDate",
+          },
+        },
+      ];
+
+      if (viewMode === "upcoming") {
+        carMatch.pickupDate = { $gte: today };
+      } else if (viewMode === "past") {
+        carMatch.pickupDate = { $lt: today };
+      }
+
+      if (dateFrom || dateTo) {
+        const dateFilter = {};
+        if (dateFrom) dateFilter.$gte = new Date(dateFrom);
+        if (dateTo) {
+          const end = new Date(dateTo);
+          end.setHours(23, 59, 59, 999);
+          dateFilter.$lte = end;
+        }
+        carMatch.pickupDate = dateFilter;
+      }
+
+      carPipeline.push({ $match: carMatch });
+
+      // Lookup user info
+      carPipeline.push({
+        $addFields: { userObjectId: { $toObjectId: "$userId" } },
+      });
+      carPipeline.push({
+        $lookup: {
+          from: "users",
+          localField: "userObjectId",
+          foreignField: "_id",
+          as: "userInfo",
+        },
+      });
+      carPipeline.push({
+        $addFields: {
+          userName: {
+            $ifNull: [{ $arrayElemAt: ["$userInfo.name", 0] }, "Unknown"],
+          },
+          userEmail: {
+            $ifNull: [{ $arrayElemAt: ["$userInfo.email", 0] }, ""],
+          },
+        },
+      });
+      carPipeline.push({ $project: { userInfo: 0, userObjectId: 0 } });
+
+      carRentals = await db
+        .collection("carrentBookings")
+        .aggregate(carPipeline)
+        .toArray();
+    }
+
+    // Get bus bookings
+    let busBookings = [];
+    if (!type || type === "bus") {
+      const busMatch = {};
+      if (status) busMatch.status = status;
+
+      const busPipeline = [
+        {
+          $addFields: {
+            startDate: "$travelDate",
+          },
+        },
+      ];
+
+      if (viewMode === "upcoming") {
+        busMatch.travelDate = { $gte: today };
+      } else if (viewMode === "past") {
+        busMatch.travelDate = { $lt: today };
+      }
+
+      if (dateFrom || dateTo) {
+        const dateFilter = {};
+        if (dateFrom) dateFilter.$gte = new Date(dateFrom);
+        if (dateTo) {
+          const end = new Date(dateTo);
+          end.setHours(23, 59, 59, 999);
+          dateFilter.$lte = end;
+        }
+        busMatch.travelDate = dateFilter;
+      }
+
+      busPipeline.push({ $match: busMatch });
+
+      // Lookup user info
+      busPipeline.push({
+        $addFields: { userObjectId: { $toObjectId: "$userId" } },
+      });
+      busPipeline.push({
+        $lookup: {
+          from: "users",
+          localField: "userObjectId",
+          foreignField: "_id",
+          as: "userInfo",
+        },
+      });
+      busPipeline.push({
+        $addFields: {
+          userName: {
+            $ifNull: [{ $arrayElemAt: ["$userInfo.name", 0] }, "Unknown"],
+          },
+          userEmail: {
+            $ifNull: [{ $arrayElemAt: ["$userInfo.email", 0] }, ""],
+          },
+        },
+      });
+      busPipeline.push({ $project: { userInfo: 0, userObjectId: 0 } });
+
+      busBookings = await db
+        .collection("busBookings")
+        .aggregate(busPipeline)
+        .toArray();
+    }
+
     // Get coin topups if type filter is not set or is coin_topup
     let coinTopups = [];
     if (!type || type === "coin_topup") {
@@ -855,7 +1055,7 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
     }
 
     // Merge and sort
-    let allItems = [...bookings, ...coinTopups];
+    let allItems = [...bookings, ...carRentals, ...busBookings, ...coinTopups];
 
     // Filter by search if provided
     if (search) {
@@ -865,6 +1065,7 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
           item.userName?.toLowerCase().includes(q) ||
           item.carName?.toLowerCase().includes(q) ||
           item.hotelName?.toLowerCase().includes(q) ||
+          item.busName?.toLowerCase().includes(q) ||
           (item.type === "coin_topup" && "coin topup".includes(q)) ||
           new Date(item.createdAt).toLocaleDateString().includes(q),
       );
@@ -1110,8 +1311,20 @@ router.get("/stats", auth, role("admin"), async (req, res) => {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
+    // Count total bookings from all sources
+    const hotelBookingsCount = await db
+      .collection("bookings")
+      .countDocuments({ status: "confirmed" });
+    const carBookingsCount = await db
+      .collection("carrentBookings")
+      .countDocuments({ status: "confirmed" });
+    const busBookingsCount = await db
+      .collection("busBookings")
+      .countDocuments({ status: "confirmed" });
+    const totalBookings =
+      hotelBookingsCount + carBookingsCount + busBookingsCount;
+
     const [
-      totalBookings,
       totalHotels,
       totalCars,
       totalUsers,
@@ -1121,8 +1334,11 @@ router.get("/stats", auth, role("admin"), async (req, res) => {
       todayCanceledResult,
       coinTopupRevenueResult,
       todayCoinTopupRevenueResult,
+      carRevenueResult,
+      busRevenueResult,
+      carTodayRevenueResult,
+      busTodayRevenueResult,
     ] = await Promise.all([
-      db.collection("bookings").countDocuments(),
       db.collection("hotels").countDocuments({ isActive: { $ne: false } }),
       db.collection("cars").countDocuments({ isActive: { $ne: false } }),
       db.collection("users").countDocuments({ role: "user" }),
@@ -1193,16 +1409,67 @@ router.get("/stats", auth, role("admin"), async (req, res) => {
           { $group: { _id: null, total: { $sum: "$amount" } } },
         ])
         .toArray(),
+      // Total revenue from car rentals
+      db
+        .collection("carrentBookings")
+        .aggregate([
+          { $match: { status: "confirmed" } },
+          { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+        ])
+        .toArray(),
+      // Total revenue from bus bookings
+      db
+        .collection("busBookings")
+        .aggregate([
+          { $match: { status: "confirmed" } },
+          { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+        ])
+        .toArray(),
+      // Today's revenue from car rentals
+      db
+        .collection("carrentBookings")
+        .aggregate([
+          {
+            $match: {
+              status: "confirmed",
+              paidAt: { $gte: today, $lt: tomorrow },
+            },
+          },
+          { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+        ])
+        .toArray(),
+      // Today's revenue from bus bookings
+      db
+        .collection("busBookings")
+        .aggregate([
+          {
+            $match: {
+              status: "confirmed",
+              createdAt: { $gte: today, $lt: tomorrow },
+            },
+          },
+          { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+        ])
+        .toArray(),
     ]);
 
     const bookingRevenue = revenueResult[0]?.total || 0;
     const refundedTotal = refundedResult[0]?.total || 0;
     const coinTopupRevenue = coinTopupRevenueResult[0]?.total || 0;
-    const totalRevenue = bookingRevenue + coinTopupRevenue;
+    const carRevenue = carRevenueResult[0]?.total || 0;
+    const busRevenue = busRevenueResult[0]?.total || 0;
+    const totalRevenue =
+      bookingRevenue + coinTopupRevenue + carRevenue + busRevenue;
     const netRevenue = totalRevenue - refundedTotal;
     const todayBookingRevenue = todayRevenueResult[0]?.total || 0;
+    const todayCarRevenue = carTodayRevenueResult[0]?.total || 0;
+    const todayBusRevenue = busTodayRevenueResult[0]?.total || 0;
     const todayCoinTopupRevenue = todayCoinTopupRevenueResult[0]?.total || 0;
-    const todayRevenue = todayBookingRevenue + todayCoinTopupRevenue;
+    const todayRevenue =
+      todayBookingRevenue +
+      todayCoinTopupRevenue +
+      todayCarRevenue +
+      todayBusRevenue;
 
     res.json({
       totalBookings,
@@ -2252,16 +2519,7 @@ router.get("/todays-bookings", auth, role("admin"), async (req, res) => {
           $match: {
             type: "hotel",
             status: { $in: ["confirmed", "pending"] },
-            $or: [
-              { checkIn: { $gte: today, $lt: tomorrow } }, // Check-in today
-              {
-                checkOut: { $gt: today, $lte: tomorrow },
-              }, // Check-out today
-              {
-                checkIn: { $lt: today },
-                checkOut: { $gt: today },
-              }, // Ongoing
-            ],
+            checkIn: { $gte: today, $lt: tomorrow }, // Check-in TODAY only
           },
         },
         { $addFields: { userObjectId: { $toObjectId: "$userId" } } },
@@ -2315,16 +2573,7 @@ router.get("/todays-bookings", auth, role("admin"), async (req, res) => {
           $match: {
             type: "car",
             status: { $in: ["confirmed", "pending"] },
-            $or: [
-              { pickupDate: { $gte: today, $lt: tomorrow } }, // Pickup today
-              {
-                returnDate: { $gt: today, $lte: tomorrow },
-              }, // Return today
-              {
-                pickupDate: { $lt: today },
-                returnDate: { $gt: today },
-              }, // Ongoing
-            ],
+            pickupDate: { $gte: today, $lt: tomorrow }, // Pickup TODAY only
           },
         },
         { $addFields: { userObjectId: { $toObjectId: "$userId" } } },
@@ -2412,28 +2661,16 @@ router.get("/todays-bookings", auth, role("admin"), async (req, res) => {
       today: today.toISOString().split("T")[0],
       hotelBookings,
       carBookings,
+      carrentBookings: [],
+      busBookings: [],
       blockedDates,
       summary: {
-        hotelCheckIn: hotelBookings.filter((b) => {
-          const checkInDate = new Date(b.checkIn);
-          checkInDate.setHours(0, 0, 0, 0);
-          return checkInDate.getTime() === today.getTime();
-        }).length,
-        hotelCheckOut: hotelBookings.filter((b) => {
-          const checkOutDate = new Date(b.checkOut);
-          checkOutDate.setHours(0, 0, 0, 0);
-          return checkOutDate.getTime() === today.getTime();
-        }).length,
-        carPickup: carBookings.filter((b) => {
-          const pickupDate = new Date(b.pickupDate);
-          pickupDate.setHours(0, 0, 0, 0);
-          return pickupDate.getTime() === today.getTime();
-        }).length,
-        carReturn: carBookings.filter((b) => {
-          const returnDate = new Date(b.returnDate);
-          returnDate.setHours(0, 0, 0, 0);
-          return returnDate.getTime() === today.getTime();
-        }).length,
+        hotelCheckIn: hotelBookings.length,
+        hotelCheckOut: 0,
+        carPickup: carBookings.length,
+        carReturn: 0,
+        carrentPickup: 0,
+        busBookings: 0,
         blockedRooms: blockedDates.length,
       },
     });
@@ -2757,7 +2994,24 @@ router.get("/carrent", adminAuth, async (req, res) => {
       .find({})
       .sort({ createdAt: -1 })
       .toArray();
-    res.json(cars);
+    const now = new Date();
+    const enriched = await Promise.all(
+      cars.map(async (car) => {
+        const activeBookings = await db
+          .collection("carrentBookings")
+          .countDocuments({
+            carId: car._id.toString(),
+            status: { $in: ["confirmed", "pending"] },
+            returnDate: { $gte: now },
+          });
+        return {
+          ...car,
+          bookedCount: activeBookings,
+          availableCars: Math.max(0, (car.quantity || 0) - activeBookings),
+        };
+      }),
+    );
+    res.json(enriched);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -2770,11 +3024,13 @@ router.post(
   upload.array("images", 5),
   async (req, res) => {
     try {
-      const { name, seats, fuel, price, quantity, places, type, transmission } =
+      const { name, fuel, price, quantity, places, type, transmission } =
         req.body;
 
-      if (!name || !price) {
-        return res.status(400).json({ message: "Name and price are required" });
+      if (!name || !price || !quantity) {
+        return res
+          .status(400)
+          .json({ message: "Name, price, and quantity are required" });
       }
 
       const db = await getDb();
@@ -2782,10 +3038,9 @@ router.post(
 
       const car = {
         name,
-        seats: parseInt(seats) || 5,
         fuel,
         price: parseInt(price),
-        quantity: parseInt(quantity) || 1,
+        quantity: parseInt(quantity),
         places: places ? places.split(",").map((p) => p.trim()) : [],
         type,
         transmission,
@@ -2813,7 +3068,7 @@ router.put(
   upload.array("images", 5),
   async (req, res) => {
     try {
-      const { name, seats, fuel, price, quantity, places, type, transmission } =
+      const { name, fuel, price, quantity, places, type, transmission } =
         req.body;
       const db = await getDb();
 
@@ -2822,13 +3077,17 @@ router.put(
         .findOne({ _id: new ObjectId(req.params.id) });
       if (!car) return res.status(404).json({ message: "Car not found" });
 
-      const images = req.files?.length
-        ? req.files.map((f) => `/uploads/${f.filename}`)
-        : car.images;
+      // If new images are uploaded, delete old ones
+      let images = car.images;
+      if (req.files?.length) {
+        if (car.images) {
+          deleteImageFiles(car.images);
+        }
+        images = req.files.map((f) => `/uploads/${f.filename}`);
+      }
 
       const updated = {
         name,
-        seats: parseInt(seats),
         fuel,
         price: parseInt(price),
         quantity: parseInt(quantity),
@@ -2854,6 +3113,17 @@ router.put(
 router.delete("/carrent/:id", adminAuth, async (req, res) => {
   try {
     const db = await getDb();
+
+    // Get car before deleting to retrieve image paths
+    const car = await db
+      .collection("carrent")
+      .findOne({ _id: new ObjectId(req.params.id) });
+
+    // Delete associated images from filesystem
+    if (car?.images) {
+      deleteImageFiles(car.images);
+    }
+
     const result = await db
       .collection("carrent")
       .deleteOne({ _id: new ObjectId(req.params.id) });
@@ -2892,6 +3162,245 @@ router.get("/carrent/:id/bookings", adminAuth, async (req, res) => {
     const bookings = await db
       .collection("carrentBookings")
       .find({ carId: req.params.id })
+      .sort({ createdAt: -1 })
+      .toArray();
+    res.json(bookings);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// BUS SERVICES MANAGEMENT
+// ─────────────────────────────────────────────────────────────────────────
+
+// GET /api/admin/buses — all buses
+router.get("/buses", adminAuth, async (req, res) => {
+  try {
+    const db = await getDb();
+    const buses = await db
+      .collection("buses")
+      .find({})
+      .sort({ createdAt: -1 })
+      .toArray();
+    const now = new Date();
+    const enriched = await Promise.all(
+      buses.map(async (bus) => {
+        const bookedSeats = await db
+          .collection("busBookings")
+          .aggregate([
+            {
+              $match: {
+                busId: bus._id.toString(),
+                status: { $in: ["confirmed", "pending"] },
+                travelDate: { $gte: now },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                total: { $sum: { $toInt: "$seats" } },
+              },
+            },
+          ])
+          .toArray();
+        const totalBooked = bookedSeats[0]?.total || 0;
+        return {
+          ...bus,
+          bookedSeats: totalBooked,
+          availableSeats: Math.max(0, (bus.totalSeats || 0) - totalBooked),
+        };
+      }),
+    );
+    res.json(enriched);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/buses — create bus
+router.post(
+  "/buses",
+  adminAuth,
+  upload.array("images", 5),
+  async (req, res) => {
+    try {
+      const {
+        name,
+        busType,
+        seats,
+        acType,
+        departureTime,
+        date,
+        price,
+        totalSeats,
+        routes,
+      } = req.body;
+
+      if (!name || !acType || !departureTime || !date || !price || !routes) {
+        return res.status(400).json({
+          message:
+            "name, acType, departureTime, date, price, and routes are required",
+        });
+      }
+
+      const db = await getDb();
+      const images = req.files?.map((f) => `/uploads/${f.filename}`) || [];
+
+      // Parse routes from comma-separated string
+      const routeArray =
+        typeof routes === "string"
+          ? routes
+              .split(",")
+              .map((r) => r.trim())
+              .filter(Boolean)
+          : Array.isArray(routes)
+            ? routes
+            : [];
+
+      if (routeArray.length === 0) {
+        return res
+          .status(400)
+          .json({ message: "At least one route is required" });
+      }
+
+      const bus = {
+        name,
+        busType: busType || "Standard Bus",
+        seats: parseInt(seats) || 45,
+        acType, // "AC" or "Non-AC"
+        departureTime, // "10:30 AM", "2:00 PM", etc.
+        date, // YYYY-MM-DD format
+        price: parseInt(price),
+        totalSeats: parseInt(totalSeats) || 45,
+        routes: routeArray,
+        images,
+        isActive: true,
+        createdAt: new Date(),
+      };
+
+      const result = await db.collection("buses").insertOne(bus);
+
+      res.json({
+        _id: result.insertedId,
+        ...bus,
+      });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
+
+// PUT /api/admin/buses/:id — update bus
+router.put(
+  "/buses/:id",
+  adminAuth,
+  upload.array("images", 5),
+  async (req, res) => {
+    try {
+      const {
+        name,
+        busType,
+        seats,
+        acType,
+        departureTime,
+        date,
+        price,
+        totalSeats,
+        routes,
+      } = req.body;
+      const db = await getDb();
+
+      const bus = await db
+        .collection("buses")
+        .findOne({ _id: new ObjectId(req.params.id) });
+      if (!bus) return res.status(404).json({ message: "Bus not found" });
+
+      let images = bus.images;
+      if (req.files?.length) {
+        if (bus.images) {
+          deleteImageFiles(bus.images);
+        }
+        images = req.files.map((f) => `/uploads/${f.filename}`);
+      }
+
+      const routeArray =
+        typeof routes === "string"
+          ? routes
+              .split(",")
+              .map((r) => r.trim())
+              .filter(Boolean)
+          : Array.isArray(routes)
+            ? routes
+            : bus.routes;
+
+      const updated = {
+        name: name || bus.name,
+        busType: busType || bus.busType,
+        seats: parseInt(seats) || bus.seats,
+        acType: acType || bus.acType,
+        departureTime: departureTime || bus.departureTime,
+        date: date || bus.date,
+        price: parseInt(price) || bus.price,
+        totalSeats: parseInt(totalSeats) || bus.totalSeats || 45,
+        routes: routeArray,
+        images,
+        updatedAt: new Date(),
+      };
+
+      await db
+        .collection("buses")
+        .updateOne({ _id: new ObjectId(req.params.id) }, { $set: updated });
+
+      res.json({ _id: req.params.id, ...updated });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
+
+// DELETE /api/admin/buses/:id
+router.delete("/buses/:id", adminAuth, async (req, res) => {
+  try {
+    const db = await getDb();
+    const result = await db
+      .collection("buses")
+      .deleteOne({ _id: new ObjectId(req.params.id) });
+    res.json({ message: "Bus deleted", deletedCount: result.deletedCount });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/admin/buses/:id/toggle — toggle availability
+router.patch("/buses/:id/toggle", adminAuth, async (req, res) => {
+  try {
+    const db = await getDb();
+    const bus = await db
+      .collection("buses")
+      .findOne({ _id: new ObjectId(req.params.id) });
+    if (!bus) return res.status(404).json({ message: "Bus not found" });
+
+    await db
+      .collection("buses")
+      .updateOne(
+        { _id: new ObjectId(req.params.id) },
+        { $set: { isActive: !bus.isActive } },
+      );
+
+    res.json({ isActive: !bus.isActive });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/buses/:id/bookings — get bus bookings
+router.get("/buses/:id/bookings", adminAuth, async (req, res) => {
+  try {
+    const db = await getDb();
+    const bookings = await db
+      .collection("busBookings")
+      .find({ busId: req.params.id })
       .sort({ createdAt: -1 })
       .toArray();
     res.json(bookings);
