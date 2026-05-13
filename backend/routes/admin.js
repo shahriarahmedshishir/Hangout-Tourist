@@ -3027,10 +3027,9 @@ router.post(
       const { name, fuel, price, quantity, places, type, transmission } =
         req.body;
 
-      if (!name || !price || !quantity) {
-        return res
-          .status(400)
-          .json({ message: "Name, price, and quantity are required" });
+      // ✅ Removed quantity from required check
+      if (!name || !price) {
+        return res.status(400).json({ message: "Name and price are required" });
       }
 
       const db = await getDb();
@@ -3040,7 +3039,8 @@ router.post(
         name,
         fuel,
         price: parseInt(price),
-        quantity: parseInt(quantity),
+        // ✅ Default to 1 if not provided
+        quantity: quantity ? parseInt(quantity) : 1,
         places: places ? places.split(",").map((p) => p.trim()) : [],
         type,
         transmission,
@@ -3077,7 +3077,6 @@ router.put(
         .findOne({ _id: new ObjectId(req.params.id) });
       if (!car) return res.status(404).json({ message: "Car not found" });
 
-      // If new images are uploaded, delete old ones
       let images = car.images;
       if (req.files?.length) {
         if (car.images) {
@@ -3090,7 +3089,8 @@ router.put(
         name,
         fuel,
         price: parseInt(price),
-        quantity: parseInt(quantity),
+        // ✅ Fall back to existing car quantity if not submitted
+        quantity: quantity ? parseInt(quantity) : (car.quantity ?? 1),
         places: places ? places.split(",").map((p) => p.trim()) : [],
         type,
         transmission,
