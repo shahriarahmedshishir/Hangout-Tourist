@@ -1892,6 +1892,7 @@ const CarsRentView = () => {
                 <option value="Micro Bus">Micro Bus</option>
               </select>
             </div>
+            {/* Fuel Type */}
             <div>
               <label className="mb-2 block text-sm font-medium text-foreground">
                 Fuel Type
@@ -1924,6 +1925,21 @@ const CarsRentView = () => {
                 />
               </div>
             </div>
+            {/* Quantity ✅ New Field */}
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Quantity <span className="text-destructive">*</span>
+              </label>
+              <Input
+                name="quantity"
+                type="number"
+                min="1"
+                defaultValue={form?.quantity || "1"}
+                placeholder="e.g. 3"
+                required
+                className="bg-muted border-0 focus:ring-2 focus:ring-primary"
+              />
+            </div>
             {/* Traveling Routes */}
             <div>
               <label className="mb-2 block text-sm font-medium text-foreground">
@@ -1939,6 +1955,7 @@ const CarsRentView = () => {
                 Enter multiple routes separated by commas
               </p>
             </div>
+            {/* Images */}
             <div>
               <label className="mb-1 block text-xs text-muted-foreground">
                 Images
@@ -1969,7 +1986,6 @@ const CarsRentView = () => {
           </form>
         </div>
       )}
-
       {loading ? (
         <div className="text-muted-foreground">Loading...</div>
       ) : cars.length === 0 ? (
