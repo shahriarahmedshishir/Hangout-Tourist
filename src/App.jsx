@@ -13,6 +13,7 @@ import Holidays from "./pages/Holidays";
 import Cars from "./pages/Cars";
 import CarBooking from "./pages/CarBooking";
 import BusBooking from "./pages/BusBooking";
+import Flight from "./pages/Flights";
 import CoxsBazarBooking from "./pages/CoxsBazarBooking";
 import Login from "./pages/Login";
 import VerifyEmail from "./pages/VerifyEmail";
@@ -62,6 +63,7 @@ const App = () => (
             <Route path="/booking/car" element={<CarBooking />} />
             <Route path="/booking/bus" element={<BusBooking />} />
             <Route path="/booking/coxs-bazar" element={<CoxsBazarBooking />} />
+            <Route path="/flight" element={<Flight/>} />
             <Route path="/login" element={<Login />} />
             <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="/reset-password" element={<ResetPassword />} />

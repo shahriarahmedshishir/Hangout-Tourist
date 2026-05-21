@@ -27,6 +27,7 @@ import { api } from "@/lib/api";
 const navLinks = [
   { path: "/hotels", label: "Hotels" },
   { path: "/cars", label: "Cars" },
+  { path: "/flight", label: "Flight" },
   { path: "/holidays", label: "Holidays" },
 ];
 
