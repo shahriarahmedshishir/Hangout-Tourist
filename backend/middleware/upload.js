@@ -24,10 +24,12 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
+const MAX_IMAGE_UPLOAD_BYTES = 15 * 1024 * 1024; // 15MB raw upload limit
+
 const _multer = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }, // allow up to 10MB raw; output will be much smaller
+  limits: { fileSize: MAX_IMAGE_UPLOAD_BYTES },
 });
 
 // Compress and save a single buffer, returns the saved filename

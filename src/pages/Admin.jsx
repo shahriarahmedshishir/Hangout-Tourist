@@ -33,9 +33,11 @@ import {
   XCircle,
   RotateCcw,
   BusFront,
+  Package,
 } from "lucide-react";
 import { api, imgUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { Textarea } from "@/components/ui/textarea";
 import logo from "@/assets/logo.png";
 
 const sidebarItems = [
@@ -44,6 +46,8 @@ const sidebarItems = [
   { id: "cars", label: "Car Rental", icon: Car },
   { id: "cars rent", label: "Cox's Bazar", icon: Car },
   { id: "buses", label: "Buses", icon: BusFront },
+  { id: "packages", label: "Tour Packages", icon: Package },
+  { id: "package-bookings", label: "Package Bookings", icon: Package },
   { id: "bus-tickets", label: "Bus Tickets", icon: BusFront },
   { id: "todays-bookings", label: "Today's Bookings", icon: CalendarRange },
   { id: "bookings", label: "Bookings", icon: ShoppingCart },
@@ -73,6 +77,39 @@ const Admin = () => {
     logout();
     navigate("/login", { replace: true });
   };
+
+  // Handle browser back button - ask for confirmation before logout
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      // Show confirmation when trying to leave
+      e.preventDefault();
+      e.returnValue = "";
+    };
+
+    const handlePopState = () => {
+      const confirmLogout = window.confirm(
+        "Are you sure you want to log out? Your session will be ended.",
+      );
+      if (confirmLogout) {
+        logout();
+        navigate("/login", { replace: true });
+      } else {
+        // Stay on admin page by pushing history again
+        window.history.pushState(null, null, window.location.pathname);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    // Push initial state
+    window.history.pushState(null, null, window.location.pathname);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [logout, navigate]);
 
   // All hooks must be called BEFORE any conditional returns
   useEffect(() => {
@@ -163,7 +200,9 @@ const Admin = () => {
           {view === "cars" && <CarsView />}
           {view === "cars rent" && <CarsRentView />}
           {view === "buses" && <BusesView />}
+          {view === "packages" && <PackagesView />}
           {view === "bus-tickets" && <BusTicketsView />}
+          {view === "package-bookings" && <PackageBookingsView />}
           {view === "todays-bookings" && <TodaysBookingsView />}
           {view === "bookings" && <BookingsView />}
           {view === "cancel-requests" && <CancelRequestsView />}
@@ -2727,7 +2766,7 @@ const BookingsView = () => {
             </thead>
             <tbody>
               {filtered.map((b) => {
-                const startDate = b.pickupDate || b.checkIn;
+                const startDate = b.pickupDate || b.checkIn || b.travelDate;
                 const endDate = b.returnDate || b.checkOut;
                 const isToday =
                   startDate &&
@@ -2756,10 +2795,16 @@ const BookingsView = () => {
                             ? `Coin Top-up`
                             : b.type === "car"
                               ? b.carName
-                              : b.hotelName || "—"}
+                              : b.type === "package" || b.type === "holiday"
+                                ? b.packageName || "Holiday Package"
+                                : b.hotelName || "—"}
                         </div>
                         <div className="text-xs text-muted-foreground capitalize">
-                          {b.type === "coin_topup" ? "wallet" : b.type}
+                          {b.type === "coin_topup"
+                            ? "wallet"
+                            : b.type === "package" || b.type === "holiday"
+                              ? "package"
+                              : b.type}
                           {isToday && b.type !== "coin_topup" && (
                             <span className="ml-2 rounded-full bg-primary/10 text-primary px-1.5 py-0.5 text-[10px] font-semibold">
                               Today
@@ -2808,6 +2853,7 @@ const BookingsView = () => {
                           onClick={(e) => e.stopPropagation()}
                         >
                           {b.type !== "coin_topup" &&
+                            b.type !== "package" &&
                             b.status !== "cancelled" &&
                             viewMode === "upcoming" && (
                               <button
@@ -2946,7 +2992,10 @@ const BookingsView = () => {
                                   ? "Wallet Coin Top-up"
                                   : b.type === "car"
                                     ? b.carName
-                                    : `${b.hotelName || ""}${b.roomNumber ? " · Room " + b.roomNumber : ""}`}
+                                    : b.type === "package" ||
+                                        b.type === "holiday"
+                                      ? b.packageName || "Holiday Package"
+                                      : `${b.hotelName || ""}${b.roomNumber ? " · Room " + b.roomNumber : ""}`}
                               </p>
                             </div>
                             {b.type === "car" && b.pickupLocation && (
@@ -3021,6 +3070,410 @@ const BookingsView = () => {
                       </tr>
                     )}
                   </>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── PACKAGE BOOKINGS ─────────────────────────────────────────────────────────
+const PackageBookingsView = () => {
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refundForm, setRefundForm] = useState(null);
+  const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [viewMode, setViewMode] = useState("upcoming");
+  const [expanded, setExpanded] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        type: "package",
+        limit: 200,
+        viewMode,
+      });
+
+      if (dateFrom) params.append("dateFrom", dateFrom);
+
+      const data = await api.get(`/api/admin/bookings?${params.toString()}`);
+      setBookings(data.bookings || []);
+    } catch (err) {
+      console.error("Failed to load package bookings:", err);
+      setBookings([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, [viewMode, dateFrom]);
+
+  const handleCancel = async (id) => {
+    if (!confirm("Cancel this package booking and initiate refund?")) return;
+    try {
+      await api.post(`/api/admin/bookings/${id}/cancel`, {});
+      load();
+    } catch (err) {
+      alert(err.message || "Unable to cancel booking");
+    }
+  };
+
+  const handleRefund = async (e) => {
+    e.preventDefault();
+    if (!refundForm) return;
+
+    const fd = new FormData(e.target);
+    try {
+      await api.postForm(`/api/admin/bookings/${refundForm._id}/refund`, fd);
+      setRefundForm(null);
+      load();
+    } catch (err) {
+      alert(err.message || "Unable to process refund");
+    }
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return "—";
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  const filteredBookings = bookings.filter((booking) => {
+    const q = search.toLowerCase();
+    return (
+      !search ||
+      booking.userName?.toLowerCase().includes(q) ||
+      booking.userEmail?.toLowerCase().includes(q) ||
+      booking.packageName?.toLowerCase().includes(q)
+    );
+  });
+
+  return (
+    <div>
+      <h2 className="mb-4 font-heading text-lg font-bold text-foreground">
+        Package Bookings
+      </h2>
+
+      <div className="mb-5 flex gap-2 border-b border-border">
+        <button
+          onClick={() => setViewMode("upcoming")}
+          className={`px-3 py-2 font-medium transition-colors ${
+            viewMode === "upcoming"
+              ? "border-b-2 border-primary text-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Today & Future
+        </button>
+        <button
+          onClick={() => setViewMode("past")}
+          className={`px-3 py-2 font-medium transition-colors ${
+            viewMode === "past"
+              ? "border-b-2 border-primary text-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Past Bookings
+        </button>
+        <button
+          onClick={() => setViewMode("all")}
+          className={`px-3 py-2 font-medium transition-colors ${
+            viewMode === "all"
+              ? "border-b-2 border-primary text-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          All Bookings
+        </button>
+      </div>
+
+      <div className="mb-5 flex flex-wrap gap-3">
+        <Input
+          placeholder="Search by user or package"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="bg-muted w-64"
+        />
+        <Input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          className="bg-muted w-56"
+        />
+        {(search || dateFrom) && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSearch("");
+              setDateFrom("");
+            }}
+          >
+            Clear
+          </Button>
+        )}
+      </div>
+
+      {refundForm && (
+        <div className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-card">
+          <h3 className="mb-4 font-heading font-bold text-foreground">
+            Confirm Refund — {refundForm._id.slice(-8)}
+          </h3>
+          <form onSubmit={handleRefund} className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Transaction ID *
+              </label>
+              <Input name="transactionId" required className="bg-muted" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Payment Method *
+              </label>
+              <Input
+                name="paymentMethod"
+                placeholder="e.g. bKash, Bank Transfer"
+                required
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Screenshot (optional)
+              </label>
+              <input
+                type="file"
+                name="screenshot"
+                accept="image/*"
+                className="text-sm text-muted-foreground"
+              />
+            </div>
+            <div className="sm:col-span-2 flex gap-2">
+              <Button
+                type="submit"
+                className="bg-gradient-primary text-primary-foreground"
+              >
+                Confirm Refund
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRefundForm(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="text-muted-foreground">Loading...</div>
+      ) : filteredBookings.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card p-10 text-center text-muted-foreground">
+          {bookings.length === 0
+            ? "No package bookings available."
+            : "No package bookings match your search."}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-border bg-card shadow-card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50">
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                  User
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                  Package
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                  Travel Date
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                  People
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                  Amount
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                  Status
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredBookings.map((b) => {
+                const isToday =
+                  b.travelDate &&
+                  new Date(b.travelDate).toDateString() ===
+                    new Date().toDateString();
+                return (
+                  <Fragment key={b._id}>
+                    <tr
+                      className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                      onClick={() =>
+                        setExpanded(expanded === b._id ? null : b._id)
+                      }
+                    >
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-foreground">
+                          {b.userName || "—"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {b.userEmail || ""}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-foreground">
+                          {b.packageName || "Holiday Package"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Holiday Package
+                          {isToday && (
+                            <span className="ml-2 rounded-full bg-primary/10 text-primary px-1.5 py-0.5 text-[10px] font-semibold">
+                              Today
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">
+                        {formatDate(b.travelDate)}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-foreground">
+                        {b.peopleCount || 1}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-foreground">
+                        ৳{b.totalAmount?.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_COLORS[b.status] || "bg-muted text-muted-foreground"}`}
+                        >
+                          {b.status}
+                        </span>
+                        {b.refundStatus && (
+                          <span
+                            className={`ml-1 rounded-full px-2 py-0.5 text-xs font-medium ${b.refundStatus === "completed" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}
+                          >
+                            {b.refundStatus === "completed"
+                              ? "refunded"
+                              : b.refundStatus}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div
+                          className="flex gap-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {b.status !== "cancelled" && (
+                            <button
+                              title="Cancel booking"
+                              className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                              onClick={() => handleCancel(b._id)}
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          )}
+                          {b.refundStatus === "in_progress" && (
+                            <button
+                              title="Process refund"
+                              className="rounded-lg p-1.5 text-muted-foreground hover:bg-success/10 hover:text-success transition-colors"
+                              onClick={() => setRefundForm(b)}
+                            >
+                              <Check className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {expanded === b._id && (
+                      <tr className="bg-muted/20">
+                        <td colSpan={7} className="px-6 py-4">
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+                            <div>
+                              <span className="text-muted-foreground text-xs">
+                                Booking ID
+                              </span>
+                              <p className="font-mono text-foreground">
+                                {b._id}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground text-xs">
+                                Package
+                              </span>
+                              <p className="font-medium text-foreground">
+                                {b.packageName || "Holiday Package"}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground text-xs">
+                                Travel Date
+                              </span>
+                              <p className="text-foreground">
+                                {formatDate(b.travelDate)}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground text-xs">
+                                People
+                              </span>
+                              <p className="text-foreground">
+                                {b.peopleCount || 1}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground text-xs">
+                                Price Per Person
+                              </span>
+                              <p className="text-foreground">
+                                ৳{(b.pricePerPerson || 0).toLocaleString()}
+                              </p>
+                            </div>
+                            {b.contactNumber && (
+                              <div>
+                                <span className="text-muted-foreground text-xs">
+                                  Contact Number
+                                </span>
+                                <p className="text-foreground">
+                                  {b.contactNumber}
+                                </p>
+                              </div>
+                            )}
+                            <div>
+                              <span className="text-muted-foreground text-xs">
+                                Transaction ID
+                              </span>
+                              <p className="font-mono text-foreground text-xs break-all">
+                                {b.transactionId || "—"}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground text-xs">
+                                Booked On
+                              </span>
+                              <p className="text-foreground">
+                                {new Date(b.createdAt).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -5049,18 +5502,6 @@ const BusesView = () => {
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium text-foreground">
-                Date <span className="text-destructive">*</span>
-              </label>
-              <Input
-                name="date"
-                type="date"
-                defaultValue={form?.date || ""}
-                required
-                className="bg-muted"
-              />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-foreground">
                 Price per Seat (BDT) <span className="text-destructive">*</span>
               </label>
               <div className="relative">
@@ -5329,6 +5770,411 @@ const BusesView = () => {
                     </tr>
                   )}
                 </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Tour Packages Management View
+const PackagesView = () => {
+  const [packages, setPackages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const loadPackages = async () => {
+    setLoading(true);
+    try {
+      const data = await api.get("/api/admin/packages");
+      setPackages(data || []);
+    } catch (err) {
+      console.error("Failed to load tour packages", err);
+      setPackages([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPackages();
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const file = e.target.image?.files?.[0];
+    const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
+
+    if (file && file.size > MAX_FILE_SIZE) {
+      alert(
+        "Selected image is too large. Please choose an image smaller than 15MB.",
+      );
+      return;
+    }
+
+    setSaving(true);
+
+    const formData = new FormData();
+    formData.append("name", e.target.name.value.trim());
+    formData.append("transportation", e.target.transportation.value.trim());
+    formData.append("hotel", e.target.hotel.value.trim());
+    formData.append("meal", e.target.meal.value.trim());
+    formData.append("duration", e.target.duration.value.trim());
+    formData.append("pricePerPerson", e.target.pricePerPerson.value || "0");
+    formData.append("minimumPerson", e.target.minimumPerson.value || "0");
+    formData.append("localTransport", e.target.localTransport.value.trim());
+    formData.append("additionalInfo", e.target.additionalInfo.value.trim());
+    formData.append(
+      "termsAndConditions",
+      e.target.termsAndConditions.value.trim(),
+    );
+    formData.append("description", e.target.description.value.trim());
+    formData.append(
+      "giftIncluded",
+      e.target.giftIncluded.checked ? "true" : "false",
+    );
+
+    if (file) {
+      formData.append("image", file);
+    }
+
+    try {
+      if (form === "add") {
+        await api.postForm("/api/admin/packages", formData);
+      } else {
+        await api.putForm(`/api/admin/packages/${form._id}`, formData);
+      }
+      setForm(null);
+      await loadPackages();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("Delete this tour package?")) return;
+    try {
+      await api.delete(`/api/admin/packages/${id}`);
+      await loadPackages();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleEdit = (pkg) => {
+    setForm(pkg);
+  };
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="font-heading text-lg font-bold text-foreground">
+          Tour Packages
+        </h2>
+        <Button
+          className="gap-2 bg-gradient-primary text-primary-foreground"
+          onClick={() => setForm("add")}
+        >
+          <Plus className="h-4 w-4" /> Add Package
+        </Button>
+      </div>
+
+      {form && (
+        <div className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-card">
+          <h3 className="mb-4 font-heading font-bold text-foreground">
+            {form === "add" ? "Add New Package" : `Edit: ${form.name}`}
+          </h3>
+          <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Package Name <span className="text-destructive">*</span>
+              </label>
+              <Input
+                name="name"
+                defaultValue={form?.name || ""}
+                placeholder="e.g. Sylhet Explorer"
+                required
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Transportation <span className="text-destructive">*</span>
+              </label>
+              <Input
+                name="transportation"
+                defaultValue={form?.transportation || ""}
+                placeholder="e.g. Private coach"
+                required
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Hotel <span className="text-destructive">*</span>
+              </label>
+              <Input
+                name="hotel"
+                defaultValue={form?.hotel || ""}
+                placeholder="e.g. Sea View Resort"
+                required
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Meal <span className="text-destructive">*</span>
+              </label>
+              <Input
+                name="meal"
+                defaultValue={form?.meal || ""}
+                placeholder="e.g. Breakfast & dinner"
+                required
+                className="bg-muted"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Package Image
+              </label>
+              {form?.image && (
+                <img
+                  src={imgUrl(form.image)}
+                  alt={form.name || "Package image"}
+                  className="mb-3 h-40 w-full max-w-xs rounded-2xl object-cover"
+                />
+              )}
+              <Input
+                type="file"
+                name="image"
+                accept="image/*"
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Price per Person (BDT)
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  ৳
+                </span>
+                <Input
+                  name="pricePerPerson"
+                  type="number"
+                  min="0"
+                  required
+                  defaultValue={form?.pricePerPerson ?? ""}
+                  placeholder="1500"
+                  className="bg-muted pl-8"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Minimum Person
+              </label>
+              <Input
+                name="minimumPerson"
+                type="number"
+                min="1"
+                required
+                defaultValue={form?.minimumPerson ?? ""}
+                placeholder="2"
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Package Duration
+              </label>
+              <Input
+                name="duration"
+                defaultValue={form?.duration || ""}
+                placeholder="e.g. 2 nights 3 days"
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Local Transport
+              </label>
+              <Input
+                name="localTransport"
+                defaultValue={form?.localTransport || ""}
+                placeholder="e.g. City tour bus, Boat"
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Additional Info
+              </label>
+              <Input
+                name="additionalInfo"
+                defaultValue={form?.additionalInfo || ""}
+                placeholder="e.g. Free WiFi, guide included"
+                className="bg-muted"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Terms & Conditions
+              </label>
+              <Textarea
+                name="termsAndConditions"
+                defaultValue={form?.termsAndConditions || ""}
+                placeholder="Enter package terms and conditions..."
+                className="bg-muted"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
+                <input
+                  type="checkbox"
+                  name="giftIncluded"
+                  defaultChecked={form?.giftIncluded || false}
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                />
+                Gift Included
+              </label>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Description
+              </label>
+              <Textarea
+                name="description"
+                defaultValue={form?.description || ""}
+                placeholder="Provide details about the tour package..."
+                className="bg-muted"
+              />
+            </div>
+            <div className="sm:col-span-2 flex flex-wrap gap-2">
+              <Button
+                type="submit"
+                disabled={saving}
+                className="bg-gradient-primary text-primary-foreground"
+              >
+                {form === "add" ? "Add Package" : "Update Package"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setForm(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="text-muted-foreground">Loading tour packages...</div>
+      ) : packages.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card p-10 text-center text-muted-foreground">
+          No tour packages yet. Add one above.
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-card">
+          <table className="w-full text-sm">
+            <thead className="border-b border-border bg-muted/50">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Name
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Transportation
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Hotel
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Meal
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Duration
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Price/Person
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Min Person
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Local Transport
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Gift
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {packages.map((pkg) => (
+                <tr
+                  key={pkg._id}
+                  className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                >
+                  <td className="px-4 py-3 text-foreground">
+                    <div className="font-medium">{pkg.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {pkg.description?.slice(0, 80) || "No description"}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {pkg.transportation}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {pkg.hotel}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {pkg.meal}
+                  </td>
+                  <td className="px-4 py-3 text-foreground">
+                    {pkg.duration || "—"}
+                  </td>
+                  <td className="px-4 py-3 font-medium text-foreground">
+                    {pkg.pricePerPerson
+                      ? `৳${pkg.pricePerPerson.toLocaleString()}`
+                      : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {pkg.minimumPerson || "—"}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {pkg.localTransport || "—"}
+                  </td>
+                  <td className="px-4 py-3 text-foreground">
+                    {pkg.giftIncluded ? "Yes" : "No"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className="rounded-lg border border-border px-2 py-1 text-sm text-foreground transition hover:bg-accent"
+                        onClick={() => handleEdit(pkg)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-lg border border-destructive px-2 py-1 text-sm text-destructive transition hover:bg-destructive/10"
+                        onClick={() => handleDelete(pkg._id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>

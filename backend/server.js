@@ -192,6 +192,9 @@ app.use("/api/staff", require("./routes/staff"));
 app.use("/api/manual-payment", require("./routes/manual-payment"));
 app.use("/api/hangcoin", require("./routes/hangcoin"));
 
+// Public packages endpoint
+app.use("/api/packages", require("./routes/packages"));
+
 // 404 handler
 app.use((req, res) => res.status(404).json({ message: "Route not found" }));
 

@@ -13,6 +13,7 @@ import {
   Hotel,
   Car,
   BusFront,
+  Package,
   X,
   FileText,
   AlertCircle,
@@ -109,21 +110,35 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
     }
   };
 
+  const parseBookingDate = (value) => {
+    if (!value) return null;
+    if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [year, month, day] = value.split("-").map(Number);
+      return new Date(year, month - 1, day);
+    }
+    return new Date(value);
+  };
+
   const canCancelBooking = () => {
     if (!booking || booking.status !== "confirmed") return false;
 
-    const checkInTime = new Date(booking.checkIn || booking.pickupDate);
+    const checkInTime = parseBookingDate(
+      booking.checkIn || booking.pickupDate || booking.travelDate,
+    );
     const now = new Date();
     const hoursUntilCheckIn = (checkInTime - now) / (1000 * 60 * 60);
 
-    return hoursUntilCheckIn >= 23;
+    return hoursUntilCheckIn > 24;
   };
 
   const getHoursUntilCheckIn = () => {
     if (!booking) return 0;
-    const checkInTime = new Date(booking.checkIn || booking.pickupDate);
+    const checkInTime = parseBookingDate(
+      booking.checkIn || booking.pickupDate || booking.travelDate,
+    );
     const now = new Date();
-    return Math.ceil((checkInTime - now) / (1000 * 60 * 60));
+    const hoursUntilCheckIn = (checkInTime - now) / (1000 * 60 * 60);
+    return Math.max(0, Math.ceil(hoursUntilCheckIn - 24));
   };
 
   const handleCancelRequest = async () => {
@@ -162,6 +177,7 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
   const isHotel = booking?.type === "hotel";
   const isCar = booking?.type === "car";
   const isBus = booking?.type === "bus";
+  const isPackage = booking?.type === "package" || booking?.type === "holiday";
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -186,6 +202,15 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
           </div>
         ) : booking ? (
           <div className="space-y-6">
+            {isPackage && booking.packageDetails?.image && (
+              <div className="overflow-hidden rounded-[1.5rem]">
+                <img
+                  src={imgUrl(booking.packageDetails.image)}
+                  alt={booking.packageName || "Holiday Package"}
+                  className="h-48 w-full object-cover"
+                />
+              </div>
+            )}
             {/* Header */}
             <div className="flex items-start justify-between border-b pb-4">
               <div className="flex items-center gap-3">
@@ -195,13 +220,17 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
                       ? "bg-primary/10"
                       : isBus
                         ? "bg-blue/10"
-                        : "bg-secondary/10"
+                        : isPackage
+                          ? "bg-violet-100"
+                          : "bg-secondary/10"
                   }`}
                 >
                   {isHotel ? (
                     <Hotel className="h-6 w-6 text-primary" />
                   ) : isBus ? (
                     <BusFront className="h-6 w-6 text-blue-600" />
+                  ) : isPackage ? (
+                    <Package className="h-6 w-6 text-violet-600" />
                   ) : (
                     <Car className="h-6 w-6 text-secondary" />
                   )}
@@ -212,14 +241,18 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
                       ? booking.hotelName
                       : isBus
                         ? booking.busName
-                        : booking.carName}
+                        : isPackage
+                          ? booking.packageName || "Holiday Package"
+                          : booking.carName}
                   </h3>
                   <p className="text-sm text-muted-foreground">
                     {isHotel
                       ? `Room ${booking.roomNumber}`
                       : isBus
                         ? `Seats: ${booking.seats}`
-                        : booking.carType}
+                        : isPackage
+                          ? `${booking.peopleCount || 1} people`
+                          : booking.carType}
                   </p>
                 </div>
               </div>
@@ -270,7 +303,7 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
                       Duration
                     </p>
                     <p className="font-semibold">
-                      \n {booking.days} day{booking.days !== 1 ? "s" : ""}
+                      {booking.days} day{booking.days !== 1 ? "s" : ""}
                     </p>
                   </div>
                 </>
@@ -332,6 +365,30 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Seats</p>
                     <p className="font-semibold">{booking.seats || "N/A"}</p>
+                  </div>
+                </>
+              )}
+              {isPackage && (
+                <>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Travel Date
+                    </p>
+                    <p className="font-semibold">
+                      {formatDate(booking.travelDate)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">People</p>
+                    <p className="font-semibold">{booking.peopleCount || 1}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Price Per Person
+                    </p>
+                    <p className="font-semibold">
+                      ৳{(booking.pricePerPerson || 0).toLocaleString()}
+                    </p>
                   </div>
                 </>
               )}
@@ -497,12 +554,11 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
               !booking.cancelRequest && (
                 <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
                   <p className="text-sm text-blue-900">
-                    ⏰ You can cancel this booking up to{" "}
+                    ⏰ You have{" "}
                     <span className="font-semibold">
-                      {getHoursUntilCheckIn()} hours
+                      {getHoursUntilCheckIn()}
                     </span>{" "}
-                    before check-in. After that, the booking cannot be
-                    cancelled.
+                    hours remaining to cancel before the 24-hour cutoff.
                   </p>
                 </div>
               )}

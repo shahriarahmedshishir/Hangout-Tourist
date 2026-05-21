@@ -796,16 +796,22 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
     // Get bookings
     const bookingsPipeline = [];
 
-    // Add computed startDate field (pickupDate for cars, checkIn for hotels)
+    // Add computed startDate field (pickupDate for cars, checkIn for hotels, travelDate for packages)
     bookingsPipeline.push({
       $addFields: {
-        startDate: { $ifNull: ["$pickupDate", "$checkIn"] },
+        startDate: { $ifNull: ["$pickupDate", "$checkIn", "$travelDate"] },
       },
     });
 
     // Build initial match
     const bookingsMatch = {};
-    if (type && type !== "coin_topup") bookingsMatch.type = type;
+    if (type && type !== "coin_topup") {
+      if (type === "package" || type === "holiday") {
+        bookingsMatch.type = { $in: ["package", "holiday"] };
+      } else {
+        bookingsMatch.type = type;
+      }
+    }
     if (status) bookingsMatch.status = status;
 
     // Date filtering based on viewMode
@@ -861,6 +867,8 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
       searchFilters.push({ userName: { $regex: search, $options: "i" } });
       searchFilters.push({ carName: { $regex: search, $options: "i" } });
       searchFilters.push({ hotelName: { $regex: search, $options: "i" } });
+      searchFilters.push({ packageName: { $regex: search, $options: "i" } });
+      bookingsPipeline.push({ $match: { $or: searchFilters } });
     }
 
     // Remove internals from bookings
@@ -3231,16 +3239,15 @@ router.post(
         seats,
         acType,
         departureTime,
-        date,
         price,
         totalSeats,
         routes,
       } = req.body;
 
-      if (!name || !acType || !departureTime || !date || !price || !routes) {
+      if (!name || !acType || !departureTime || !price || !routes) {
         return res.status(400).json({
           message:
-            "name, acType, departureTime, date, price, and routes are required",
+            "name, acType, departureTime, price, and routes are required",
         });
       }
 
@@ -3270,7 +3277,6 @@ router.post(
         seats: parseInt(seats) || 45,
         acType, // "AC" or "Non-AC"
         departureTime, // "10:30 AM", "2:00 PM", etc.
-        date, // YYYY-MM-DD format
         price: parseInt(price),
         totalSeats: parseInt(totalSeats) || 45,
         routes: routeArray,
@@ -3304,7 +3310,6 @@ router.put(
         seats,
         acType,
         departureTime,
-        date,
         price,
         totalSeats,
         routes,
@@ -3340,7 +3345,6 @@ router.put(
         seats: parseInt(seats) || bus.seats,
         acType: acType || bus.acType,
         departureTime: departureTime || bus.departureTime,
-        date: date || bus.date,
         price: parseInt(price) || bus.price,
         totalSeats: parseInt(totalSeats) || bus.totalSeats || 45,
         routes: routeArray,
@@ -3404,6 +3408,220 @@ router.get("/buses/:id/bookings", adminAuth, async (req, res) => {
       .sort({ createdAt: -1 })
       .toArray();
     res.json(bookings);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// TOUR PACKAGES MANAGEMENT
+// ─────────────────────────────────────────────────────────────────────────
+
+router.get("/packages", adminAuth, async (req, res) => {
+  try {
+    const db = await getDb();
+    const packages = await db
+      .collection("packages")
+      .find({ createdBy: String(req.user._id) })
+      .sort({ createdAt: -1 })
+      .toArray();
+    res.json(packages);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post(
+  "/packages",
+  adminAuth,
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      const {
+        name,
+        transportation,
+        hotel,
+        meal,
+        duration,
+        pricePerPerson,
+        minimumPerson,
+        localTransport,
+        additionalInfo,
+        termsAndConditions,
+        description,
+        giftIncluded,
+      } = req.body;
+
+      const pricePerPersonValue = Number(pricePerPerson);
+      const minimumPersonValue = Number(minimumPerson);
+
+      if (
+        !name ||
+        !transportation ||
+        !hotel ||
+        !meal ||
+        !pricePerPersonValue ||
+        !minimumPersonValue
+      ) {
+        return res.status(400).json({
+          message:
+            "Package name, transportation, hotel, meal, price per person, and minimum person are required",
+        });
+      }
+
+      const imageUrl = req.file ? `/uploads/${req.file.filename}` : "";
+      const db = await getDb();
+      const pkg = {
+        name,
+        transportation,
+        hotel,
+        meal,
+        duration: duration || "",
+        pricePerPerson: pricePerPersonValue,
+        minimumPerson: minimumPersonValue,
+        localTransport: localTransport || "",
+        additionalInfo: additionalInfo || "",
+        termsAndConditions: termsAndConditions || "",
+        description: description || "",
+        giftIncluded: giftIncluded === true || giftIncluded === "true",
+        image: imageUrl,
+        createdBy: String(req.user._id),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const result = await db.collection("packages").insertOne(pkg);
+      res.json({ _id: result.insertedId, ...pkg });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
+
+router.put(
+  "/packages/:id",
+  adminAuth,
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      if (!isValidObjectId(req.params.id)) {
+        return res.status(400).json({ message: "Invalid package id" });
+      }
+
+      const db = await getDb();
+      const existing = await db
+        .collection("packages")
+        .findOne({ _id: new ObjectId(req.params.id) });
+
+      if (!existing) {
+        return res.status(404).json({ message: "Tour package not found" });
+      }
+      if (String(existing.createdBy) !== String(req.user._id)) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      const {
+        name,
+        transportation,
+        hotel,
+        meal,
+        duration,
+        pricePerPerson,
+        minimumPerson,
+        localTransport,
+        additionalInfo,
+        termsAndConditions,
+        description,
+        giftIncluded,
+      } = req.body;
+
+      const pricePerPersonValue =
+        pricePerPerson !== undefined
+          ? Number(pricePerPerson)
+          : existing.pricePerPerson;
+      const minimumPersonValue =
+        minimumPerson !== undefined
+          ? Number(minimumPerson)
+          : existing.minimumPerson;
+
+      const updated = {
+        name: name || existing.name,
+        transportation: transportation || existing.transportation,
+        hotel: hotel || existing.hotel,
+        meal: meal || existing.meal,
+        duration: typeof duration === "string" ? duration : existing.duration,
+        pricePerPerson:
+          !Number.isNaN(pricePerPersonValue) && pricePerPersonValue > 0
+            ? pricePerPersonValue
+            : existing.pricePerPerson,
+        minimumPerson:
+          !Number.isNaN(minimumPersonValue) && minimumPersonValue > 0
+            ? minimumPersonValue
+            : existing.minimumPerson,
+        localTransport:
+          typeof localTransport === "string"
+            ? localTransport
+            : existing.localTransport,
+        additionalInfo:
+          typeof additionalInfo === "string"
+            ? additionalInfo
+            : existing.additionalInfo,
+        termsAndConditions:
+          typeof termsAndConditions === "string"
+            ? termsAndConditions
+            : existing.termsAndConditions,
+        description:
+          typeof description === "string" ? description : existing.description,
+        giftIncluded:
+          giftIncluded === true || giftIncluded === "true"
+            ? true
+            : giftIncluded === false || giftIncluded === "false"
+              ? false
+              : existing.giftIncluded,
+        updatedAt: new Date(),
+      };
+
+      if (req.file) {
+        if (existing.image) {
+          deleteImageFiles([existing.image]);
+        }
+        updated.image = `/uploads/${req.file.filename}`;
+      }
+
+      await db
+        .collection("packages")
+        .updateOne({ _id: new ObjectId(req.params.id) }, { $set: updated });
+
+      res.json({ _id: req.params.id, ...existing, ...updated });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
+
+router.delete("/packages/:id", adminAuth, async (req, res) => {
+  try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid package id" });
+    }
+
+    const db = await getDb();
+    const existing = await db
+      .collection("packages")
+      .findOne({ _id: new ObjectId(req.params.id) });
+
+    if (!existing) {
+      return res.status(404).json({ message: "Tour package not found" });
+    }
+    if (String(existing.createdBy) !== String(req.user._id)) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    await db
+      .collection("packages")
+      .deleteOne({ _id: new ObjectId(req.params.id) });
+
+    res.json({ message: "Tour package deleted" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

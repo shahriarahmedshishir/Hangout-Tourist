@@ -384,6 +384,122 @@ router.post("/initiate/car", auth, async (req, res) => {
   }
 });
 
+// POST /api/payment/initiate/package
+// Initiates a holiday package booking payment through SSL Commerz
+router.post("/initiate/package", auth, async (req, res) => {
+  try {
+    if (req.user.role === "hotel_staff" || req.user.role === "admin") {
+      return res
+        .status(403)
+        .json({ message: "Staff and admin accounts cannot book packages" });
+    }
+
+    const { packageId, travelDate, peopleCount, guestDetails, totalAmount } =
+      req.body;
+
+    if (!packageId || !travelDate || !peopleCount) {
+      return res.status(400).json({
+        message: "packageId, travelDate, and peopleCount are required",
+      });
+    }
+
+    if (!isValidObjectId(packageId)) {
+      return res.status(400).json({ message: "Invalid package id" });
+    }
+
+    const travelDateObj = new Date(travelDate);
+    if (isNaN(travelDateObj)) {
+      return res.status(400).json({ message: "Invalid travel date" });
+    }
+
+    const db = await getDb();
+    const pkg = await db
+      .collection("packages")
+      .findOne({ _id: new ObjectId(packageId) });
+    if (!pkg) return res.status(404).json({ message: "Package not found" });
+
+    const count = Number(peopleCount);
+    const minPerson = Number(pkg.minimumPerson || 1);
+    if (count < minPerson) {
+      return res.status(400).json({
+        message: `At least ${minPerson} people are required for this package`,
+      });
+    }
+
+    const computedTotal = Number(pkg.pricePerPerson || 0) * count;
+    const clientTotalAmount = parseFloat(totalAmount) || 0;
+    if (!validatePrice(clientTotalAmount, computedTotal, 1)) {
+      return res.status(400).json({
+        message: `Price mismatch. Expected ${computedTotal} BDT, got ${clientTotalAmount} BDT. Please refresh and try again.`,
+        expectedAmount: computedTotal,
+      });
+    }
+
+    const tran_id = makeTranId("HT-PKG");
+
+    const userDoc = await db
+      .collection("users")
+      .findOne({ _id: new ObjectId(req.user.id) });
+
+    const guestEmail =
+      userDoc?.email || req.user.email || guestDetails?.email || "";
+    const finalGuestDetails = { ...(guestDetails || {}), email: guestEmail };
+
+    await db.collection("payment_sessions").insertOne({
+      tran_id,
+      type: "package",
+      userId: req.user.id,
+      packageId,
+      packageName: pkg.name,
+      travelDate: travelDateObj,
+      peopleCount: count,
+      pricePerPerson: Number(pkg.pricePerPerson || 0),
+      guestDetails: finalGuestDetails,
+      totalAmount: computedTotal,
+      createdAt: new Date(),
+    });
+
+    const sslData = {
+      total_amount: computedTotal,
+      currency: "BDT",
+      tran_id,
+      success_url: `${BACKEND_URL}/api/payment/success`,
+      fail_url: `${BACKEND_URL}/api/payment/fail`,
+      cancel_url: `${BACKEND_URL}/api/payment/cancel`,
+      ipn_url: `${BACKEND_URL}/api/payment/ipn`,
+      product_name: getProductName("holiday", pkg.name),
+      product_category: "holiday",
+      product_profile: "general",
+      cus_name: userDoc?.name || "Guest",
+      cus_email: userDoc?.email || "guest@example.com",
+      cus_add1: "Bangladesh",
+      cus_city: "Dhaka",
+      cus_country: "Bangladesh",
+      cus_phone: guestDetails?.contactNumber || "01700000000",
+      ship_name: userDoc?.name || "Guest",
+      ship_add1: "Bangladesh",
+      ship_city: "Dhaka",
+      ship_country: "Bangladesh",
+      shipping_method: "NO",
+      num_of_item: count,
+    };
+
+    const sslcz = new SSLCommerzPayment(STORE_ID, STORE_PASSWORD, IS_LIVE);
+    const apiResponse = await sslcz.init(sslData);
+
+    if (apiResponse?.GatewayPageURL) {
+      return res.json({ paymentUrl: apiResponse.GatewayPageURL, tran_id });
+    }
+
+    await db.collection("payment_sessions").deleteOne({ tran_id });
+    res
+      .status(502)
+      .json({ message: "Failed to initiate payment gateway. Try again." });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/payment/initiate/coin-topup
 // Initiates a coin top-up payment through SSL Commerz
 // User taps up coins which get auto-credited to wallet after payment succeeds
@@ -787,6 +903,25 @@ async function _confirmBooking(tran_id, validation = null) {
       pricePerDay: session.pricePerDay,
       totalAmount: session.totalAmount,
       seatsBooked: session.seatsBooked || 1,
+      status: "confirmed",
+      transactionId: tran_id,
+      paymentMethod: "SSLCommerz",
+      paidAt: now,
+      refundStatus: null,
+      createdAt: now,
+    });
+  } else if (session.type === "package" || session.type === "holiday") {
+    console.log("Creating holiday package booking");
+    await db.collection("bookings").insertOne({
+      userId: session.userId,
+      type: "holiday",
+      packageId: session.packageId,
+      packageName: session.packageName,
+      travelDate: session.travelDate,
+      peopleCount: session.peopleCount,
+      pricePerPerson: session.pricePerPerson,
+      totalAmount: session.totalAmount,
+      guestDetails: session.guestDetails || {},
       status: "confirmed",
       transactionId: tran_id,
       paymentMethod: "SSLCommerz",

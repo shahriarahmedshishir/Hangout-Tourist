@@ -309,6 +309,81 @@ router.post("/initiate-booking/car", auth, async (req, res) => {
   }
 });
 
+// POST /api/hangcoin/initiate-booking/package — Initiate holiday package booking with pending hangcoin payment
+router.post("/initiate-booking/package", auth, async (req, res) => {
+  try {
+    if (req.user.role === "hotel_staff" || req.user.role === "admin") {
+      return res
+        .status(403)
+        .json({ message: "Staff and admin accounts cannot book packages" });
+    }
+
+    const { packageId, travelDate, peopleCount, guestDetails } = req.body;
+
+    if (!packageId || !travelDate || !peopleCount) {
+      return res.status(400).json({
+        message: "packageId, travelDate, and peopleCount are required",
+      });
+    }
+
+    if (!isValidObjectId(packageId)) {
+      return res.status(400).json({ message: "Invalid package id" });
+    }
+
+    const travelDateObj = new Date(travelDate);
+    if (isNaN(travelDateObj)) {
+      return res.status(400).json({ message: "Invalid travel date" });
+    }
+
+    const db = await getDb();
+    const pkg = await db
+      .collection("packages")
+      .findOne({ _id: new ObjectId(packageId) });
+    if (!pkg) return res.status(404).json({ message: "Package not found" });
+
+    const count = Number(peopleCount);
+    const minPerson = Number(pkg.minimumPerson || 1);
+    if (count < minPerson) {
+      return res.status(400).json({
+        message: `At least ${minPerson} people are required for this package`,
+      });
+    }
+
+    const userDoc = await db
+      .collection("users")
+      .findOne({ _id: new ObjectId(req.user.id) });
+
+    const guestEmail =
+      userDoc?.email || req.user.email || guestDetails?.email || "";
+    const finalGuestDetails = { ...(guestDetails || {}), email: guestEmail };
+    const totalAmount = Number(pkg.pricePerPerson || 0) * count;
+
+    const booking = {
+      userId: req.user.id,
+      type: "holiday",
+      packageId: pkg._id.toString(),
+      packageName: pkg.name,
+      travelDate: travelDateObj,
+      peopleCount: count,
+      pricePerPerson: Number(pkg.pricePerPerson || 0),
+      guestDetails: finalGuestDetails,
+      totalAmount,
+      status: "pending",
+      paymentMethod: "hangcoin",
+      createdAt: new Date(),
+    };
+
+    const result = await db.collection("bookings").insertOne(booking);
+
+    res.json({
+      message: "Booking initiated for hangcoin payment",
+      bookingId: result.insertedId,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/hangcoin/pay-booking/:bookingId — Pay booking with coins
 router.post("/pay-booking/:bookingId", auth, async (req, res) => {
   try {
@@ -371,7 +446,13 @@ router.post("/pay-booking/:bookingId", auth, async (req, res) => {
             amount: -coinsRequired,
             timestamp: new Date(),
             description: `Payment for ${
-              booking.type === "hotel" ? booking.hotelName : booking.carName
+              booking.type === "hotel"
+                ? booking.hotelName
+                : booking.type === "car"
+                  ? booking.carName
+                  : booking.type === "bus"
+                    ? booking.busName
+                    : booking.packageName || "package"
             } booking`,
           },
         },

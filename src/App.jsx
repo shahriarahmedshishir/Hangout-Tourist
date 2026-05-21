@@ -10,6 +10,7 @@ import Hotels from "./pages/Hotels";
 import HotelDetail from "./pages/HotelDetail";
 import HotelBooking from "./pages/HotelBooking";
 import Holidays from "./pages/Holidays";
+import PackageBooking from "./pages/PackageBooking";
 import Cars from "./pages/Cars";
 import CarBooking from "./pages/CarBooking";
 import BusBooking from "./pages/BusBooking";
@@ -58,12 +59,13 @@ const App = () => (
             <Route path="/hotels" element={<Hotels />} />
             <Route path="/hotels/:id" element={<HotelDetail />} />
             <Route path="/booking/hotel" element={<HotelBooking />} />
+            <Route path="/booking/package" element={<PackageBooking />} />
             <Route path="/holidays" element={<Holidays />} />
             <Route path="/cars" element={<Cars />} />
             <Route path="/booking/car" element={<CarBooking />} />
             <Route path="/booking/bus" element={<BusBooking />} />
             <Route path="/booking/coxs-bazar" element={<CoxsBazarBooking />} />
-            <Route path="/flight" element={<Flight/>} />
+            <Route path="/flight" element={<Flight />} />
             <Route path="/login" element={<Login />} />
             <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="/reset-password" element={<ResetPassword />} />

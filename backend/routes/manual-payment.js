@@ -121,6 +121,83 @@ router.post("/initiate/hotel", auth, async (req, res) => {
   }
 });
 
+// POST /api/manual-payment/initiate/package — Initiate holiday package booking with pending status
+router.post("/initiate/package", auth, async (req, res) => {
+  try {
+    if (req.user.role === "hotel_staff" || req.user.role === "admin") {
+      return res
+        .status(403)
+        .json({ message: "Staff and admin accounts cannot book packages" });
+    }
+
+    const { packageId, travelDate, peopleCount, guestDetails, contactNumber } =
+      req.body;
+
+    if (!packageId || !travelDate || !peopleCount) {
+      return res.status(400).json({
+        message: "packageId, travelDate, and peopleCount are required",
+      });
+    }
+
+    if (!isValidObjectId(packageId)) {
+      return res.status(400).json({ message: "Invalid package id" });
+    }
+
+    const travelDateObj = new Date(travelDate);
+    if (isNaN(travelDateObj)) {
+      return res.status(400).json({ message: "Invalid travel date" });
+    }
+
+    const db = await getDb();
+    const pkg = await db
+      .collection("packages")
+      .findOne({ _id: new ObjectId(packageId) });
+    if (!pkg) return res.status(404).json({ message: "Package not found" });
+
+    const count = Number(peopleCount);
+    const minPerson = Number(pkg.minimumPerson || 1);
+    if (count < minPerson) {
+      return res.status(400).json({
+        message: `At least ${minPerson} people are required for this package`,
+      });
+    }
+
+    const userDoc = await db
+      .collection("users")
+      .findOne({ _id: new ObjectId(req.user.id) });
+
+    const guestEmail =
+      userDoc?.email || req.user.email || guestDetails?.email || "";
+    const finalGuestDetails = { ...(guestDetails || {}), email: guestEmail };
+    const totalAmount = Number(pkg.pricePerPerson || 0) * count;
+
+    const booking = {
+      userId: req.user.id,
+      type: "holiday",
+      packageId: pkg._id.toString(),
+      packageName: pkg.name,
+      travelDate: travelDateObj,
+      peopleCount: count,
+      pricePerPerson: Number(pkg.pricePerPerson || 0),
+      contactNumber: contactNumber || "",
+      totalAmount,
+      status: "pending",
+      paymentMethod: "manual",
+      guestDetails: finalGuestDetails,
+      createdAt: new Date(),
+    };
+
+    const result = await db.collection("bookings").insertOne(booking);
+
+    res.json({
+      message: "Booking initiated for manual payment",
+      bookingId: result.insertedId,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/manual-payment/initiate/car — Initiate car booking with pending status
 router.post("/initiate/car", auth, async (req, res) => {
   try {
@@ -232,17 +309,31 @@ router.post("/submit", auth, async (req, res) => {
     const db = await getDb();
 
     // Verify booking exists and belongs to user
-    const bookingCollection = db.collection("carrentBookings");
-    const booking = await bookingCollection.findOne({
-      _id: new ObjectId(bookingId),
-      userId: req.user.id,
-    });
+    const bookingCollections = ["bookings", "carrentBookings", "busBookings"];
+    let booking = null;
+    let bookingCollection = null;
 
-    if (!booking) {
+    for (const collectionName of bookingCollections) {
+      const candidate = await db.collection(collectionName).findOne({
+        _id: new ObjectId(bookingId),
+        userId: req.user.id,
+      });
+      if (candidate) {
+        booking = candidate;
+        bookingCollection = db.collection(collectionName);
+        break;
+      }
+    }
+
+    if (!booking || !bookingCollection) {
       return res.status(404).json({ message: "Booking not found" });
     }
 
-    if (booking.status !== "pending" && booking.status !== "payment_failed") {
+    if (
+      booking.status !== "pending" &&
+      booking.status !== "payment_failed" &&
+      booking.status !== "pending_payment"
+    ) {
       return res.status(409).json({
         message: "Booking is not in valid state for manual payment",
       });
@@ -252,14 +343,16 @@ router.post("/submit", auth, async (req, res) => {
     const manualPayment = {
       bookingId: booking._id.toString(),
       userId: req.user.id,
-      bookingType: booking.type, // hotel or car
+      bookingType: booking.type,
       hotelId: booking.hotelId || null,
       carId: booking.carId || null,
+      busId: booking.busId || null,
+      packageId: booking.packageId || null,
       totalAmount: booking.totalAmount,
       paymentMethod,
       transactionId,
-      screenshot, // base64 or image URL
-      status: "pending", // pending, approved, rejected
+      screenshot,
+      status: "pending",
       submittedAt: new Date(),
       reviewedAt: null,
       reviewedBy: null,

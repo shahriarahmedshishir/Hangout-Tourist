@@ -301,8 +301,44 @@ router.get("/my", auth, async (req, res) => {
         .toArray(),
     ]);
 
+    const packageBookings = bookings.filter(
+      (b) => (b.type === "package" || b.type === "holiday") && b.packageId,
+    );
+    const uniquePackageIds = [
+      ...new Set(
+        packageBookings
+          .filter((b) => isValidObjectId(b.packageId))
+          .map((b) => b.packageId),
+      ),
+    ];
+
+    let packageMap = new Map();
+    if (uniquePackageIds.length) {
+      const packages = await db
+        .collection("packages")
+        .find({
+          _id: { $in: uniquePackageIds.map((id) => new ObjectId(id)) },
+        })
+        .toArray();
+      packageMap = new Map(packages.map((pkg) => [pkg._id.toString(), pkg]));
+    }
+
+    const enrichedBookings = bookings.map((booking) => {
+      if (
+        (booking.type === "package" || booking.type === "holiday") &&
+        booking.packageId &&
+        packageMap.has(booking.packageId)
+      ) {
+        return {
+          ...booking,
+          packageDetails: packageMap.get(booking.packageId),
+        };
+      }
+      return booking;
+    });
+
     res.json(
-      [...bookings, ...carRentBookings, ...busBookings].sort(
+      [...enrichedBookings, ...carRentBookings, ...busBookings].sort(
         (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
       ),
     );
@@ -476,6 +512,7 @@ router.get("/:id", auth, async (req, res) => {
 
     // Get hotel/car/bus details for invoice
     let property;
+    let packageDetails = null;
     if (booking.type === "hotel") {
       property = await db
         .collection("hotels")
@@ -488,6 +525,14 @@ router.get("/:id", auth, async (req, res) => {
       property = await db
         .collection("buses")
         .findOne({ _id: new ObjectId(booking.busId) });
+    } else if (
+      (booking.type === "package" || booking.type === "holiday") &&
+      booking.packageId &&
+      isValidObjectId(booking.packageId)
+    ) {
+      packageDetails = await db
+        .collection("packages")
+        .findOne({ _id: new ObjectId(booking.packageId) });
     }
 
     // Get cancel request if exists
@@ -499,6 +544,7 @@ router.get("/:id", auth, async (req, res) => {
       ...booking,
       user,
       property,
+      packageDetails,
       cancelRequest,
     });
   } catch (err) {
