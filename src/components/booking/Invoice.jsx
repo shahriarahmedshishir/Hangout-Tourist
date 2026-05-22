@@ -105,17 +105,28 @@ const Invoice = ({ invoice, onClose }) => {
   const isHotel = invoice.bookingType === "Hotel Booking";
   const isCar = invoice.bookingType === "Car Rental";
   const isBus = invoice.bookingType === "Bus Ticket";
+  const isPackage =
+    invoice.bookingType === "Holiday Package" ||
+    invoice.bookingType === "Package Booking";
 
   const headerTitle = isHotel
     ? "Hotel Booking Summary"
     : isCar
       ? "Car Rental Invoice"
-      : "Bus Ticket Invoice";
+      : isBus
+        ? "Bus Ticket Invoice"
+        : isPackage
+          ? "Package Invoice"
+          : "Invoice";
   const headerDesc = isHotel
     ? "Please present either an electronic or paper copy of your booking confirmation upon check-in."
     : isCar
       ? "Please present this confirmation at the rental desk."
-      : "Please present this ticket at the bus counter.";
+      : isBus
+        ? "Please present this ticket at the bus counter."
+        : isPackage
+          ? "Please keep this invoice for your holiday package booking details."
+          : "Please keep this invoice for your booking details.";
 
   return (
     <div className="w-full bg-white font-sans">
@@ -199,7 +210,14 @@ const Invoice = ({ invoice, onClose }) => {
               )}
               <div className="col-span-2">
                 <strong>
-                  {isHotel ? "Hotel Name" : isCar ? "Car Name" : "Bus Name"}:
+                  {isHotel
+                    ? "Hotel Name"
+                    : isCar
+                      ? "Car Name"
+                      : isBus
+                        ? "Bus Name"
+                        : "Package Name"}
+                  :
                 </strong>{" "}
                 <br />
                 <span className="font-medium">{invoice.property.name}</span>
@@ -210,7 +228,9 @@ const Invoice = ({ invoice, onClose }) => {
                     ? "Hotel Address"
                     : isCar
                       ? "Rental Location"
-                      : "Route"}
+                      : isBus
+                        ? "Route"
+                        : "Package Details"}
                   :
                 </strong>
                 <br />
@@ -270,6 +290,17 @@ const Invoice = ({ invoice, onClose }) => {
                   <strong>Pickup Location:</strong>{" "}
                   {invoice.property.details?.split(", Route: ")[1] ||
                     invoice.property.details}
+                </div>
+              </>
+            )}
+            {isPackage && (
+              <>
+                <div>
+                  <strong>Travel Date:</strong>{" "}
+                  {formatDate(invoice.dates.checkIn)}
+                </div>
+                <div>
+                  <strong>People Count:</strong> {invoice.peopleCount || "1"}
                 </div>
               </>
             )}
@@ -344,6 +375,22 @@ const Invoice = ({ invoice, onClose }) => {
                     </th>
                   </>
                 )}
+                {isPackage && (
+                  <>
+                    <th className="text-left py-2 px-3 font-semibold border">
+                      Package
+                    </th>
+                    <th className="text-left py-2 px-3 font-semibold border">
+                      Lead Guest
+                    </th>
+                    <th className="text-center py-2 px-3 font-semibold border">
+                      People
+                    </th>
+                    <th className="text-left py-2 px-3 font-semibold border">
+                      Contact
+                    </th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -378,6 +425,22 @@ const Invoice = ({ invoice, onClose }) => {
                     </td>
                   </>
                 )}
+                {isPackage && (
+                  <>
+                    <td className="border px-3 py-3 text-center">
+                      {invoice.peopleCount || "1"}
+                    </td>
+                    <td className="border px-3 py-3">
+                      {invoice.guestDetails?.name || invoice.customer.name}
+                    </td>
+                    <td className="border px-3 py-3 text-center">
+                      {invoice.peopleCount || "1"}
+                    </td>
+                    <td className="border px-3 py-3">
+                      {invoice.guestDetails?.email || invoice.customer.email}
+                    </td>
+                  </>
+                )}
                 {isBus && (
                   <>
                     <td className="border px-3 py-3 text-center">
@@ -401,7 +464,17 @@ const Invoice = ({ invoice, onClose }) => {
           <table className="w-full border text-sm [&_th]:bg-white">
             <tbody>
               <tr>
-                <td className="border px-3 py-2">Room Rate</td>
+                <td className="border px-3 py-2">
+                  {isPackage
+                    ? "Package Price"
+                    : isHotel
+                      ? "Room Rate"
+                      : isCar
+                        ? "Rental Charge"
+                        : isBus
+                          ? "Ticket Fare"
+                          : "Base Amount"}
+                </td>
                 <td className="border px-3 py-2 text-right">
                   {(invoice.pricing.basePrice || 0).toLocaleString()} BDT
                 </td>

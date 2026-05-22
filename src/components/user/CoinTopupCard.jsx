@@ -26,10 +26,8 @@ import { api } from "@/lib/api";
 
 const PRESET_AMOUNTS = [50, 100, 250, 500];
 const MANUAL_PAYMENT_METHODS = [
-  { value: "bank_transfer", label: "Bank Transfer" },
-  { value: "mobile_banking", label: "Mobile Banking" },
-  { value: "cash", label: "Cash Deposit" },
-  { value: "cheque", label: "Cheque" },
+  { value: "bkash", label: "bKash" },
+  { value: "nagad", label: "Nagad" },
 ];
 
 export default function CoinTopupCard({ onTopupSuccess }) {
@@ -113,12 +111,21 @@ export default function CoinTopupCard({ onTopupSuccess }) {
       return;
     }
 
+    if (!manualDescription.trim()) {
+      toast({
+        title: "Payment Details Required",
+        description: "Please provide payment details for verification.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setManualLoading(true);
     try {
       const response = await api.post("/api/payment/submit/manual-coin-topup", {
         amount: topupAmount,
         paymentMethod: manualPaymentType,
-        description: manualDescription || null,
+        description: manualDescription.trim(),
       });
 
       toast({
@@ -314,11 +321,11 @@ export default function CoinTopupCard({ onTopupSuccess }) {
             {/* Description */}
             <div>
               <Label htmlFor="description" className="text-sm font-medium">
-                Payment Details (Optional)
+                Payment Details
               </Label>
               <Textarea
                 id="description"
-                placeholder="E.g., Bank account number, reference ID, or transaction details..."
+                placeholder="E.g., transaction reference, sender number, or account details"
                 value={manualDescription}
                 onChange={(e) => setManualDescription(e.target.value)}
                 className="mt-1 resize-none"
@@ -359,7 +366,12 @@ export default function CoinTopupCard({ onTopupSuccess }) {
             {/* Submit Button */}
             <Button
               onClick={handleManualTopup}
-              disabled={manualLoading || !manualAmount || !manualPaymentType}
+              disabled={
+                manualLoading ||
+                !manualAmount ||
+                !manualPaymentType ||
+                !manualDescription.trim()
+              }
               className="w-full bg-gradient-primary text-primary-foreground hover:opacity-90"
             >
               {manualLoading ? "Submitting..." : "Submit Request"}

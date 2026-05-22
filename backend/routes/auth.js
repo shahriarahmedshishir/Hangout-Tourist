@@ -16,6 +16,79 @@ const {
   sendPasswordResetEmail,
 } = require("../utils/emailService");
 
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_BLOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const failedLoginAttempts = new Map();
+
+const getClientIp = (req) => {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) {
+    return forwarded.split(",")[0].trim();
+  }
+  return req.ip || req.connection?.remoteAddress || "unknown";
+};
+
+const resetFailedAttempts = (ip) => {
+  failedLoginAttempts.delete(ip);
+};
+
+const getFailedAttemptData = (ip) => {
+  const data = failedLoginAttempts.get(ip);
+  if (!data) return null;
+  if (data.blockedUntil && data.blockedUntil <= Date.now()) {
+    failedLoginAttempts.delete(ip);
+    return null;
+  }
+  return data;
+};
+
+const recordFailedAttempt = (ip) => {
+  const now = Date.now();
+  const existing = getFailedAttemptData(ip);
+
+  if (existing && existing.blockedUntil) {
+    return existing;
+  }
+
+  let data = existing || {
+    count: 0,
+    firstAttemptAt: now,
+    blockedUntil: null,
+  };
+
+  if (now - data.firstAttemptAt > LOGIN_BLOCK_DURATION_MS) {
+    data = {
+      count: 0,
+      firstAttemptAt: now,
+      blockedUntil: null,
+    };
+  }
+
+  data.count += 1;
+  if (data.count >= LOGIN_MAX_ATTEMPTS) {
+    data.blockedUntil = now + LOGIN_BLOCK_DURATION_MS;
+  }
+
+  failedLoginAttempts.set(ip, data);
+  return data;
+};
+
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const [ip, data] of failedLoginAttempts.entries()) {
+      if (
+        (data.blockedUntil && data.blockedUntil <= now) ||
+        (!data.blockedUntil &&
+          now - data.firstAttemptAt > LOGIN_BLOCK_DURATION_MS)
+      ) {
+        failedLoginAttempts.delete(ip);
+      }
+    }
+  },
+  5 * 60 * 1000,
+);
+
 const SECRET = process.env.JWT_SECRET;
 
 // Helper to run app-level rate limiters stored via app.set()
@@ -100,6 +173,15 @@ router.post("/login", async (req, res) => {
     // Apply auth (login) rate limiter if configured
     await runLimiter(req, res, "authLimiter");
 
+    const ip = getClientIp(req);
+    const existingBlock = getFailedAttemptData(ip);
+    if (existingBlock?.blockedUntil) {
+      return res.status(429).json({
+        message:
+          "Too many failed login attempts from this IP. Please try again later.",
+      });
+    }
+
     const { email, password } = req.body;
 
     // ✅ SECURITY: Input validation
@@ -114,7 +196,17 @@ router.post("/login", async (req, res) => {
     const user = await db
       .collection("users")
       .findOne({ email: email.toLowerCase() });
-    if (!user) return res.status(401).json({ message: "Invalid credentials" });
+
+    if (!user) {
+      const data = recordFailedAttempt(ip);
+      if (data.blockedUntil) {
+        return res.status(429).json({
+          message:
+            "Too many failed login attempts from this IP. Please try again later.",
+        });
+      }
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
 
     // Check if email is verified
     if (!user.emailVerified) {
@@ -125,7 +217,18 @@ router.post("/login", async (req, res) => {
     }
 
     const valid = await bcrypt.compare(password, user.password);
-    if (!valid) return res.status(401).json({ message: "Invalid credentials" });
+    if (!valid) {
+      const data = recordFailedAttempt(ip);
+      if (data.blockedUntil) {
+        return res.status(429).json({
+          message:
+            "Too many failed login attempts from this IP. Please try again later.",
+        });
+      }
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    resetFailedAttempts(ip);
 
     const token = jwt.sign(
       { id: user._id.toString(), role: user.role, name: user.name },

@@ -597,6 +597,10 @@ router.get("/:id/invoice", auth, async (req, res) => {
       property = await db
         .collection("buses")
         .findOne({ _id: new ObjectId(booking.busId) });
+    } else if (booking.type === "package" || booking.type === "holiday") {
+      property = await db
+        .collection("packages")
+        .findOne({ _id: new ObjectId(booking.packageId) });
     }
 
     // Create invoice object
@@ -604,6 +608,8 @@ router.get("/:id/invoice", auth, async (req, res) => {
     if (booking.type === "hotel") bookingTypeLabel = "Hotel Booking";
     else if (booking.type === "car") bookingTypeLabel = "Car Rental";
     else if (booking.type === "bus") bookingTypeLabel = "Bus Ticket";
+    else if (booking.type === "package" || booking.type === "holiday")
+      bookingTypeLabel = "Holiday Package";
 
     const invoice = {
       bookingId: booking._id,
@@ -626,19 +632,27 @@ router.get("/:id/invoice", auth, async (req, res) => {
             ? booking.hotelName
             : booking.type === "car"
               ? booking.carName
-              : booking.busName,
+              : booking.type === "bus"
+                ? booking.busName
+                : booking.packageName || "Holiday Package",
         type:
           booking.type === "hotel"
             ? "Hotel"
             : booking.type === "car"
               ? "Car"
-              : "Bus",
+              : booking.type === "bus"
+                ? "Bus"
+                : "Holiday Package",
         details:
           booking.type === "hotel"
             ? `Room ${booking.roomNumber}, ${property?.location || ""}`
             : booking.type === "car"
               ? booking.carName || booking.carType || "Car Rental"
-              : `${booking.busName}, Route: ${booking.pickupLocation}`,
+              : booking.type === "bus"
+                ? `${booking.busName}, Route: ${booking.pickupLocation}`
+                : property?.location ||
+                  property?.description ||
+                  "Package booking",
         address: property?.location || "",
       },
 
@@ -653,6 +667,13 @@ router.get("/:id/invoice", auth, async (req, res) => {
       ...(booking.type === "bus" && {
         departureTime: booking.departureTime,
       }),
+      // Additional info for holiday packages
+      ...(booking.type === "package" || booking.type === "holiday"
+        ? {
+            peopleCount: booking.peopleCount,
+            guestDetails: booking.guestDetails || {},
+          }
+        : {}),
 
       // Pricing
       pricing: {

@@ -4,6 +4,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { api, imgUrl } from "@/lib/api";
@@ -192,6 +193,11 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
           <DialogTitle>
             {showInvoice ? "Invoice" : "Booking Details"}
           </DialogTitle>
+          <DialogDescription>
+            {showInvoice
+              ? "Review your invoice and download it once approved."
+              : "View full booking details, status, and payment information."}
+          </DialogDescription>
         </DialogHeader>
 
         {showInvoice ? (
