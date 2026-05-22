@@ -26,56 +26,90 @@ async function getDb() {
 }
 
 async function createIndexes(db) {
+  async function createIndexIfNeeded(collection, key, options = {}) {
+    const coll = db.collection(collection);
+    const existing = await coll.indexes();
+    const name =
+      options.name ||
+      Object.entries(key)
+        .map(([field, order]) => `${field}_${order}`)
+        .join("_");
+    if (existing.some((idx) => idx.name === name)) {
+      return;
+    }
+    await coll.createIndex(key, options);
+  }
+
   try {
     // Hotels indexes
-    await db.collection("hotels").createIndex({ isActive: 1 });
-    await db.collection("hotels").createIndex({ createdAt: -1 });
+    await createIndexIfNeeded("hotels", { isActive: 1 });
+    await createIndexIfNeeded("hotels", { createdAt: -1 });
 
     // Rooms indexes
-    await db.collection("rooms").createIndex({ hotelId: 1, isActive: 1 });
-    await db.collection("rooms").createIndex({ hotelId: 1, price: 1 });
+    await createIndexIfNeeded("rooms", { hotelId: 1, isActive: 1 });
+    await createIndexIfNeeded("rooms", { hotelId: 1, price: 1 });
 
     // Cars indexes
-    await db.collection("cars").createIndex({ isActive: 1 });
-    await db.collection("cars").createIndex({ createdAt: -1 });
+    await createIndexIfNeeded("cars", { isActive: 1 });
+    await createIndexIfNeeded("cars", { createdAt: -1 });
 
     // Car bookings indexes
-    await db
-      .collection("carBookings")
-      .createIndex({ carId: 1, status: 1, pickUpDate: 1, dropOffDate: 1 });
-    await db.collection("carBookings").createIndex({ userId: 1, status: 1 });
+    await createIndexIfNeeded("carBookings", {
+      carId: 1,
+      status: 1,
+      pickUpDate: 1,
+      dropOffDate: 1,
+    });
+    await createIndexIfNeeded("carBookings", { userId: 1, status: 1 });
 
     // CarRent indexes
-    await db.collection("carrent").createIndex({ isActive: 1 });
-    await db.collection("carrent").createIndex({ createdAt: -1 });
+    await createIndexIfNeeded("carrent", { isActive: 1 });
+    await createIndexIfNeeded("carrent", { createdAt: -1 });
 
     // CarRent Bookings indexes
-    await db
-      .collection("carrentBookings")
-      .createIndex({ carId: 1, status: 1, pickupDate: 1, returnDate: 1 });
-    await db
-      .collection("carrentBookings")
-      .createIndex({ userId: 1, status: 1 });
-    await db.collection("carrentBookings").createIndex({ createdAt: -1 });
+    await createIndexIfNeeded("carrentBookings", {
+      carId: 1,
+      status: 1,
+      pickupDate: 1,
+      returnDate: 1,
+    });
+    await createIndexIfNeeded("carrentBookings", { userId: 1, status: 1 });
+    await createIndexIfNeeded("carrentBookings", { createdAt: -1 });
 
     // Tour package indexes
-    await db
-      .collection("packages")
-      .createIndex({ createdBy: 1, createdAt: -1 });
+    await createIndexIfNeeded("packages", { createdBy: 1, createdAt: -1 });
 
     // Payments indexes
-    await db.collection("revenue").createIndex({ createdAt: -1 });
-    await db.collection("revenue").createIndex({ type: 1, createdAt: -1 });
-    await db
-      .collection("coin_topup_requests")
-      .createIndex({ userId: 1, status: 1 });
+    await createIndexIfNeeded("revenue", { createdAt: -1 });
+    await createIndexIfNeeded("revenue", { type: 1, createdAt: -1 });
+    await createIndexIfNeeded("coin_topup_requests", { userId: 1, status: 1 });
+
+    // Booking/payment transaction indexes
+    await createIndexIfNeeded(
+      "bookings",
+      { transactionId: 1 },
+      { unique: true, sparse: true },
+    );
+    await createIndexIfNeeded(
+      "carrentBookings",
+      { transactionId: 1 },
+      { unique: true, sparse: true },
+    );
+    await createIndexIfNeeded(
+      "busBookings",
+      { transactionId: 1 },
+      { unique: true, sparse: true },
+    );
+    await createIndexIfNeeded(
+      "coin_topup_requests",
+      { transactionId: 1 },
+      { unique: true, sparse: true },
+    );
 
     // Cancel requests indexes
-    await db
-      .collection("cancel_requests")
-      .createIndex({ bookingId: 1, status: 1 });
-    await db.collection("cancel_requests").createIndex({ userId: 1 });
-    await db.collection("cancel_requests").createIndex({ createdAt: -1 });
+    await createIndexIfNeeded("cancel_requests", { bookingId: 1, status: 1 });
+    await createIndexIfNeeded("cancel_requests", { userId: 1 });
+    await createIndexIfNeeded("cancel_requests", { createdAt: -1 });
 
     console.log("Database indexes created successfully");
   } catch (err) {

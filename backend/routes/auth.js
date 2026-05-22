@@ -18,10 +18,20 @@ const {
 
 const SECRET = process.env.JWT_SECRET;
 
+// Helper to run app-level rate limiters stored via app.set()
+const runLimiter = (req, res, name) =>
+  new Promise((resolve, reject) => {
+    const limiter = req.app && req.app.get(name);
+    if (!limiter) return resolve();
+    limiter(req, res, (err) => (err ? reject(err) : resolve()));
+  });
+
 // ✅ SECURITY: Rate limiting applied in server.js and referenced here
 // Register (user only) - requires email verification
 router.post("/register", async (req, res) => {
   try {
+    // Apply signup limiter if configured
+    await runLimiter(req, res, "signupLimiter");
     const { name, email, password } = req.body;
 
     // ✅ SECURITY: Validate input
@@ -87,6 +97,9 @@ router.post("/register", async (req, res) => {
 // Login - requires email verification
 router.post("/login", async (req, res) => {
   try {
+    // Apply auth (login) rate limiter if configured
+    await runLimiter(req, res, "authLimiter");
+
     const { email, password } = req.body;
 
     // ✅ SECURITY: Input validation

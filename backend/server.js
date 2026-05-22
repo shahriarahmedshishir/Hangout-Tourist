@@ -98,7 +98,14 @@ app.use(
 app.use(mongoSanitize()); // Prevent NoSQL injection
 app.use(xss()); // Prevent XSS attacks
 
-app.use(express.json({ limit: "10mb" }));
+app.use(
+  express.json({
+    limit: "10mb",
+    verify: (req, res, buf) => {
+      req.rawBody = buf.toString("utf8");
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // Payment callbacks come from SSLCommerz's domain — register BEFORE the
@@ -194,6 +201,8 @@ app.use("/api/hangcoin", require("./routes/hangcoin"));
 
 // Public packages endpoint
 app.use("/api/packages", require("./routes/packages"));
+// Payment health endpoint (admin)
+app.use("/api/admin/payment-health", require("./routes/payment-health"));
 
 // 404 handler
 app.use((req, res) => res.status(404).json({ message: "Route not found" }));
@@ -208,7 +217,18 @@ const PORT = process.env.PORT || 5000;
 
 // Initialize cache and DB on startup
 Promise.all([getDb(), initCache()])
-  .then(() => {
+  .then(([db]) => {
+    server.on("error", (err) => {
+      if (err.code === "EADDRINUSE") {
+        console.error(
+          `❌ Port ${PORT} is already in use. Stop the process using this port or set PORT to a free port before restarting.`,
+        );
+      } else {
+        console.error("Server error:", err);
+      }
+      process.exit(1);
+    });
+
     server.listen(PORT, () => {
       console.log(
         `Server running on port ${PORT} in ${process.env.NODE_ENV || "development"} mode`,

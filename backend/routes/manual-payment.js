@@ -3,9 +3,36 @@ const router = express.Router();
 const { getDb } = require("../db");
 const { ObjectId } = require("mongodb");
 const { auth } = require("../middleware/auth");
+const fs = require("fs");
+const path = require("path");
 
 function isValidObjectId(id) {
   return /^[0-9a-fA-F]{24}$/.test(id);
+}
+
+// Validate & store base64 image data URIs (returns path under /uploads)
+async function saveScreenshot(dataUri, userId) {
+  if (!dataUri || typeof dataUri !== "string") return null;
+  // Accept data:image/png;base64,... or data:image/jpeg;base64,... or webp
+  const match = dataUri.match(
+    /^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/i,
+  );
+  if (!match) return null;
+  const mime = match[1];
+  const b64 = match[3];
+  // Limit size to 2.5MB
+  const byteLength = Buffer.byteLength(b64, "base64");
+  if (byteLength > 2.5 * 1024 * 1024) return null;
+  const ext = mime.split("/")[1] === "jpeg" ? "jpg" : mime.split("/")[1];
+  const filename = `manual_${userId}_${Date.now()}.${ext}`;
+  const filepath = path.join(__dirname, "..", "uploads", filename);
+  try {
+    fs.writeFileSync(filepath, Buffer.from(b64, "base64"));
+    return `/uploads/${filename}`;
+  } catch (err) {
+    console.error("Failed to save screenshot:", err.message);
+    return null;
+  }
 }
 
 // POST /api/manual-payment/initiate/hotel — Initiate hotel booking with pending status
@@ -306,6 +333,14 @@ router.post("/submit", auth, async (req, res) => {
       });
     }
 
+    // Validate and save screenshot (if data URI)
+    const savedScreenshot = await saveScreenshot(screenshot, req.user.id);
+    if (!savedScreenshot) {
+      return res
+        .status(400)
+        .json({ message: "Invalid screenshot data or file too large" });
+    }
+
     const db = await getDb();
 
     // Verify booking exists and belongs to user
@@ -351,7 +386,7 @@ router.post("/submit", auth, async (req, res) => {
       totalAmount: booking.totalAmount,
       paymentMethod,
       transactionId,
-      screenshot,
+      screenshot: savedScreenshot,
       status: "pending",
       submittedAt: new Date(),
       reviewedAt: null,
@@ -423,6 +458,14 @@ router.post("/:id/resubmit", auth, async (req, res) => {
       });
     }
 
+    // Validate and save screenshot for resubmission
+    const savedScreenshotRes = await saveScreenshot(screenshot, req.user.id);
+    if (!savedScreenshotRes) {
+      return res
+        .status(400)
+        .json({ message: "Invalid screenshot data or file too large" });
+    }
+
     // Create new submission (use old booking)
     const newSubmission = {
       bookingId: oldSubmission.bookingId,
@@ -434,7 +477,7 @@ router.post("/:id/resubmit", auth, async (req, res) => {
       totalAmount: oldSubmission.totalAmount,
       paymentMethod,
       transactionId,
-      screenshot,
+      screenshot: savedScreenshotRes,
       status: "pending",
       submittedAt: new Date(),
       reviewedAt: null,

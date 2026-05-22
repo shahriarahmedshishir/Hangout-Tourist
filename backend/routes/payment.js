@@ -4,7 +4,91 @@ const SSLCommerzPayment = require("sslcommerz-lts");
 const { getDb } = require("../db");
 const { ObjectId } = require("mongodb");
 const { auth } = require("../middleware/auth");
+const fs = require("fs");
+const path = require("path");
 const { isValidObjectId, validatePrice } = require("../utils/validation");
+const crypto = require("crypto");
+
+// Callback verification config: prefer HMAC secret, fallback to allowed IPs list
+const CALLBACK_SECRET = process.env.SSLCOMMERZ_CALLBACK_SECRET || null;
+const ALLOWED_IPS = (process.env.SSLCOMMERZ_IPS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+function _normalizeIp(ip) {
+  if (!ip) return "";
+  return ip.replace(/^::ffff:/, "");
+}
+
+function _isIpAllowed(ip) {
+  const n = _normalizeIp(ip);
+  return ALLOWED_IPS.some((a) => {
+    if (!a) return false;
+    // simple prefix match for convenience (supports CIDR-like prefixes if provided as '192.168.')
+    return n === a || n.startsWith(a);
+  });
+}
+
+function verifyPaymentCallback(req, res, next) {
+  // In production require either a callback secret or an IP allowlist to be configured
+  if (
+    process.env.NODE_ENV === "production" &&
+    !CALLBACK_SECRET &&
+    ALLOWED_IPS.length === 0
+  ) {
+    console.error(
+      "❌ Payment callback verification not configured in production",
+    );
+    return res.status(503).send("Payment callbacks temporarily disabled");
+  }
+
+  // If secret configured, validate HMAC-SHA256 of raw JSON body
+  if (CALLBACK_SECRET) {
+    const sigHeader = (
+      req.headers["x-sslcommerz-signature"] ||
+      req.headers["x-ssl-signature"] ||
+      req.headers["x-signature"] ||
+      ""
+    ).toString();
+    try {
+      const payload = req.rawBody || JSON.stringify(req.body || {});
+      const expected = crypto
+        .createHmac("sha256", CALLBACK_SECRET)
+        .update(payload)
+        .digest("hex");
+      const a = Buffer.from(expected);
+      const b = Buffer.from(sigHeader || "");
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+        console.warn("⚠️ Invalid payment callback signature", {
+          ip: req.ip,
+          tran_id: req.body?.tran_id,
+        });
+        return res.status(403).send("Invalid signature");
+      }
+      return next();
+    } catch (err) {
+      console.error("Error verifying callback signature:", err.message);
+      return res.status(403).send("Invalid signature");
+    }
+  }
+
+  // Fallback: check IP allowlist
+  if (ALLOWED_IPS.length) {
+    const ip = req.ip || req.connection?.remoteAddress || "";
+    if (!_isIpAllowed(ip)) {
+      console.warn("⚠️ Payment callback from unauthorized IP", {
+        ip,
+        tran_id: req.body?.tran_id,
+      });
+      return res.status(403).send("Forbidden");
+    }
+    return next();
+  }
+
+  // Non-production env with no config - allow for local testing
+  return next();
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SSL COMMERZ CONFIGURATION & SETUP
@@ -68,6 +152,14 @@ function getProductName(type, name) {
 // POST /api/payment/initiate/hotel
 // Initiates a hotel booking payment through SSL Commerz
 router.post("/initiate/hotel", auth, async (req, res) => {
+  // Apply payment rate limiter if configured (app sets paymentLimiter)
+  if (req.app && req.app.get("paymentLimiter")) {
+    await new Promise((resolve, reject) =>
+      req.app.get("paymentLimiter")(req, res, (err) =>
+        err ? reject(err) : resolve(),
+      ),
+    );
+  }
   try {
     // Prevent staff and admin from booking
     if (req.user.role === "hotel_staff" || req.user.role === "admin") {
@@ -249,6 +341,13 @@ router.post("/initiate/hotel", auth, async (req, res) => {
 // POST /api/payment/initiate/car
 // Initiates a car rental booking payment through SSL Commerz
 router.post("/initiate/car", auth, async (req, res) => {
+  if (req.app && req.app.get("paymentLimiter")) {
+    await new Promise((resolve, reject) =>
+      req.app.get("paymentLimiter")(req, res, (err) =>
+        err ? reject(err) : resolve(),
+      ),
+    );
+  }
   try {
     // Prevent staff and admin from booking
     if (req.user.role === "hotel_staff" || req.user.role === "admin") {
@@ -387,6 +486,13 @@ router.post("/initiate/car", auth, async (req, res) => {
 // POST /api/payment/initiate/package
 // Initiates a holiday package booking payment through SSL Commerz
 router.post("/initiate/package", auth, async (req, res) => {
+  if (req.app && req.app.get("paymentLimiter")) {
+    await new Promise((resolve, reject) =>
+      req.app.get("paymentLimiter")(req, res, (err) =>
+        err ? reject(err) : resolve(),
+      ),
+    );
+  }
   try {
     if (req.user.role === "hotel_staff" || req.user.role === "admin") {
       return res
@@ -504,6 +610,13 @@ router.post("/initiate/package", auth, async (req, res) => {
 // Initiates a coin top-up payment through SSL Commerz
 // User taps up coins which get auto-credited to wallet after payment succeeds
 router.post("/initiate/coin-topup", auth, async (req, res) => {
+  if (req.app && req.app.get("paymentLimiter")) {
+    await new Promise((resolve, reject) =>
+      req.app.get("paymentLimiter")(req, res, (err) =>
+        err ? reject(err) : resolve(),
+      ),
+    );
+  }
   try {
     const { amount } = req.body;
 
@@ -593,14 +706,13 @@ router.post("/initiate/coin-topup", auth, async (req, res) => {
 
 // POST /api/payment/success
 // Browser redirect callback from SSL Commerz after successful payment
-router.post("/success", async (req, res) => {
+router.post("/success", verifyPaymentCallback, async (req, res) => {
   try {
     const { tran_id, val_id, status } = req.body;
 
     // ✅ SECURITY: Log payment success attempt
-    console.log("🔔 Payment success callback received", {
+    console.log("🔔 Payment success callback", {
       tran_id,
-      val_id,
       status,
       timestamp: new Date().toISOString(),
       ipAddress: req.ip,
@@ -619,58 +731,59 @@ router.post("/success", async (req, res) => {
       );
     }
 
-    // Validate transaction with SSLCommerz (if val_id is provided)
+    // Require gateway validation before confirming bookings.
+    // Do NOT confirm booking when val_id is missing or when validation fails.
     let validation = null;
-    let confirmed = true;
+    let confirmed = false;
 
-    if (val_id) {
-      try {
-        const sslcz = new SSLCommerzPayment(STORE_ID, STORE_PASSWORD, IS_LIVE);
-        validation = await sslcz.validate({ val_id });
-        console.log("✅ SSLCommerz validation successful", {
-          tran_id,
-          validationStatus: validation?.status,
-        });
-
-        if (
-          validation?.status === "VALID" ||
-          validation?.status === "VALIDATED"
-        ) {
-          // Cross-check tran_id and amount from validation response against session
-          confirmed = await _confirmBooking(tran_id, validation);
-          if (!confirmed) {
-            console.error(
-              "❌ Payment validation mismatch for tran_id:",
-              tran_id,
-            );
-            return res.redirect(
-              `${CLIENT_URL}/payment/result?status=fail&tran_id=${tran_id}`,
-            );
-          }
-        } else {
-          // Validation response doesn't show VALID/VALIDATED status
-          // But SSL Commerz already told us it's VALID, so confirm booking
-          console.warn(
-            "⚠️ Validation API returned different status:",
-            validation?.status,
-          );
-          confirmed = await _confirmBooking(tran_id, null);
-        }
-      } catch (validationErr) {
-        console.warn(
-          "⚠️ SSLCommerz validation API error:",
-          validationErr.message,
-        );
-        // Since SSL Commerz callback status is VALID, confirm the booking
-        // even if direct validation API fails
-        confirmed = await _confirmBooking(tran_id, null);
-      }
-    } else {
-      // No val_id provided, but status is VALID — trust SSL Commerz
-      console.log(
-        "⚠️ No val_id provided but status is VALID, confirming booking",
+    if (!val_id) {
+      console.warn(
+        "⚠️ Payment success callback missing val_id; deferring confirmation to IPN",
       );
-      confirmed = await _confirmBooking(tran_id, null);
+      // Do not confirm here; wait for IPN (server-to-server) which will validate
+      return res.redirect(
+        `${CLIENT_URL}/payment/result?status=pending&tran_id=${tran_id}`,
+      );
+    }
+
+    try {
+      const sslcz = new SSLCommerzPayment(STORE_ID, STORE_PASSWORD, IS_LIVE);
+      validation = await sslcz.validate({ val_id });
+      console.log("✅ SSLCommerz validation response", {
+        tran_id,
+        validationStatus: validation?.status,
+      });
+
+      if (
+        validation?.status === "VALID" ||
+        validation?.status === "VALIDATED"
+      ) {
+        // Cross-check tran_id and amount from validation response against session
+        confirmed = await _confirmBooking(tran_id, validation);
+        if (!confirmed) {
+          console.error("❌ Payment validation mismatch for tran_id:", tran_id);
+          return res.redirect(
+            `${CLIENT_URL}/payment/result?status=fail&tran_id=${tran_id}`,
+          );
+        }
+      } else {
+        console.error(
+          "❌ Validation API returned non-validated status:",
+          validation?.status,
+        );
+        return res.redirect(
+          `${CLIENT_URL}/payment/result?status=fail&tran_id=${tran_id}`,
+        );
+      }
+    } catch (validationErr) {
+      console.error("❌ SSLCommerz validation API error", {
+        tran_id,
+        err: validationErr.message,
+      });
+      // Don't confirm booking on validation API error — advise pending
+      return res.redirect(
+        `${CLIENT_URL}/payment/result?status=pending&tran_id=${tran_id}`,
+      );
     }
 
     if (!confirmed) {
@@ -692,7 +805,7 @@ router.post("/success", async (req, res) => {
 
 // POST /api/payment/fail
 // Browser redirect callback from SSL Commerz when payment fails
-router.post("/fail", async (req, res) => {
+router.post("/fail", verifyPaymentCallback, async (req, res) => {
   const { tran_id } = req.body;
   try {
     if (tran_id) await _deleteSession(tran_id);
@@ -704,7 +817,7 @@ router.post("/fail", async (req, res) => {
 
 // POST /api/payment/cancel
 // Browser redirect callback from SSL Commerz when user cancels payment
-router.post("/cancel", async (req, res) => {
+router.post("/cancel", verifyPaymentCallback, async (req, res) => {
   const { tran_id } = req.body;
   try {
     if (tran_id) await _deleteSession(tran_id);
@@ -718,14 +831,13 @@ router.post("/cancel", async (req, res) => {
 // Server-to-server Instant Payment Notification from SSL Commerz
 // This is a backup callback (browser may not reach /success if user closes window)
 // Configure IPN URL in SSL Commerz merchant panel
-router.post("/ipn", async (req, res) => {
+router.post("/ipn", verifyPaymentCallback, async (req, res) => {
   try {
     const { tran_id, val_id, status } = req.body;
 
     // ✅ SECURITY: Log IPN payment callback
-    console.log("🔔 IPN payment callback received", {
+    console.log("🔔 IPN payment callback", {
       tran_id,
-      val_id,
       status,
       timestamp: new Date().toISOString(),
       ipAddress: req.ip,
@@ -734,7 +846,7 @@ router.post("/ipn", async (req, res) => {
     if ((status === "VALID" || status === "VALIDATED") && val_id) {
       const sslcz = new SSLCommerzPayment(STORE_ID, STORE_PASSWORD, IS_LIVE);
       const validation = await sslcz.validate({ val_id });
-      console.log("✅ IPN validation response:", {
+      console.log("✅ IPN validation response", {
         tran_id,
         status: validation?.status,
       });
@@ -774,14 +886,23 @@ router.post("/ipn", async (req, res) => {
 // Returns false if validation fails or session not found
 async function _confirmBooking(tran_id, validation = null) {
   const db = await getDb();
-  const session = await db.collection("payment_sessions").findOne({ tran_id });
-
-  console.log("_confirmBooking called for tran_id:", tran_id);
-  console.log("Session found:", !!session);
+  // Atomically claim the session to ensure idempotent processing
+  const now = new Date();
+  const claim = await db
+    .collection("payment_sessions")
+    .findOneAndUpdate(
+      { tran_id, processed: { $ne: true } },
+      { $set: { processed: true, processedAt: now } },
+      { returnOriginal: false },
+    );
+  const session = claim.value;
 
   if (!session) {
-    console.warn("Session not found for tran_id:", tran_id);
-    return false; // Session not found - potential tampering or already processed
+    console.warn(
+      "Session not found or already processed for tran_id:",
+      tran_id,
+    );
+    return false; // Session not found or already processed
   }
 
   // Cross-check: tran_id and amount from SSLCommerz must match our session
@@ -821,8 +942,7 @@ async function _confirmBooking(tran_id, validation = null) {
     );
   }
 
-  const now = new Date();
-
+  // now is already set when claiming session
   if (session.type === "hotel") {
     // Double-check: Ensure rooms are still available (prevent race condition)
     for (const r of session.rooms) {
@@ -864,7 +984,6 @@ async function _confirmBooking(tran_id, validation = null) {
       refundStatus: null,
       createdAt: now,
     }));
-    console.log("Creating", bookings.length, "hotel booking(s)");
     await db.collection("bookings").insertMany(bookings);
   } else if (session.type === "car") {
     // Double-check: Ensure car is still available (prevent race condition)
@@ -1173,6 +1292,13 @@ router.post("/submit/manual-coin-topup", auth, async (req, res) => {
 // POST /api/payment/initiate/bus
 // Initiates a bus booking payment through SSL Commerz
 router.post("/initiate/bus", auth, async (req, res) => {
+  if (req.app && req.app.get("paymentLimiter")) {
+    await new Promise((resolve, reject) =>
+      req.app.get("paymentLimiter")(req, res, (err) =>
+        err ? reject(err) : resolve(),
+      ),
+    );
+  }
   try {
     // Prevent staff and admin from booking
     if (req.user.role === "hotel_staff" || req.user.role === "admin") {
@@ -1323,6 +1449,13 @@ router.post("/initiate/bus", auth, async (req, res) => {
 
 // POST /api/payment/initiate/carrent — Cox's Bazar service booking
 router.post("/initiate/carrent", auth, async (req, res) => {
+  if (req.app && req.app.get("paymentLimiter")) {
+    await new Promise((resolve, reject) =>
+      req.app.get("paymentLimiter")(req, res, (err) =>
+        err ? reject(err) : resolve(),
+      ),
+    );
+  }
   try {
     // Prevent staff and admin from booking
     if (req.user.role === "hotel_staff" || req.user.role === "admin") {

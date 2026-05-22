@@ -8,6 +8,12 @@ const { ObjectId } = require("mongodb");
 const { auth, role } = require("../middleware/auth");
 const upload = require("../middleware/upload");
 
+// Utility to escape user input when building a RegExp for MongoDB queries
+function escapeRegex(input = "") {
+  const s = String(input).slice(0, 200); // limit length to avoid ReDoS
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 const adminAuth = [auth, role("admin")];
 
 // Helper function to delete image files from /uploads
@@ -864,10 +870,11 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
     // Search by user name or item name for bookings
     const searchFilters = [];
     if (search) {
-      searchFilters.push({ userName: { $regex: search, $options: "i" } });
-      searchFilters.push({ carName: { $regex: search, $options: "i" } });
-      searchFilters.push({ hotelName: { $regex: search, $options: "i" } });
-      searchFilters.push({ packageName: { $regex: search, $options: "i" } });
+      const esc = escapeRegex(search);
+      searchFilters.push({ userName: { $regex: esc, $options: "i" } });
+      searchFilters.push({ carName: { $regex: esc, $options: "i" } });
+      searchFilters.push({ hotelName: { $regex: esc, $options: "i" } });
+      searchFilters.push({ packageName: { $regex: esc, $options: "i" } });
       bookingsPipeline.push({ $match: { $or: searchFilters } });
     }
 
@@ -2145,7 +2152,9 @@ router.get("/payment-history", auth, role("admin"), async (req, res) => {
     const userMatch = {};
 
     if (email) {
-      userMatch.$or = [{ "userInfo.email": { $regex: email, $options: "i" } }];
+      userMatch.$or = [
+        { "userInfo.email": { $regex: escapeRegex(email), $options: "i" } },
+      ];
     }
 
     if (dateFrom || dateTo) {
@@ -2180,9 +2189,10 @@ router.get("/payment-history", auth, role("admin"), async (req, res) => {
     ];
 
     if (email) {
+      const escEmail = escapeRegex(email);
       bookingPipeline.push({
         $match: {
-          "userInfo.email": { $regex: email, $options: "i" },
+          "userInfo.email": { $regex: escEmail, $options: "i" },
         },
       });
     }
@@ -2237,9 +2247,10 @@ router.get("/payment-history", auth, role("admin"), async (req, res) => {
         ];
 
         if (email) {
+          const escEmail = escapeRegex(email);
           coinTopupPipeline.push({
             $match: {
-              "userInfo.email": { $regex: email, $options: "i" },
+              "userInfo.email": { $regex: escEmail, $options: "i" },
             },
           });
         }
@@ -2291,8 +2302,9 @@ router.get("/payment-history", auth, role("admin"), async (req, res) => {
       const ledgerLookupMatch = {};
 
       if (email) {
+        const escEmail = escapeRegex(email);
         ledgerLookupMatch.$or = [
-          { "userInfo.email": { $regex: email, $options: "i" } },
+          { "userInfo.email": { $regex: escEmail, $options: "i" } },
         ];
       }
 
@@ -2312,9 +2324,10 @@ router.get("/payment-history", auth, role("admin"), async (req, res) => {
       ];
 
       if (email) {
+        const escEmail = escapeRegex(email);
         ledgerPipeline.push({
           $match: {
-            "userInfo.email": { $regex: email, $options: "i" },
+            "userInfo.email": { $regex: escEmail, $options: "i" },
           },
         });
       }

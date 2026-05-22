@@ -178,10 +178,23 @@ export default function HotelBooking() {
         guestDetails,
         totalAmount: total,
       });
+      // Validate gateway response
+      if (!paymentUrl) {
+        throw new Error("Payment gateway did not return a redirect URL");
+      }
+
       // Redirect browser to SSLCommerz payment page
       window.location.href = paymentUrl;
     } catch (err) {
-      setError(err.message || "Booking failed. Please try again.");
+      console.error("Hotel payment initiation error:", err);
+      const msg = err.message || "Booking failed. Please try again.";
+      setError(msg);
+      toast({
+        title: "Payment Error",
+        description: msg,
+        duration: 4000,
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }

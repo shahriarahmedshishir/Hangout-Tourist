@@ -568,7 +568,7 @@ function CompactHotelCard({ hotel, isFavorite, onToggleFavorite, index }) {
           asChild
           className="w-full mt-3 md:mt-4 bg-primary text-primary-foreground hover:opacity-90 py-1.5 md:py-2 text-xs md:text-sm h-auto"
         >
-          <Link to={`/hotels/${hotel._id}`}>View Details</Link>
+          <span>View Details</span>
         </Button>
       </div>
     </Link>
@@ -682,7 +682,7 @@ function MirroredHotelCard({
               asChild
               className="bg-primary text-primary-foreground hover:opacity-90 py-2 md:py-3 px-4 md:px-6 text-xs md:text-sm h-auto"
             >
-              <Link to={`/hotels/${hotel._id}`}>View Details</Link>
+              <span>View Details</span>
             </Button>
           </div>
         </div>
