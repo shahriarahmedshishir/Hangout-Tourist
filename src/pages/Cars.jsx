@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -68,6 +69,7 @@ const Cars = () => {
   const [cars, setCars] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const location = useLocation();
   const [activeImg, setActiveImg] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 9;
@@ -130,6 +132,12 @@ const Cars = () => {
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
+    // Initialize search from query param if present
+    try {
+      const params = new URLSearchParams(location.search);
+      const q = params.get("q");
+      if (q) setSearch(q);
+    } catch (err) {}
     if (selectedTab === "car") {
       setLoading(true);
       api
@@ -167,13 +175,21 @@ const Cars = () => {
   }, [search, selectedTab]);
 
   // Filtering for cars tab
-  const filtered = cars.filter(
-    (car) =>
-      !search ||
-      car.name?.toLowerCase().includes(search.toLowerCase()) ||
-      car.type?.toLowerCase().includes(search.toLowerCase()) ||
-      car.places?.some((p) => p.toLowerCase().includes(search.toLowerCase())),
-  );
+  const filtered = cars.filter((car) => {
+    const normalize = (s = "") =>
+      String(s)
+        .toLowerCase()
+        .replace(/[\u2018\u2019'`’]/g, "")
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    const ns = normalize(search);
+    if (!ns) return true;
+    if (normalize(car.name || "").includes(ns)) return true;
+    if (normalize(car.type || "").includes(ns)) return true;
+    if (car.places?.some((p) => normalize(p || "").includes(ns))) return true;
+    return false;
+  });
   const totalPages = Math.ceil(filtered.length / itemsPerPage);
   const startIdx = (currentPage - 1) * itemsPerPage;
   const paginatedCars = filtered.slice(startIdx, startIdx + itemsPerPage);

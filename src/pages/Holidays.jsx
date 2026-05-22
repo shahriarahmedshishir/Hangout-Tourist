@@ -146,9 +146,16 @@ const Holidays = () => {
                       <Button
                         variant="outline"
                         className="w-full"
-                        onClick={() =>
-                          navigate("/booking/package", { state: { pkg } })
-                        }
+                        onClick={() => {
+                          if (!user) {
+                            // Redirect to login with intended destination
+                            navigate("/login", {
+                              state: { redirectTo: "/booking/package", pkg },
+                            });
+                          } else {
+                            navigate("/booking/package", { state: { pkg } });
+                          }
+                        }}
                       >
                         Book Now
                       </Button>

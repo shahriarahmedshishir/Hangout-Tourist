@@ -6,6 +6,7 @@ import Footer from "@/components/layout/Footer";
 import HeroSection from "@/components/home/HeroSection";
 import HotelsSection from "@/components/home/HotelsSection";
 import PopularCars from "@/components/home/PopularCars";
+import PopularPackages from "@/components/home/PopularPackages";
 import ExclusiveOffers from "@/components/home/ExclusiveOffers";
 import WhyChooseUs from "@/components/home/WhyChooseUs";
 const Index = () => {
@@ -23,6 +24,7 @@ const Index = () => {
       <HeroSection />
       <HotelsSection />
       <PopularCars />
+      <PopularPackages />
       <ExclusiveOffers />
       <WhyChooseUs />
       <Footer />

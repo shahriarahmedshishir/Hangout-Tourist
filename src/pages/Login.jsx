@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,6 +29,7 @@ const Login = () => {
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
 
   // Password validation checks
@@ -70,6 +71,15 @@ const Login = () => {
         // Don't switch to sign in - keep showing the message
       } else {
         login(data.token, data.user);
+        // If a redirect was provided (e.g. booking flow), honor it and pass state
+        const redirectTo = location?.state?.redirectTo;
+        const redirectPkg = location?.state?.pkg;
+        if (redirectTo) {
+          if (redirectPkg)
+            navigate(redirectTo, { state: { pkg: redirectPkg } });
+          else navigate(redirectTo);
+          return;
+        }
         if (data.user.role === "admin") navigate("/admin");
         else if (data.user.role === "hotel_staff") navigate("/staff");
         else navigate("/");

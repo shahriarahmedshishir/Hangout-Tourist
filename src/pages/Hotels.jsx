@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import Navbar from "@/components/layout/Navbar";
@@ -28,6 +29,7 @@ const Hotels = () => {
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState("price");
   const [search, setSearch] = useState("");
+  const location = useLocation();
   const [currentPage, setCurrentPage] = useState(1);
   const [favorites, setFavorites] = useState(new Set());
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
@@ -45,6 +47,12 @@ const Hotels = () => {
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
+    // Initialize search from query param if present
+    try {
+      const params = new URLSearchParams(location.search);
+      const q = params.get("q");
+      if (q) setSearch(q);
+    } catch (err) {}
     api
       .get("/api/hotels")
       .then((data) => setHotels(data))
@@ -53,13 +61,24 @@ const Hotels = () => {
   }, []);
 
   const filtered = hotels
-    .filter(
-      (h) =>
-        (h.name.toLowerCase().includes(search.toLowerCase()) ||
-          (h.area || "").toLowerCase().includes(search.toLowerCase())) &&
+    .filter((h) => {
+      const normalize = (s = "") =>
+        String(s)
+          .toLowerCase()
+          .replace(/[\u2018\u2019'`’]/g, "")
+          .replace(/[^a-z0-9\s]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      const ns = normalize(search);
+      const name = normalize(h.name || "");
+      const area = normalize(h.area || "");
+      const matches = !ns || name.includes(ns) || area.includes(ns);
+      return (
+        matches &&
         (h.minPrice || 0) >= priceRange[0] &&
-        (h.minPrice || 0) <= priceRange[1],
-    )
+        (h.minPrice || 0) <= priceRange[1]
+      );
+    })
     .sort((a, b) =>
       sortBy === "price"
         ? (a.minPrice || 0) - (b.minPrice || 0)
