@@ -357,7 +357,7 @@ export default function PackageBooking() {
             <div className="space-y-4 rounded-3xl border border-slate-800/80 bg-slate-900/95 p-6">
               <div className="grid gap-4">
                 <div className="grid gap-2">
-                  <label className="text-sm text-slate-400">Full Name</label>
+                  <label className="text-sm text-slate-300">Full Name</label>
                   <Input
                     value={guestDetails.fullName}
                     onChange={(e) =>
@@ -366,19 +366,20 @@ export default function PackageBooking() {
                         fullName: e.target.value,
                       }))
                     }
+                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
                   />
                 </div>
                 <div className="grid gap-2">
-                  <label className="text-sm text-slate-400">Email</label>
+                  <label className="text-sm text-slate-300">Email</label>
                   <Input
                     value={guestDetails.email}
                     readOnly
                     disabled
-                    className="cursor-not-allowed bg-slate-200 text-slate-500"
+                    className="bg-slate-700 border-slate-600 text-slate-300 cursor-not-allowed"
                   />
                 </div>
                 <div className="grid gap-2">
-                  <label className="text-sm text-slate-400">
+                  <label className="text-sm text-slate-300">
                     Contact Number
                   </label>
                   <Input
@@ -389,10 +390,11 @@ export default function PackageBooking() {
                         contactNumber: e.target.value,
                       }))
                     }
+                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
                   />
                 </div>
                 <div className="grid gap-2">
-                  <label className="text-sm text-slate-400">Address</label>
+                  <label className="text-sm text-slate-300">Address</label>
                   <Input
                     value={guestDetails.address}
                     onChange={(e) =>
@@ -401,10 +403,11 @@ export default function PackageBooking() {
                         address: e.target.value,
                       }))
                     }
+                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
                   />
                 </div>
                 <div className="grid gap-2">
-                  <label className="text-sm text-slate-400">NID Number</label>
+                  <label className="text-sm text-slate-300">NID Number</label>
                   <Input
                     value={guestDetails.nidNumber}
                     onChange={(e) =>
@@ -413,6 +416,7 @@ export default function PackageBooking() {
                         nidNumber: e.target.value,
                       }))
                     }
+                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
                   />
                 </div>
               </div>
@@ -431,21 +435,22 @@ export default function PackageBooking() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <label className="text-sm text-slate-400">People</label>
+                  <label className="text-sm text-slate-300">People</label>
                   <input
                     type="number"
-                    min={pkg.minimumPerson || 1}
+                    min="1"
                     value={peopleCount}
                     onChange={(e) => {
-                      const value = Number(e.target.value);
-                      setPeopleCount(value >= minPeople ? value : minPeople);
+                      const value = Number(e.target.value) || 1;
+                      setPeopleCount(value);
                     }}
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-sky-500"
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-800 px-4 py-3 text-white outline-none transition focus:border-sky-500"
                   />
                   {belowMinimum ? (
-                    <p className="text-sm text-rose-400">
-                      You must book at least {minPeople} people for this
-                      package.
+                    <p className="text-sm text-amber-400 flex items-center gap-1">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      You cannot select lower than {minPeople} people. Minimum
+                      is required.
                     </p>
                   ) : null}
                 </div>

@@ -1,16 +1,16 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Ban } from "lucide-react";
+import { CheckCircle2, XCircle, Ban, Clock } from "lucide-react";
 
 export default function PaymentResult() {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const { user, loading, refreshUser } = useAuth();
-  const status = params.get("status"); // "success" | "fail" | "cancel"
+  const [status, setStatus] = useState(params.get("status")); // "success" | "fail" | "cancel" | "pending"
   const tranId = params.get("tran_id");
   const reason = params.get("reason"); // "unavailable" for double-booking
 
@@ -26,6 +26,37 @@ export default function PaymentResult() {
       return () => clearTimeout(timer);
     }
   }, [status, tranId, user, refreshUser]);
+
+  // Auto-poll for pending payment confirmation
+  useEffect(() => {
+    if (status !== "pending" || !tranId) return;
+
+    let attempts = 0;
+    const interval = setInterval(async () => {
+      attempts++;
+      try {
+        const res = await fetch(
+          `/api/payment/check-transaction?tran_id=${tranId}`,
+        );
+        const data = await res.json();
+        if (data.confirmed) {
+          // Update URL to success without reload
+          setParams({ status: "success", tran_id: tranId });
+          setStatus("success");
+          refreshUser().catch(() => {
+            // Silently fail - user data will update on next navigation
+          });
+          clearInterval(interval);
+        } else if (attempts >= 10) {
+          clearInterval(interval); // Stop after ~30s
+        }
+      } catch (err) {
+        console.warn("Error checking transaction status:", err);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [status, tranId, setParams, refreshUser]);
 
   useEffect(() => {
     if (!loading && user && user.role === "hotel_staff") {
@@ -69,6 +100,17 @@ export default function PaymentResult() {
       primaryPath: "/hotels",
       secondaryLabel: "Browse Cars",
       secondaryPath: "/cars",
+    },
+    pending: {
+      icon: <Clock className="h-16 w-16 text-amber-500 animate-spin" />,
+      bg: "bg-amber-500/10",
+      title: "Processing Payment",
+      message:
+        "Your payment is being processed. Please wait while we confirm your booking...",
+      primaryLabel: "My Bookings",
+      primaryPath: "/dashboard",
+      secondaryLabel: "Go Home",
+      secondaryPath: "/",
     },
   };
 

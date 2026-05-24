@@ -749,18 +749,26 @@ router.post("/success", verifyPaymentCallback, async (req, res) => {
     try {
       const sslcz = new SSLCommerzPayment(STORE_ID, STORE_PASSWORD, IS_LIVE);
       validation = await sslcz.validate({ val_id });
+      const validationStatus = _getValidationStatus(validation);
       console.log("✅ SSLCommerz validation response", {
         tran_id,
-        validationStatus: validation?.status,
+        validationStatus,
       });
 
-      if (
-        validation?.status === "VALID" ||
-        validation?.status === "VALIDATED"
-      ) {
-        // Cross-check tran_id and amount from validation response against session
+      if (validationStatus === "VALID" || validationStatus === "VALIDATED") {
+        // Try to confirm; if locked by IPN, poll until done
         confirmed = await _confirmBooking(tran_id, validation);
-        if (!confirmed) {
+        if (confirmed === null) {
+          // Still processing — poll for up to 8 seconds (faster confirmation)
+          for (let i = 0; i < 16; i++) {
+            await new Promise((r) => setTimeout(r, 500));
+            if (await _isTransactionAlreadyConfirmed(tran_id)) {
+              confirmed = true;
+              break;
+            }
+          }
+        }
+        if (confirmed === null) {
           console.error("❌ Payment validation mismatch for tran_id:", tran_id);
           return res.redirect(
             `${CLIENT_URL}/payment/result?status=fail&tran_id=${tran_id}`,
@@ -769,7 +777,7 @@ router.post("/success", verifyPaymentCallback, async (req, res) => {
       } else {
         console.error(
           "❌ Validation API returned non-validated status:",
-          validation?.status,
+          validationStatus,
         );
         return res.redirect(
           `${CLIENT_URL}/payment/result?status=fail&tran_id=${tran_id}`,
@@ -786,8 +794,18 @@ router.post("/success", verifyPaymentCallback, async (req, res) => {
       );
     }
 
-    if (!confirmed) {
-      console.error("❌ Booking confirmation failed for tran_id:", tran_id);
+    if (confirmed === null) {
+      console.log(
+        "ℹ️ Payment still processing, redirecting to pending:",
+        tran_id,
+      );
+      return res.redirect(
+        `${CLIENT_URL}/payment/result?status=pending&tran_id=${tran_id}`,
+      );
+    }
+
+    if (confirmed === false) {
+      console.error("❌ Payment confirmation failed for tran_id:", tran_id);
       return res.redirect(
         `${CLIENT_URL}/payment/result?status=fail&tran_id=${tran_id}&reason=unavailable`,
       );
@@ -844,17 +862,17 @@ router.post("/ipn", verifyPaymentCallback, async (req, res) => {
     });
 
     if ((status === "VALID" || status === "VALIDATED") && val_id) {
+      // Minimal delay for IPN — lock mechanism prevents duplicate processing
+      await new Promise((resolve) => setTimeout(resolve, 500));
       const sslcz = new SSLCommerzPayment(STORE_ID, STORE_PASSWORD, IS_LIVE);
       const validation = await sslcz.validate({ val_id });
+      const validationStatus = _getValidationStatus(validation);
       console.log("✅ IPN validation response", {
         tran_id,
-        status: validation?.status,
+        validationStatus,
       });
 
-      if (
-        validation?.status === "VALID" ||
-        validation?.status === "VALIDATED"
-      ) {
+      if (validationStatus === "VALID" || validationStatus === "VALIDATED") {
         // For IPN, we attempt confirmation. If session is not found, it's ok (already processed)
         const db = await getDb();
         const session = await db
@@ -885,334 +903,668 @@ router.post("/ipn", verifyPaymentCallback, async (req, res) => {
 // Returns true only if booking was successfully created
 // Returns false if validation fails or session not found
 async function _confirmBooking(tran_id, validation = null) {
+  console.log("🔧 [_confirmBooking START]", {
+    tran_id,
+    validationProvided: !!validation,
+  });
   const db = await getDb();
-  // Atomically claim the session to ensure idempotent processing
   const now = new Date();
-  const claim = await db
-    .collection("payment_sessions")
-    .findOneAndUpdate(
-      { tran_id, processed: { $ne: true } },
-      { $set: { processed: true, processedAt: now } },
-      { returnOriginal: false },
-    );
-  const session = claim.value;
+  const STALE_LOCK_MS = 2 * 60 * 1000; // 2 minutes
 
-  if (!session) {
-    console.warn(
-      "Session not found or already processed for tran_id:",
+  // Atomically claim the session for processing only.
+  // If a previous processing attempt hung, allow a stale lock to be reclaimed.
+  let claim = await db.collection("payment_sessions").findOneAndUpdate(
+    {
+      tran_id,
+      $or: [
+        { processing: { $exists: false } },
+        { processing: false },
+        { processingAt: { $lt: new Date(now - STALE_LOCK_MS) } },
+      ],
+    },
+    { $set: { processing: true, processingAt: now } },
+    { returnDocument: "after" },
+  );
+  let session = claim.value ?? claim;
+
+  if (session) {
+    console.log(
+      "🔧 [LOCK ACQUIRED] Successfully claimed lock for tran_id:",
       tran_id,
     );
-    return false; // Session not found or already processed
-  }
-
-  // Cross-check: tran_id and amount from SSLCommerz must match our session
-  if (validation) {
-    const validatedTranId = validation.tran_id;
-    // SSLCommerz returns amount as a string; compare as floats
-    const validatedAmount = parseFloat(
-      validation.amount || validation.currency_amount || 0,
-    );
-    const expectedAmount = parseFloat(session.totalAmount);
-
-    console.log("Validation check:", {
-      validatedTranId,
-      expectedTranId: tran_id,
-      validatedAmount,
-      expectedAmount,
-    });
-
-    if (validatedTranId && validatedTranId !== tran_id) {
-      console.error(
-        `tran_id mismatch: expected ${tran_id}, got ${validatedTranId}`,
-      );
-      await _deleteSession(tran_id);
-      return false;
-    }
-    if (validatedAmount > 0 && Math.abs(validatedAmount - expectedAmount) > 1) {
-      // Allow ±1 BDT tolerance for floating point
-      console.error(
-        `Amount mismatch: expected ${expectedAmount}, got ${validatedAmount}`,
-      );
-      await _deleteSession(tran_id);
-      return false;
-    }
   } else {
     console.log(
-      "No validation object provided, creating booking based on session",
+      "🔧 [LOCK FAILED] Could not claim lock for tran_id:",
+      tran_id,
+      "- another callback is processing",
     );
   }
 
-  // now is already set when claiming session
-  if (session.type === "hotel") {
-    // Double-check: Ensure rooms are still available (prevent race condition)
-    for (const r of session.rooms) {
-      const conflict = await db.collection("bookings").findOne({
-        roomId: r.roomId,
-        status: "confirmed",
-        checkIn: { $lt: session.checkOut },
-        checkOut: { $gt: session.checkIn },
+  if (!session) {
+    const existingSession = await db
+      .collection("payment_sessions")
+      .findOne({ tran_id });
+
+    if (existingSession) {
+      console.warn("Session exists but is currently locked for processing:", {
+        tran_id,
+        processing: existingSession.processing,
+        processingAt: existingSession.processingAt,
       });
 
-      if (conflict) {
-        console.error(
-          `Room ${r.roomNumber} was booked by another user during payment`,
+      if (await _isTransactionAlreadyConfirmed(tran_id)) {
+        console.log(
+          "ℹ️ Transaction already confirmed; duplicate callback received",
+          { tran_id },
         );
-        // Payment succeeded but room is no longer available
-        // Don't create booking - let user know to refund
-        await db.collection("payment_sessions").deleteOne({ tran_id });
-        return false; // Fail the confirmation
+        return true;
+      }
+
+      const waitResult = await _waitForSessionProcessingCompletion(
+        db,
+        tran_id,
+        15000,
+      );
+      console.log("🔧 [WAIT RESULT]", waitResult, "for tran_id:", tran_id);
+
+      if (waitResult === "confirmed") {
+        console.log(
+          "🔧 [WAIT CONFIRMED] Transaction confirmed during wait for tran_id:",
+          tran_id,
+        );
+        return true;
+      }
+
+      if (waitResult === "available") {
+        console.log(
+          "🔧 [WAIT AVAILABLE] Lock released, attempting to claim for tran_id:",
+          tran_id,
+        );
+        claim = await db.collection("payment_sessions").findOneAndUpdate(
+          {
+            tran_id,
+            $or: [
+              { processing: { $exists: false } },
+              { processing: false },
+              { processingAt: { $lt: new Date(now - STALE_LOCK_MS) } },
+            ],
+          },
+          { $set: { processing: true, processingAt: new Date() } },
+          { returnDocument: "after" },
+        );
+        session = claim.value ?? claim;
+        if (session) {
+          console.log(
+            "🔧 [LOCK RE-ACQUIRED] Successfully claimed lock after wait for tran_id:",
+            tran_id,
+          );
+        } else {
+          console.log(
+            "🔧 [LOCK RE-FAILED] Failed to reclaim lock after wait for tran_id:",
+            tran_id,
+          );
+        }
+      }
+
+      if (waitResult === "timeout") {
+        console.warn(
+          "🔧 [WAIT TIMEOUT] Session processing still active after wait for tran_id:",
+          tran_id,
+        );
+        // Wait a bit more then do a final check
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        if (await _isTransactionAlreadyConfirmed(tran_id)) {
+          console.log(
+            "ℹ️ Booking was confirmed during extended wait:",
+            tran_id,
+          );
+          return true;
+        }
+        return null;
+      }
+
+      if (waitResult === "missing") {
+        console.warn(
+          "🔧 [WAIT MISSING] Session was deleted while waiting for tran_id:",
+          tran_id,
+        );
+        // Session was deleted while we waited — check if booking was created
+        if (await _isTransactionAlreadyConfirmed(tran_id)) {
+          console.log("ℹ️ Session processed by concurrent callback:", tran_id);
+          return true;
+        }
+        return false;
       }
     }
 
-    const bookings = session.rooms.map((r) => ({
-      userId: session.userId,
-      type: "hotel",
-      hotelId: session.hotelId,
-      hotelName: session.hotelName,
-      roomId: r.roomId,
-      roomNumber: r.roomNumber,
-      checkIn: session.checkIn,
-      checkOut: session.checkOut,
-      days: session.days,
-      pricePerNight: r.pricePerNight,
-      totalAmount: r.roomTotal,
-      contactNumber: session.contactNumber,
-      status: "confirmed",
-      transactionId: tran_id,
-      paymentMethod: "SSLCommerz",
-      paidAt: now,
-      refundStatus: null,
-      createdAt: now,
-    }));
-    await db.collection("bookings").insertMany(bookings);
-  } else if (session.type === "car") {
-    // Double-check: Ensure car is still available (prevent race condition)
-    const conflictingBookings = await db
-      .collection("carrentBookings")
-      .countDocuments({
-        carId: session.carId,
-        type: "car",
-        status: "confirmed",
-        pickupDate: { $lt: session.returnDate },
-        returnDate: { $gt: session.pickupDate },
-      });
+    if (!session) {
+      if (await _isTransactionAlreadyConfirmed(tran_id)) {
+        console.log(
+          "ℹ️ Transaction already confirmed; duplicate callback received",
+          { tran_id },
+        );
+        return true;
+      }
 
-    const car = await db
-      .collection("carrent")
-      .findOne({ _id: new ObjectId(session.carId) });
-
-    if (car && car.quantity > 0 && conflictingBookings >= car.quantity) {
-      console.error(`Car ${session.carName} is no longer available`);
-      // Payment succeeded but car is no longer available
-      await db.collection("payment_sessions").deleteOne({ tran_id });
-      return false; // Fail the confirmation
-    }
-
-    console.log("Creating car booking");
-    await db.collection("carrentBookings").insertOne({
-      userId: session.userId,
-      type: "car",
-      carId: session.carId,
-      carName: session.carName,
-      pickupDate: session.pickupDate,
-      returnDate: session.returnDate,
-      pickupLocation: session.pickupLocation,
-      contactNumber: session.contactNumber,
-      days: session.days,
-      pricePerDay: session.pricePerDay,
-      totalAmount: session.totalAmount,
-      seatsBooked: session.seatsBooked || 1,
-      status: "confirmed",
-      transactionId: tran_id,
-      paymentMethod: "SSLCommerz",
-      paidAt: now,
-      refundStatus: null,
-      createdAt: now,
-    });
-  } else if (session.type === "package" || session.type === "holiday") {
-    console.log("Creating holiday package booking");
-    await db.collection("bookings").insertOne({
-      userId: session.userId,
-      type: "holiday",
-      packageId: session.packageId,
-      packageName: session.packageName,
-      travelDate: session.travelDate,
-      peopleCount: session.peopleCount,
-      pricePerPerson: session.pricePerPerson,
-      totalAmount: session.totalAmount,
-      guestDetails: session.guestDetails || {},
-      status: "confirmed",
-      transactionId: tran_id,
-      paymentMethod: "SSLCommerz",
-      paidAt: now,
-      refundStatus: null,
-      createdAt: now,
-    });
-  } else if (session.type === "bus") {
-    // Double-check: Ensure bus seats are still available (prevent race condition)
-    const conflictingBookings = await db
-      .collection("busBookings")
-      .countDocuments({
-        busId: session.busId,
-        status: "confirmed",
-        travelDate: {
-          $gte: new Date(session.travelDate.getTime() - 24 * 60 * 60 * 1000),
-          $lt: new Date(session.travelDate.getTime() + 24 * 60 * 60 * 1000),
-        },
-      });
-
-    const bus = await db
-      .collection("buses")
-      .findOne({ _id: new ObjectId(session.busId) });
-
-    const availableSeats = bus.quantity - conflictingBookings;
-    if (availableSeats < session.seats) {
-      console.error(`Bus ${session.busName} has insufficient seats remaining`);
-      // Payment succeeded but bus is no longer available
-      await db.collection("payment_sessions").deleteOne({ tran_id });
-      return false; // Fail the confirmation
-    }
-
-    console.log("Creating bus booking");
-    await db.collection("busBookings").insertOne({
-      userId: session.userId,
-      type: "bus",
-      busId: session.busId,
-      busName: session.busName,
-      travelDate: session.travelDate,
-      seats: session.seats,
-      pickupLocation: session.pickupLocation,
-      contactNumber: session.contactNumber,
-      pricePerSeat: session.pricePerSeat,
-      totalAmount: session.totalAmount,
-      status: "confirmed",
-      transactionId: tran_id,
-      paymentMethod: "SSLCommerz",
-      paidAt: now,
-      refundStatus: null,
-      createdAt: now,
-    });
-  } else if (session.type === "carrent") {
-    // Double-check: Ensure carrent seats are still available (prevent race condition)
-    const bookedSeatsData = await db
-      .collection("carrentBookings")
-      .aggregate([
-        {
-          $match: {
-            serviceId: session.serviceId,
-            status: "confirmed",
-            returnDate: { $gte: now },
-            $or: [
-              {
-                pickupDate: { $lt: session.returnDate },
-                returnDate: { $gt: session.pickupDate },
-              },
-            ],
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            total: { $sum: { $toInt: "$seatsBooked" } },
-          },
-        },
-      ])
-      .toArray();
-
-    const bookedSeats = bookedSeatsData[0]?.total || 0;
-    const service = await db
-      .collection("carrent")
-      .findOne({ _id: new ObjectId(session.serviceId) });
-
-    const availableSeats =
-      (service.quantity || service.totalSeats || 0) - bookedSeats;
-    if (availableSeats < session.seatsBooked) {
-      console.error(
-        `Service ${session.serviceName} has insufficient cars remaining`,
+      console.warn(
+        "Session not found or already processed for tran_id:",
+        tran_id,
       );
-      // Payment succeeded but service is no longer available
-      await db.collection("payment_sessions").deleteOne({ tran_id });
-      return false; // Fail the confirmation
+      return false; // Session not found or already processed
     }
-
-    console.log("Creating carrent booking");
-    await db.collection("carrentBookings").insertOne({
-      userId: session.userId,
-      type: "carrent",
-      serviceId: session.serviceId,
-      serviceName: session.serviceName,
-      carName: session.serviceName, // For frontend display
-      carType: service.type || "Standard", // For frontend display
-      pickupDate: session.pickupDate,
-      returnDate: session.returnDate,
-      days: Math.ceil(
-        (session.returnDate - session.pickupDate) / (1000 * 60 * 60 * 24),
-      ), // Calculate days
-      seatsBooked: session.seatsBooked,
-      pickupLocation: session.pickupLocation,
-      contactNumber: session.contactNumber,
-      pricePerSeat: session.pricePerSeat,
-      totalAmount: session.totalAmount,
-      status: "confirmed",
-      transactionId: tran_id,
-      paymentMethod: "SSLCommerz",
-      paidAt: now,
-      refundStatus: null,
-      createdAt: now,
-    });
-  } else if (session.type === "coin_topup") {
-    console.log("Processing coin top-up - auto-approving SSL Commerz payment");
-    // SSL Commerz payments are auto-approved since they're validated by SSLCommerz
-    // Directly add coins to coin_ledger
-    await db.collection("coin_ledger").updateOne(
-      { userId: session.userId },
-      {
-        $inc: { coins: session.amount },
-        $push: {
-          transactions: {
-            type: "topup",
-            paymentMethod: "ssl_commerz",
-            amount: session.amount,
-            timestamp: now,
-            transactionId: tran_id,
-            description: `SSL Commerz coin top-up (auto-approved)`,
-            approvedBy: null,
-          },
-        },
-      },
-      { upsert: true },
-    );
-
-    // Store transaction record
-    await db.collection("coin_topup_requests").insertOne({
-      userId: session.userId,
-      amount: session.amount,
-      paymentMethod: "ssl_commerz",
-      status: "approved",
-      transactionId: tran_id,
-      submittedAt: now,
-      reviewedAt: now,
-      reviewedBy: null, // System auto-approved
-      rejectionReason: null,
-    });
-
-    // Track revenue (coins received as payment)
-    await db.collection("revenue").insertOne({
-      amount: session.amount,
-      paymentMethod: "ssl_commerz",
-      type: "coin_topup",
-      userId: session.userId,
-      transactionId: tran_id,
-      topupRequestId: null,
-      approvedAt: now,
-      approvedBy: null,
-      createdAt: now,
-    });
   }
 
-  await db.collection("payment_sessions").deleteOne({ tran_id });
-  console.log("Booking confirmed and session deleted for tran_id:", tran_id);
-  return true; // Successfully created booking
+  // Safety check: ensure session is not null before proceeding
+  if (!session) {
+    console.error(
+      "🔧 [CRITICAL] Session is null despite all retry attempts for tran_id:",
+      tran_id,
+    );
+    return false;
+  }
+
+  try {
+    console.log("🔧 [_confirmBooking TRY START] Validating session...", {
+      tran_id,
+      sessionType: session?.type,
+    });
+
+    // Cross-check: tran_id and amount from SSLCommerz must match our session
+    if (validation) {
+      const validatedTranId =
+        validation.tran_id || validation.tran_id?.toString();
+      // SSLCommerz returns amount as a string; compare as floats
+      const validatedAmount = _getValidationAmount(validation);
+      const expectedAmount = parseFloat(session.totalAmount);
+
+      console.log("Validation check:", {
+        validatedTranId,
+        expectedTranId: tran_id,
+        validatedAmount,
+        expectedAmount,
+      });
+
+      if (validatedTranId && validatedTranId !== tran_id) {
+        console.error(
+          `tran_id mismatch: expected ${tran_id}, got ${validatedTranId}`,
+        );
+        await _deleteSession(tran_id);
+        return false;
+      }
+      if (
+        validatedAmount > 0 &&
+        Math.abs(validatedAmount - expectedAmount) > 1
+      ) {
+        // Allow ±1 BDT tolerance for floating point
+        console.error(
+          `Amount mismatch: expected ${expectedAmount}, got ${validatedAmount}`,
+        );
+        await _deleteSession(tran_id);
+        return false;
+      }
+    } else {
+      console.log(
+        "No validation object provided, creating booking based on session",
+      );
+    }
+
+    // now is already set when claiming session
+    if (session.type === "hotel") {
+      // Double-check: Ensure rooms are still available (prevent race condition)
+      for (const r of session.rooms) {
+        const conflict = await db.collection("bookings").findOne({
+          roomId: r.roomId,
+          status: "confirmed",
+          checkIn: { $lt: session.checkOut },
+          checkOut: { $gt: session.checkIn },
+        });
+
+        if (conflict) {
+          console.error(
+            `Room ${r.roomNumber} was booked by another user during payment`,
+          );
+          // Payment succeeded but room is no longer available
+          // Don't create booking - let user know to refund
+          await db.collection("payment_sessions").deleteOne({ tran_id });
+          return false; // Fail the confirmation
+        }
+      }
+
+      const bookings = session.rooms.map((r) => ({
+        userId: session.userId,
+        type: "hotel",
+        hotelId: session.hotelId,
+        hotelName: session.hotelName,
+        roomId: r.roomId,
+        roomNumber: r.roomNumber,
+        checkIn: session.checkIn,
+        checkOut: session.checkOut,
+        days: session.days,
+        pricePerNight: r.pricePerNight,
+        totalAmount: r.roomTotal,
+        contactNumber: session.contactNumber,
+        status: "confirmed",
+        transactionId: tran_id,
+        paymentMethod: "SSLCommerz",
+        paidAt: now,
+        refundStatus: null,
+        createdAt: now,
+      }));
+      console.log(
+        "🔧 [HOTEL] Inserting",
+        bookings.length,
+        "bookings for tran_id:",
+        tran_id,
+      );
+      await db.collection("bookings").insertMany(bookings);
+      console.log(
+        "✅ [HOTEL] Bookings inserted successfully for tran_id:",
+        tran_id,
+      );
+    } else if (session.type === "car") {
+      // Double-check: Ensure car is still available (prevent race condition)
+      const conflictingBookings = await db
+        .collection("carrentBookings")
+        .countDocuments({
+          carId: session.carId,
+          type: "car",
+          status: "confirmed",
+          pickupDate: { $lt: session.returnDate },
+          returnDate: { $gt: session.pickupDate },
+        });
+
+      const car = await db
+        .collection("carrent")
+        .findOne({ _id: new ObjectId(session.carId) });
+
+      if (car && car.quantity > 0 && conflictingBookings >= car.quantity) {
+        console.error(`Car ${session.carName} is no longer available`);
+        // Payment succeeded but car is no longer available
+        await db.collection("payment_sessions").deleteOne({ tran_id });
+        return false; // Fail the confirmation
+      }
+
+      console.log("Creating car booking");
+      await db.collection("carrentBookings").insertOne({
+        userId: session.userId,
+        type: "car",
+        carId: session.carId,
+        carName: session.carName,
+        pickupDate: session.pickupDate,
+        returnDate: session.returnDate,
+        pickupLocation: session.pickupLocation,
+        contactNumber: session.contactNumber,
+        days: session.days,
+        pricePerDay: session.pricePerDay,
+        totalAmount: session.totalAmount,
+        seatsBooked: session.seatsBooked || 1,
+        status: "confirmed",
+        transactionId: tran_id,
+        paymentMethod: "SSLCommerz",
+        paidAt: now,
+        refundStatus: null,
+        createdAt: now,
+      });
+    } else if (session.type === "package" || session.type === "holiday") {
+      console.log(
+        "🔧 [PACKAGE] Creating holiday package booking for tran_id:",
+        tran_id,
+      );
+      await db.collection("bookings").insertOne({
+        userId: session.userId,
+        type: "holiday",
+        packageId: session.packageId,
+        packageName: session.packageName,
+        travelDate: session.travelDate,
+        peopleCount: session.peopleCount,
+        pricePerPerson: session.pricePerPerson,
+        totalAmount: session.totalAmount,
+        guestDetails: session.guestDetails || {},
+        status: "confirmed",
+        transactionId: tran_id,
+        paymentMethod: "SSLCommerz",
+        paidAt: now,
+        refundStatus: null,
+        createdAt: now,
+      });
+      console.log(
+        "✅ [PACKAGE] Holiday booking inserted successfully for tran_id:",
+        tran_id,
+      );
+    } else if (session.type === "bus") {
+      // Double-check: Ensure bus seats are still available (prevent race condition)
+      const conflictingBookings = await db
+        .collection("busBookings")
+        .countDocuments({
+          busId: session.busId,
+          status: "confirmed",
+          travelDate: {
+            $gte: new Date(session.travelDate.getTime() - 24 * 60 * 60 * 1000),
+            $lt: new Date(session.travelDate.getTime() + 24 * 60 * 60 * 1000),
+          },
+        });
+
+      const bus = await db
+        .collection("buses")
+        .findOne({ _id: new ObjectId(session.busId) });
+
+      const availableSeats = bus.quantity - conflictingBookings;
+      if (availableSeats < session.seats) {
+        console.error(
+          `Bus ${session.busName} has insufficient seats remaining`,
+        );
+        // Payment succeeded but bus is no longer available
+        await db.collection("payment_sessions").deleteOne({ tran_id });
+        return false; // Fail the confirmation
+      }
+
+      console.log("Creating bus booking");
+      await db.collection("busBookings").insertOne({
+        userId: session.userId,
+        type: "bus",
+        busId: session.busId,
+        busName: session.busName,
+        travelDate: session.travelDate,
+        seats: session.seats,
+        pickupLocation: session.pickupLocation,
+        contactNumber: session.contactNumber,
+        pricePerSeat: session.pricePerSeat,
+        totalAmount: session.totalAmount,
+        status: "confirmed",
+        transactionId: tran_id,
+        paymentMethod: "SSLCommerz",
+        paidAt: now,
+        refundStatus: null,
+        createdAt: now,
+      });
+    } else if (session.type === "carrent") {
+      // Double-check: Ensure carrent seats are still available (prevent race condition)
+      const bookedSeatsData = await db
+        .collection("carrentBookings")
+        .aggregate([
+          {
+            $match: {
+              serviceId: session.serviceId,
+              status: "confirmed",
+              returnDate: { $gte: now },
+              $or: [
+                {
+                  pickupDate: { $lt: session.returnDate },
+                  returnDate: { $gt: session.pickupDate },
+                },
+              ],
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: { $toInt: "$seatsBooked" } },
+            },
+          },
+        ])
+        .toArray();
+
+      const bookedSeats = bookedSeatsData[0]?.total || 0;
+      const service = await db
+        .collection("carrent")
+        .findOne({ _id: new ObjectId(session.serviceId) });
+
+      const availableSeats =
+        (service.quantity || service.totalSeats || 0) - bookedSeats;
+      if (availableSeats < session.seatsBooked) {
+        console.error(
+          `Service ${session.serviceName} has insufficient cars remaining`,
+        );
+        // Payment succeeded but service is no longer available
+        await db.collection("payment_sessions").deleteOne({ tran_id });
+        return false; // Fail the confirmation
+      }
+
+      console.log("Creating carrent booking");
+      await db.collection("carrentBookings").insertOne({
+        userId: session.userId,
+        type: "carrent",
+        serviceId: session.serviceId,
+        serviceName: session.serviceName,
+        carName: session.serviceName, // For frontend display
+        carType: service.type || "Standard", // For frontend display
+        pickupDate: session.pickupDate,
+        returnDate: session.returnDate,
+        days: Math.ceil(
+          (session.returnDate - session.pickupDate) / (1000 * 60 * 60 * 24),
+        ), // Calculate days
+        seatsBooked: session.seatsBooked,
+        pickupLocation: session.pickupLocation,
+        contactNumber: session.contactNumber,
+        pricePerSeat: session.pricePerSeat,
+        totalAmount: session.totalAmount,
+        status: "confirmed",
+        transactionId: tran_id,
+        paymentMethod: "SSLCommerz",
+        paidAt: now,
+        refundStatus: null,
+        createdAt: now,
+      });
+    } else if (session.type === "coin_topup") {
+      console.log(
+        "Processing coin top-up - auto-approving SSL Commerz payment",
+      );
+      // SSL Commerz payments are auto-approved since they're validated by SSLCommerz
+      // Directly add coins to coin_ledger
+      await db.collection("coin_ledger").updateOne(
+        { userId: session.userId },
+        {
+          $inc: { coins: session.amount },
+          $push: {
+            transactions: {
+              type: "topup",
+              paymentMethod: "ssl_commerz",
+              amount: session.amount,
+              timestamp: now,
+              transactionId: tran_id,
+              description: `SSL Commerz coin top-up (auto-approved)`,
+              approvedBy: null,
+            },
+          },
+        },
+        { upsert: true },
+      );
+
+      // Store transaction record
+      await db.collection("coin_topup_requests").insertOne({
+        userId: session.userId,
+        amount: session.amount,
+        paymentMethod: "ssl_commerz",
+        status: "approved",
+        transactionId: tran_id,
+        submittedAt: now,
+        reviewedAt: now,
+        reviewedBy: null, // System auto-approved
+        rejectionReason: null,
+      });
+
+      // Track revenue (coins received as payment)
+      await db.collection("revenue").insertOne({
+        amount: session.amount,
+        paymentMethod: "ssl_commerz",
+        type: "coin_topup",
+        userId: session.userId,
+        transactionId: tran_id,
+        topupRequestId: null,
+        approvedAt: now,
+        approvedBy: null,
+        createdAt: now,
+      });
+    }
+
+    console.log(
+      "🔧 [_confirmBooking] Deleting payment session for tran_id:",
+      tran_id,
+    );
+    await db.collection("payment_sessions").deleteOne({ tran_id });
+    console.log(
+      "✅ [_confirmBooking COMPLETE] Booking confirmed and session deleted for tran_id:",
+      tran_id,
+    );
+    return true; // Successfully created booking
+  } catch (err) {
+    console.error(
+      "❌ [_confirmBooking ERROR] for tran_id:",
+      tran_id,
+      "| Message:",
+      err.message,
+      "| Stack:",
+      err.stack,
+    );
+    console.log(
+      "🔧 [_confirmBooking ERROR] Attempting to release lock for tran_id:",
+      tran_id,
+    );
+    try {
+      await db
+        .collection("payment_sessions")
+        .updateOne(
+          { tran_id, processing: true },
+          { $unset: { processing: "", processingAt: "" } },
+        );
+      console.log(
+        "✅ [_confirmBooking ERROR] Lock released for tran_id:",
+        tran_id,
+      );
+    } catch (unlockErr) {
+      console.error(
+        "❌ [_confirmBooking ERROR] Failed to release lock for tran_id:",
+        tran_id,
+        "| Error:",
+        unlockErr.message,
+      );
+    }
+    throw err;
+  }
+}
+
+function _getValidationStatus(validation) {
+  if (!validation) return null;
+  return (
+    validation.status ||
+    validation.validationStatus ||
+    validation.validation_status ||
+    validation.validationMessage ||
+    null
+  );
+}
+
+function _getValidationAmount(validation) {
+  if (!validation) return 0;
+  return parseFloat(
+    validation.amount ||
+      validation.currency_amount ||
+      validation.currencyAmount ||
+      validation.currency_amount_in_bdt ||
+      validation.total_amount ||
+      0,
+  );
+}
+
+async function _waitForSessionProcessingCompletion(
+  db,
+  tran_id,
+  timeoutMs = 5000,
+) {
+  console.log(
+    "🔧 [_waitForSessionProcessingCompletion START] for tran_id:",
+    tran_id,
+    "timeout:",
+    timeoutMs,
+  );
+  const start = Date.now();
+  let iterations = 0;
+  while (Date.now() - start < timeoutMs) {
+    iterations++;
+    const session = await db
+      .collection("payment_sessions")
+      .findOne({ tran_id }, { projection: { processing: 1, processingAt: 1 } });
+
+    if (!session) {
+      console.log(
+        "🔧 [_waitForSessionProcessingCompletion] Session not found, checking if confirmed for tran_id:",
+        tran_id,
+      );
+      if (await _isTransactionAlreadyConfirmed(tran_id)) {
+        console.log(
+          "✅ [_waitForSessionProcessingCompletion] Returning 'confirmed' for tran_id:",
+          tran_id,
+        );
+        return "confirmed";
+      }
+      console.log(
+        "❌ [_waitForSessionProcessingCompletion] Returning 'missing' for tran_id:",
+        tran_id,
+      );
+      return "missing";
+    }
+
+    if (!session.processing) {
+      console.log(
+        "✅ [_waitForSessionProcessingCompletion] Returning 'available' for tran_id:",
+        tran_id,
+        "after",
+        iterations,
+        "iterations",
+      );
+      return "available";
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  console.log(
+    "⏱️ [_waitForSessionProcessingCompletion] Timeout reached for tran_id:",
+    tran_id,
+    "after",
+    iterations,
+    "iterations",
+  );
+  return "timeout";
+}
+
+async function _isTransactionAlreadyConfirmed(tran_id) {
+  console.log(
+    "🔧 [_isTransactionAlreadyConfirmed] Checking if transaction exists for tran_id:",
+    tran_id,
+  );
+  const db = await getDb();
+  const collections = [
+    "bookings",
+    "carrentBookings",
+    "busBookings",
+    "coin_topup_requests",
+  ];
+
+  for (const name of collections) {
+    console.log(
+      "🔧 [_isTransactionAlreadyConfirmed] Checking collection:",
+      name,
+    );
+    const existing = await db
+      .collection(name)
+      .findOne({ transactionId: tran_id }, { projection: { _id: 1 } });
+    if (existing) {
+      console.log(
+        "✅ [_isTransactionAlreadyConfirmed] Found in",
+        name,
+        "for tran_id:",
+        tran_id,
+      );
+      return true;
+    }
+  }
+
+  console.log(
+    "❌ [_isTransactionAlreadyConfirmed] Not found in any collection for tran_id:",
+    tran_id,
+  );
+  return false;
 }
 
 // Delete pending session (payment failed or cancelled — nothing goes to bookings)
@@ -1621,6 +1973,20 @@ router.post("/initiate/carrent", auth, async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TRANSACTION STATUS CHECK ENDPOINT
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /api/payment/check-transaction?tran_id=...
+// Check if a transaction has been confirmed (for frontend polling)
+// NO AUTH REQUIRED - just checking if transaction exists
+router.get("/check-transaction", async (req, res) => {
+  const { tran_id } = req.query;
+  if (!tran_id) return res.status(400).json({ confirmed: false });
+  const confirmed = await _isTransactionAlreadyConfirmed(tran_id);
+  res.json({ confirmed });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

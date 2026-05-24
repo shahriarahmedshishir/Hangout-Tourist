@@ -2364,20 +2364,28 @@ const BookingsView = () => {
   const [dateFilter, setDateFilter] = useState("");
   const [expanded, setExpanded] = useState(null);
   const [viewMode, setViewMode] = useState("upcoming"); // "upcoming" (default: today+future), "past", "all"
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
 
-  const load = () => {
+  const load = (page = 1) => {
     setLoading(true);
+    setCurrentPage(page);
     // Build query params
-    const params = new URLSearchParams({ limit: 100, viewMode });
+    const params = new URLSearchParams({ limit: 15, page, viewMode });
 
     api
       .get(`/api/admin/bookings?${params.toString()}`)
-      .then((data) => setBookings(data.bookings || []))
+      .then((data) => {
+        setBookings(data.bookings || []);
+        setTotal(data.total || 0);
+        setTotalPages(data.pages || 1);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
   useEffect(() => {
-    load();
+    load(1);
   }, [viewMode]);
 
   const handleCancel = async (id) => {
@@ -3074,6 +3082,51 @@ const BookingsView = () => {
               })}
             </tbody>
           </table>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="mt-6 flex items-center justify-center gap-2 flex-wrap p-4 border-t border-border">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => load(currentPage - 1)}
+                disabled={currentPage === 1}
+              >
+                ← Previous
+              </Button>
+
+              <div className="flex gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                  (page) => (
+                    <button
+                      key={page}
+                      onClick={() => load(page)}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        currentPage === page
+                          ? "bg-primary text-primary-foreground"
+                          : "border border-border hover:bg-muted"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ),
+                )}
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => load(currentPage + 1)}
+                disabled={currentPage === totalPages}
+              >
+                Next →
+              </Button>
+
+              <span className="ml-4 text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages} ({total} total)
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -5188,50 +5241,65 @@ const CancelRequestsView = () => {
 const RefundInitiationView = () => {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState({});
+  const [refundForm, setRefundForm] = useState(null);
+  const [initiating, setInitiating] = useState({});
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get("/api/admin/bookings");
+      // Show all cancelled bookings that need refund: pending or in_progress (not completed)
+      const cancelled = response.bookings.filter(
+        (b) =>
+          b.status === "cancelled" &&
+          (b.refundStatus === "pending" || b.refundStatus === "in_progress"),
+      );
+      setBookings(cancelled);
+    } catch (err) {
+      console.error("Failed to fetch cancelled bookings:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchCancelledBookings = async () => {
-      try {
-        const response = await api.get("/api/admin/bookings");
-        const cancelled = response.data.filter(
-          (b) => b.status === "cancelled" && b.refundStatus === "pending",
-        );
-        setBookings(cancelled);
-      } catch (err) {
-        console.error("Failed to fetch cancelled bookings:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchCancelledBookings();
+    load();
   }, []);
 
   const handleInitiateRefund = async (bookingId) => {
-    const refundAmount = prompt("Enter refund amount to initiate:");
-    if (refundAmount === null) return;
+    const booking = bookings.find((b) => b._id === bookingId);
+    const refundAmount = booking.totalAmount || 0;
 
-    if (
-      !refundAmount ||
-      isNaN(parseFloat(refundAmount)) ||
-      parseFloat(refundAmount) <= 0
-    ) {
-      alert("Please enter a valid refund amount");
+    if (!refundAmount || refundAmount <= 0) {
+      alert("Invalid refund amount");
       return;
     }
 
     try {
-      setProcessing((prev) => ({ ...prev, [bookingId]: true }));
+      setInitiating((prev) => ({ ...prev, [bookingId]: true }));
       await api.post(`/api/admin/bookings/${bookingId}/initiate-refund`, {
         refundAmount: parseFloat(refundAmount),
       });
-      setBookings((prev) => prev.filter((b) => b._id !== bookingId));
-      alert("Refund initiated successfully!");
+      load(); // Refresh to show "Ready to Process" status
     } catch (err) {
       alert("Failed to initiate refund: " + err.message);
     } finally {
-      setProcessing((prev) => ({ ...prev, [bookingId]: false }));
+      setInitiating((prev) => ({ ...prev, [bookingId]: false }));
+    }
+  };
+
+  const handleProcessRefund = async (e) => {
+    e.preventDefault();
+    if (!refundForm) return;
+
+    const fd = new FormData(e.target);
+    try {
+      await api.postForm(`/api/admin/bookings/${refundForm._id}/refund`, fd);
+      setRefundForm(null);
+      load(); // Refresh the list after processing
+      alert("Refund processed successfully!");
+    } catch (err) {
+      alert(err.message || "Unable to process refund");
     }
   };
 
@@ -5251,40 +5319,102 @@ const RefundInitiationView = () => {
             Refund Initiation
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Initialize refunds for approved cancellations
+            Initiate and process refunds for approved cancellations
           </p>
         </div>
       </div>
+
+      {refundForm && (
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-card">
+          <h3 className="mb-4 font-heading font-bold text-foreground">
+            Confirm Refund — {refundForm._id.slice(-8)}
+          </h3>
+          <form
+            onSubmit={handleProcessRefund}
+            className="grid gap-3 sm:grid-cols-2"
+          >
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Refund Amount
+              </label>
+              <div className="bg-muted rounded px-3 py-2 text-foreground font-medium">
+                ৳{(refundForm.refundAmount || 0).toLocaleString()}
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Transaction ID *
+              </label>
+              <Input name="transactionId" required className="bg-muted" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Payment Method *
+              </label>
+              <Input
+                name="paymentMethod"
+                placeholder="e.g. bKash, Bank Transfer"
+                required
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Screenshot (optional)
+              </label>
+              <input
+                type="file"
+                name="screenshot"
+                accept="image/*"
+                className="text-sm text-muted-foreground"
+              />
+            </div>
+            <div className="sm:col-span-2 flex gap-2">
+              <Button
+                type="submit"
+                className="bg-gradient-primary text-primary-foreground"
+              >
+                Confirm Refund
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRefundForm(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-8">Loading...</div>
       ) : bookings.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-card">
-          <p className="text-muted-foreground">
-            No pending refunds to initiate
-          </p>
+          <p className="text-muted-foreground">No pending refunds</p>
         </div>
       ) : (
         <div className="rounded-2xl border border-border overflow-x-auto shadow-card">
-          <table className="w-full">
+          <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border bg-card">
-                <th className="px-5 py-3 text-left text-xs font-semibold text-foreground uppercase">
+              <tr className="border-b border-border bg-muted/50">
+                <th className="px-5 py-3 text-left font-medium text-muted-foreground">
                   Booking ID
                 </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-foreground uppercase">
+                <th className="px-5 py-3 text-left font-medium text-muted-foreground">
                   Type
                 </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-foreground uppercase">
+                <th className="px-5 py-3 text-left font-medium text-muted-foreground">
                   Property
                 </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-foreground uppercase">
+                <th className="px-5 py-3 text-left font-medium text-muted-foreground">
                   Amount
                 </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-foreground uppercase">
-                  Cancelled Date
+                <th className="px-5 py-3 text-left font-medium text-muted-foreground">
+                  Status
                 </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-foreground uppercase">
+                <th className="px-5 py-3 text-left font-medium text-muted-foreground">
                   Action
                 </th>
               </tr>
@@ -5293,41 +5423,54 @@ const RefundInitiationView = () => {
               {bookings.map((booking) => (
                 <tr
                   key={booking._id}
-                  className="border-b border-border hover:bg-muted/50 transition-colors"
+                  className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                 >
-                  <td className="px-5 py-3 text-sm text-muted-foreground font-mono">
+                  <td className="px-5 py-3 font-mono text-muted-foreground">
                     {booking._id.slice(-8)}
                   </td>
-                  <td className="px-5 py-3 text-sm text-muted-foreground capitalize">
+                  <td className="px-5 py-3 capitalize text-muted-foreground">
                     {booking.type}
                   </td>
-                  <td className="px-5 py-3 text-sm text-muted-foreground">
-                    {booking.type === "hotel"
-                      ? booking.hotelName
-                      : booking.carType}
+                  <td className="px-5 py-3 text-muted-foreground">
+                    {booking.packageName ||
+                      booking.hotelName ||
+                      booking.carName ||
+                      "—"}
                   </td>
-                  <td className="px-5 py-3 text-sm font-semibold">
+                  <td className="px-5 py-3 font-semibold text-foreground">
                     ৳{(booking.totalAmount || 0).toLocaleString()}
                   </td>
-                  <td className="px-5 py-3 text-sm text-muted-foreground">
-                    {formatDate(booking.cancelledAt)}
+                  <td className="px-5 py-3">
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                        booking.refundStatus === "in_progress"
+                          ? "bg-success/10 text-success"
+                          : "bg-warning/10 text-warning"
+                      }`}
+                    >
+                      {booking.refundStatus === "in_progress"
+                        ? "Ready to Process"
+                        : "Pending"}
+                    </span>
                   </td>
                   <td className="px-5 py-3">
-                    <Button
-                      size="sm"
-                      className="bg-success hover:bg-success/90"
-                      onClick={() => handleInitiateRefund(booking._id)}
-                      disabled={processing[booking._id]}
-                    >
-                      {processing[booking._id] ? (
-                        "..."
-                      ) : (
-                        <>
-                          <DollarSign className="h-3.5 w-3.5 mr-1" />
-                          Initiate Refund
-                        </>
-                      )}
-                    </Button>
+                    {booking.refundStatus === "pending" ? (
+                      <button
+                        onClick={() => handleInitiateRefund(booking._id)}
+                        disabled={initiating[booking._id]}
+                        className="rounded-lg px-3 py-1.5 text-xs font-medium text-primary-foreground bg-primary hover:bg-primary/90 transition-colors disabled:opacity-50"
+                      >
+                        {initiating[booking._id] ? "..." : "Initiate"}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setRefundForm(booking)}
+                        className="rounded-lg p-1.5 text-muted-foreground hover:bg-success/10 hover:text-success transition-colors"
+                        title="Process refund"
+                      >
+                        <Check className="h-4 w-4" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

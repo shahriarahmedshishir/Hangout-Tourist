@@ -797,7 +797,7 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
     } = req.query;
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setUTCHours(0, 0, 0, 0);
 
     // Get bookings
     const bookingsPipeline = [];
@@ -836,7 +836,7 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
       if (dateFrom) dateFilter.$gte = new Date(dateFrom);
       if (dateTo) {
         const end = new Date(dateTo);
-        end.setHours(23, 59, 59, 999);
+        end.setUTCHours(23, 59, 59, 999);
         dateFilter.$lte = end;
       }
       bookingsMatch.startDate = dateFilter;
@@ -912,7 +912,7 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
         if (dateFrom) dateFilter.$gte = new Date(dateFrom);
         if (dateTo) {
           const end = new Date(dateTo);
-          end.setHours(23, 59, 59, 999);
+          end.setUTCHours(23, 59, 59, 999);
           dateFilter.$lte = end;
         }
         carMatch.pickupDate = dateFilter;
@@ -975,7 +975,7 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
         if (dateFrom) dateFilter.$gte = new Date(dateFrom);
         if (dateTo) {
           const end = new Date(dateTo);
-          end.setHours(23, 59, 59, 999);
+          end.setUTCHours(23, 59, 59, 999);
           dateFilter.$lte = end;
         }
         busMatch.travelDate = dateFilter;
@@ -1019,12 +1019,20 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
       const coinMatch = {};
       if (status) coinMatch.status = status;
 
+      // Apply viewMode filter to coin topups
+      if (viewMode === "upcoming") {
+        coinMatch.submittedAt = { $gte: today };
+      } else if (viewMode === "past") {
+        coinMatch.submittedAt = { $lt: today };
+      }
+
+      // Date range filter overrides viewMode
       if (dateFrom || dateTo) {
         const dateFilter = {};
         if (dateFrom) dateFilter.$gte = new Date(dateFrom);
         if (dateTo) {
           const end = new Date(dateTo);
-          end.setHours(23, 59, 59, 999);
+          end.setUTCHours(23, 59, 59, 999);
           dateFilter.$lte = end;
         }
         coinMatch.submittedAt = dateFilter;
@@ -1126,13 +1134,20 @@ router.post("/bookings/:id/cancel", auth, role("admin"), async (req, res) => {
     if (booking.status === "cancelled")
       return res.status(400).json({ message: "Already cancelled" });
 
+    // ✅ Auto-calculate and initiate refund when cancelling
+    const refundAmount = booking.totalAmount || 0;
+    const now = new Date();
+
     await db.collection("bookings").updateOne(
       { _id: new ObjectId(req.params.id) },
       {
         $set: {
           status: "cancelled",
           refundStatus: "in_progress",
-          cancelledAt: new Date(),
+          refundAmount: parseFloat(refundAmount),
+          refundInitiatedAt: now,
+          refundInitiatedBy: req.user.id,
+          cancelledAt: now,
         },
       },
     );
@@ -1141,6 +1156,8 @@ router.post("/bookings/:id/cancel", auth, role("admin"), async (req, res) => {
     const io = req.app.get("io");
     io.to(`user-${booking.userId}`).emit("booking-cancelled", {
       bookingId: req.params.id,
+      refundAmount: refundAmount,
+      refundStatus: "in_progress",
     });
 
     // Notify car/hotel watchers
@@ -1152,7 +1169,11 @@ router.post("/bookings/:id/cancel", auth, role("admin"), async (req, res) => {
       });
     }
 
-    res.json({ message: "Booking cancelled, refund in progress" });
+    res.json({
+      message: "Booking cancelled and refund initiated",
+      refundAmount: refundAmount,
+      refundStatus: "in_progress",
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -2162,7 +2183,7 @@ router.get("/payment-history", auth, role("admin"), async (req, res) => {
       if (dateFrom) dateFilter.$gte = new Date(dateFrom);
       if (dateTo) {
         const end = new Date(dateTo);
-        end.setHours(23, 59, 59, 999);
+        end.setUTCHours(23, 59, 59, 999);
         dateFilter.$lte = end;
       }
       bookingMatch.createdAt = dateFilter;
@@ -2260,7 +2281,7 @@ router.get("/payment-history", auth, role("admin"), async (req, res) => {
           if (dateFrom) dateFilter.$gte = new Date(dateFrom);
           if (dateTo) {
             const end = new Date(dateTo);
-            end.setHours(23, 59, 59, 999);
+            end.setUTCHours(23, 59, 59, 999);
             dateFilter.$lte = end;
           }
           coinTopupPipeline.push({
@@ -2337,7 +2358,7 @@ router.get("/payment-history", auth, role("admin"), async (req, res) => {
         if (dateFrom) dateFilter.$gte = new Date(dateFrom);
         if (dateTo) {
           const end = new Date(dateTo);
-          end.setHours(23, 59, 59, 999);
+          end.setUTCHours(23, 59, 59, 999);
           dateFilter.$lte = end;
         }
         ledgerPipeline.push({
@@ -2791,14 +2812,21 @@ router.post(
         },
       );
 
-      // Update booking status to cancelled (refund not yet initiated)
+      // ✅ Auto-calculate and initiate refund when approving cancellation
+      const refundAmount = booking.totalAmount || 0;
+      const now = new Date();
+
+      // Update booking status to cancelled and auto-initiate refund
       await bookingCollection.updateOne(
         { _id: new ObjectId(cancelRequest.bookingId) },
         {
           $set: {
             status: "cancelled",
-            refundStatus: "pending",
-            cancelledAt: new Date(),
+            refundStatus: "in_progress",
+            refundAmount: parseFloat(refundAmount),
+            refundInitiatedAt: now,
+            refundInitiatedBy: req.user.id,
+            cancelledAt: now,
             cancelledBy: "admin",
             cancelRequestId: req.params.requestId,
           },
@@ -2815,12 +2843,14 @@ router.post(
             bookingId: cancelRequest.bookingId.toString(),
           });
 
-          // Notify user their cancellation was approved
+          // Notify user their cancellation was approved with refund initiated
           const userIdStr = booking.userId.toString
             ? booking.userId.toString()
             : booking.userId;
           serverModule.io.to(`user-${userIdStr}`).emit("cancel-approved", {
             bookingId: cancelRequest.bookingId.toString(),
+            refundAmount: refundAmount,
+            refundStatus: "in_progress",
           });
         }
       } catch (err) {
@@ -2828,8 +2858,10 @@ router.post(
       }
 
       res.json({
-        message: "Cancel request approved",
+        message: "Cancel request approved and refund initiated",
         cancelRequest: { ...cancelRequest, status: "approved" },
+        refundAmount: refundAmount,
+        refundStatus: "in_progress",
       });
     } catch (err) {
       res.status(500).json({ message: err.message });
