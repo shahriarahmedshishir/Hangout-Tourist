@@ -4077,6 +4077,29 @@ const CoinTopupsView = () => {
                 </div>
               </div>
 
+              <div className="mt-4 space-y-2 border-t border-border pt-4">
+                {topup.transactionId && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      Transaction ID
+                    </p>
+                    <p className="font-mono text-sm font-semibold text-primary">
+                      {topup.transactionId}
+                    </p>
+                  </div>
+                )}
+                {topup.description && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      Payment Details
+                    </p>
+                    <p className="text-sm text-foreground">
+                      {topup.description}
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {topup.status === "pending" && (
                 <div className="mt-4 flex gap-2">
                   {topup.paymentMethod === "manual" && topup.screenshot && (
@@ -4122,14 +4145,37 @@ const CoinTopupsView = () => {
               {rejectReason ? "Reject Top-up" : "Review Proof"}
             </h3>
 
-            {!rejectReason &&
-              topups.find((t) => t._id === selected)?.screenshot && (
-                <img
-                  src={topups.find((t) => t._id === selected)?.screenshot}
-                  alt="Payment proof"
-                  className="w-full rounded-lg max-h-80 object-cover"
-                />
-              )}
+            {!rejectReason && (
+              <div className="space-y-3">
+                {topups.find((t) => t._id === selected)?.transactionId && (
+                  <div className="rounded-lg bg-muted p-3">
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Transaction ID
+                    </p>
+                    <p className="font-mono text-sm font-semibold text-primary">
+                      {topups.find((t) => t._id === selected)?.transactionId}
+                    </p>
+                  </div>
+                )}
+                {topups.find((t) => t._id === selected)?.description && (
+                  <div className="rounded-lg bg-muted p-3">
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Payment Details
+                    </p>
+                    <p className="text-sm">
+                      {topups.find((t) => t._id === selected)?.description}
+                    </p>
+                  </div>
+                )}
+                {topups.find((t) => t._id === selected)?.screenshot && (
+                  <img
+                    src={topups.find((t) => t._id === selected)?.screenshot}
+                    alt="Payment proof"
+                    className="w-full rounded-lg max-h-80 object-cover"
+                  />
+                )}
+              </div>
+            )}
 
             {rejectReason ||
             !topups.find((t) => t._id === selected)?.screenshot ? (
@@ -5680,6 +5726,45 @@ const BusesView = () => {
               </p>
             </div>
             <div className="sm:col-span-2 lg:col-span-3">
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Trip Type <span className="text-destructive">*</span>
+              </label>
+              <div className="flex gap-6">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    id="one-way"
+                    name="tripType"
+                    value="one-way"
+                    defaultChecked={form?.tripType !== "round-trip"}
+                    className="h-4 w-4 cursor-pointer"
+                  />
+                  <label
+                    htmlFor="one-way"
+                    className="cursor-pointer text-sm font-medium text-foreground"
+                  >
+                    One-Way
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    id="round-trip"
+                    name="tripType"
+                    value="round-trip"
+                    defaultChecked={form?.tripType === "round-trip"}
+                    className="h-4 w-4 cursor-pointer"
+                  />
+                  <label
+                    htmlFor="round-trip"
+                    className="cursor-pointer text-sm font-medium text-foreground"
+                  >
+                    Round-Trip
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div className="sm:col-span-2 lg:col-span-3">
               <label className="mb-1 block text-xs text-muted-foreground">
                 Images
               </label>
@@ -5734,6 +5819,9 @@ const BusesView = () => {
                   Time
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Trip Type
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
                   Price/Seat
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
@@ -5768,6 +5856,13 @@ const BusesView = () => {
                     <td className="px-5 py-3 text-foreground">{b.seats}</td>
                     <td className="px-5 py-3 text-foreground">
                       {b.departureTime}
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                        {b.tripType === "round-trip"
+                          ? "🔄 Round-Trip"
+                          : "➜ One-Way"}
+                      </span>
                     </td>
                     <td className="px-5 py-3 font-medium text-primary">
                       ৳{b.price?.toLocaleString()}

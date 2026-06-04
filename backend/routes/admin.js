@@ -3287,6 +3287,7 @@ router.post(
         price,
         totalSeats,
         routes,
+        tripType,
       } = req.body;
 
       if (!name || !acType || !departureTime || !price || !routes) {
@@ -3325,6 +3326,7 @@ router.post(
         price: parseInt(price),
         totalSeats: parseInt(totalSeats) || 45,
         routes: routeArray,
+        tripType: tripType || "one-way", // "one-way" or "round-trip"
         images,
         isActive: true,
         createdAt: new Date(),
@@ -3358,6 +3360,7 @@ router.put(
         price,
         totalSeats,
         routes,
+        tripType,
       } = req.body;
       const db = await getDb();
 
@@ -3393,6 +3396,7 @@ router.put(
         price: parseInt(price) || bus.price,
         totalSeats: parseInt(totalSeats) || bus.totalSeats || 45,
         routes: routeArray,
+        tripType: tripType || bus.tripType || "one-way",
         images,
         updatedAt: new Date(),
       };

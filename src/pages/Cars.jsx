@@ -635,6 +635,11 @@ const Cars = () => {
                       <span className="flex items-center gap-1">
                         <Settings2 className="h-3 w-3" /> {bus.acType}
                       </span>
+                      <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium flex items-center gap-1">
+                        {bus.tripType === "round-trip"
+                          ? "🔄 Round-Trip"
+                          : "➜ One-Way"}
+                      </span>
                     </div>
                     <div className="flex items-end justify-between border-t border-border pt-3">
                       <div>

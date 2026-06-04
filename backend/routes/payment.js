@@ -1637,6 +1637,23 @@ router.post("/submit/manual-coin-topup", auth, async (req, res) => {
   }
 });
 
+// GET /api/payment/my-coin-topups
+// Get the current user's coin top-up requests
+router.get("/my-coin-topups", auth, async (req, res) => {
+  try {
+    const db = await getDb();
+    const topups = await db
+      .collection("coin_topup_requests")
+      .find({ userId: req.user.id })
+      .sort({ submittedAt: -1 })
+      .toArray();
+
+    res.json(topups);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // BUS BOOKING PAYMENT
 // ═══════════════════════════════════════════════════════════════════════════

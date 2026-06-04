@@ -79,10 +79,10 @@ export default function Profile() {
   const handleScreenshotUpload = (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Check file size (warn if > 2MB)
-      if (file.size > 2 * 1024 * 1024) {
+      // Check file size (warn if > 10MB)
+      if (file.size > 10 * 1024 * 1024) {
         setTopupError(
-          "Image is too large (max 2MB). Please use a smaller image.",
+          "Image is too large (max 10MB). Please use a smaller image.",
         );
         return;
       }

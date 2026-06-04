@@ -202,6 +202,13 @@ const BusBooking = () => {
                   <BusFront className="h-4 w-4" />
                   <span>{bus.acType}</span>
                 </div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                    {bus.tripType === "round-trip"
+                      ? "🔄 Round-Trip"
+                      : "➜ One-Way"}
+                  </span>
+                </div>
                 <div className="font-medium text-foreground">
                   ৳{bus.price}/Seat
                 </div>

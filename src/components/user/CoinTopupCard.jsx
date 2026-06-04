@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Coins, Plus } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -43,9 +43,57 @@ export default function CoinTopupCard({ onTopupSuccess }) {
   const [manualAmount, setManualAmount] = useState("");
   const [manualPaymentType, setManualPaymentType] = useState("");
   const [manualDescription, setManualDescription] = useState("");
+  const [manualScreenshot, setManualScreenshot] = useState("");
   const [manualLoading, setManualLoading] = useState(false);
 
+  // File input ref
+  const screenshotInputRef = useRef(null);
+
   const { toast } = useToast();
+
+  const handleScreenshotUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith("image/")) {
+        toast({
+          title: "Invalid File",
+          description: "Please upload an image file",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: "File Too Large",
+          description: "Please upload an image smaller than 5MB",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onerror = () => {
+        toast({
+          title: "Upload Error",
+          description: "Failed to read file. Please try again.",
+          variant: "destructive",
+        });
+      };
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setManualScreenshot(event.target.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleFileInputClick = () => {
+    screenshotInputRef.current?.click();
+  };
 
   const handleTopup = async () => {
     const topupAmount = selectedPreset || parseFloat(amount);
@@ -120,11 +168,21 @@ export default function CoinTopupCard({ onTopupSuccess }) {
       return;
     }
 
+    if (!manualScreenshot) {
+      toast({
+        title: "Proof Required",
+        description: "Please upload a payment proof screenshot.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setManualLoading(true);
     try {
       const response = await api.post("/api/payment/submit/manual-coin-topup", {
         amount: topupAmount,
         paymentMethod: manualPaymentType,
+        proofUrl: manualScreenshot,
         description: manualDescription.trim(),
       });
 
@@ -140,6 +198,11 @@ export default function CoinTopupCard({ onTopupSuccess }) {
       setManualAmount("");
       setManualPaymentType("");
       setManualDescription("");
+      setManualScreenshot("");
+      // Reset file input
+      if (screenshotInputRef.current) {
+        screenshotInputRef.current.value = "";
+      }
     } catch (error) {
       toast({
         title: "Submission Failed",
@@ -333,6 +396,49 @@ export default function CoinTopupCard({ onTopupSuccess }) {
               />
             </div>
 
+            {/* Payment Proof Screenshot */}
+            <div>
+              <Label htmlFor="screenshot" className="text-sm font-medium">
+                Payment Proof Screenshot *
+              </Label>
+              <div className="mt-1">
+                <button
+                  type="button"
+                  onClick={handleFileInputClick}
+                  className="flex items-center justify-center w-full px-4 py-6 border-2 border-dashed border-primary/30 rounded-lg cursor-pointer hover:border-primary/50 transition-colors bg-primary/2"
+                >
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground">
+                      {manualScreenshot
+                        ? "✓ Screenshot Uploaded"
+                        : "Upload Screenshot"}
+                    </p>
+                  </div>
+                </button>
+                <input
+                  ref={screenshotInputRef}
+                  id="screenshot"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleScreenshotUpload}
+                  className="hidden"
+                  aria-label="Upload payment proof screenshot"
+                />
+              </div>
+              {manualScreenshot && (
+                <div className="mt-3">
+                  <p className="text-xs text-green-600 mb-2">
+                    ✓ Screenshot attached
+                  </p>
+                  <img
+                    src={manualScreenshot}
+                    alt="Payment proof preview"
+                    className="w-full h-40 object-cover rounded-lg border border-primary/20"
+                  />
+                </div>
+              )}
+            </div>
+
             {/* Summary */}
             {manualAmount && (
               <div className="rounded-lg bg-primary/5 p-4 border border-primary/10">
@@ -370,7 +476,8 @@ export default function CoinTopupCard({ onTopupSuccess }) {
                 manualLoading ||
                 !manualAmount ||
                 !manualPaymentType ||
-                !manualDescription.trim()
+                !manualDescription.trim() ||
+                !manualScreenshot
               }
               className="w-full bg-gradient-primary text-primary-foreground hover:opacity-90"
             >

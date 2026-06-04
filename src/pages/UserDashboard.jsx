@@ -341,6 +341,7 @@ const UserDashboard = () => {
   const [bookings, setBookings] = useState([]);
   const [busBookings, setBusBookings] = useState([]);
   const [pendingBusTickets, setPendingBusTickets] = useState([]);
+  const [topupRequests, setTopupRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [section, setSection] = useState("active"); // "active" or "completed"
   const [tab, setTab] = useState("hotel");
@@ -348,6 +349,7 @@ const UserDashboard = () => {
   const [carPage, setCarPage] = useState(1);
   const [busPage, setBusPage] = useState(1);
   const [packagePage, setPackagePage] = useState(1);
+  const [topupPage, setTopupPage] = useState(1);
   const [selectedBookingId, setSelectedBookingId] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
   const ITEMS_PER_PAGE = 3;
@@ -381,6 +383,12 @@ const UserDashboard = () => {
       .get("/api/bookings/user/bus-tickets/pending")
       .then((data) => {
         setPendingBusTickets(data);
+      })
+      .catch(() => {});
+    api
+      .get("/api/payment/my-coin-topups")
+      .then((data) => {
+        setTopupRequests(data);
       })
       .catch(() => {});
   }, [user]);
@@ -540,6 +548,9 @@ const UserDashboard = () => {
   const completedPackageBookings = bookings.filter(
     (b) => (b.type === "package" || b.type === "holiday") && isCompleted(b),
   );
+  const completedCarBookings = bookings.filter(
+    (b) => (b.type === "car" || b.type === "carrent") && isCompleted(b),
+  );
   const busBookingsCompleted = busBookings.filter(isBusCompleted);
 
   // Pagination
@@ -645,7 +656,13 @@ const UserDashboard = () => {
           <div>
             <CoinTopupCard
               onTopupSuccess={() => {
-                // Refresh user data or wallet balance
+                // Refresh topup requests list
+                api
+                  .get("/api/payment/my-coin-topups")
+                  .then((data) => {
+                    setTopupRequests(data);
+                  })
+                  .catch(() => {});
               }}
             />
           </div>
@@ -743,6 +760,19 @@ const UserDashboard = () => {
           >
             <Package className="h-4 w-4 mr-2" /> Package Trips
           </Button>
+          <Button
+            variant={tab === "topup" ? "default" : "outline"}
+            onClick={() => {
+              setTab("topup");
+            }}
+            className={
+              tab === "topup"
+                ? "bg-gradient-primary text-primary-foreground"
+                : ""
+            }
+          >
+            <Coins className="h-4 w-4 mr-2" /> Coin Top-ups
+          </Button>
         </div>
 
         {/* Pending Bus Tickets Section - Show when in bus tab and active section */}
@@ -798,7 +828,191 @@ const UserDashboard = () => {
             </div>
           )}
 
-        {shown.length === 0 ? (
+        {/* Coin Top-ups Section */}
+        {tab === "topup" && (
+          <div>
+            <div className="mb-6 flex gap-2">
+              <Button
+                variant={section === "active" ? "default" : "outline"}
+                onClick={() => {
+                  setSection("active");
+                  setTopupPage(1);
+                }}
+                className={
+                  section === "active"
+                    ? "bg-gradient-primary text-primary-foreground"
+                    : ""
+                }
+              >
+                Pending & Active
+              </Button>
+              <Button
+                variant={section === "completed" ? "default" : "outline"}
+                onClick={() => {
+                  setSection("completed");
+                  setTopupPage(1);
+                }}
+                className={
+                  section === "completed"
+                    ? "bg-gradient-primary text-primary-foreground"
+                    : ""
+                }
+              >
+                Completed
+              </Button>
+            </div>
+
+            {topupRequests.length === 0 ? (
+              <div className="rounded-2xl border border-border bg-card py-20 text-center shadow-card">
+                <p className="text-muted-foreground mb-4">
+                  No coin top-up requests yet.
+                </p>
+              </div>
+            ) : (
+              <>
+                {(() => {
+                  const filtered = topupRequests.filter((tr) => {
+                    if (section === "active") {
+                      return ["pending"].includes(tr.status);
+                    }
+                    return ["approved", "rejected"].includes(tr.status);
+                  });
+                  const topupTotalPages = Math.ceil(
+                    filtered.length / ITEMS_PER_PAGE,
+                  );
+                  const topupStartIdx = (topupPage - 1) * ITEMS_PER_PAGE;
+                  const paginatedTopups = filtered.slice(
+                    topupStartIdx,
+                    topupStartIdx + ITEMS_PER_PAGE,
+                  );
+
+                  return (
+                    <>
+                      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                        {paginatedTopups.map((topup) => {
+                          const StatusIcon =
+                            topup.status === "pending"
+                              ? Clock
+                              : topup.status === "approved"
+                                ? CheckCircle2
+                                : XCircle;
+                          const statusColor =
+                            topup.status === "pending"
+                              ? "border-warning/30 bg-warning/5"
+                              : topup.status === "approved"
+                                ? "border-success/30 bg-success/5"
+                                : "border-destructive/30 bg-destructive/5";
+                          const statusTextColor =
+                            topup.status === "pending"
+                              ? "text-warning"
+                              : topup.status === "approved"
+                                ? "text-success"
+                                : "text-destructive";
+
+                          return (
+                            <div
+                              key={topup._id}
+                              className={`rounded-lg border p-4 ${statusColor}`}
+                            >
+                              <div className="mb-3 flex items-start justify-between">
+                                <div>
+                                  <p className="font-semibold text-foreground">
+                                    ৳{topup.amount}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Date(
+                                      topup.submittedAt,
+                                    ).toLocaleDateString()}
+                                  </p>
+                                </div>
+                                <span
+                                  className={`rounded-full px-2.5 py-1 text-xs font-medium flex items-center gap-1 ${statusTextColor}`}
+                                >
+                                  <StatusIcon className="h-3 w-3" />
+                                  {topup.status.charAt(0).toUpperCase() +
+                                    topup.status.slice(1)}
+                                </span>
+                              </div>
+                              <div className="space-y-2 text-sm">
+                                <div>
+                                  <p className="text-xs text-muted-foreground">
+                                    Payment Method
+                                  </p>
+                                  <p className="font-medium capitalize">
+                                    {topup.paymentMethod}
+                                  </p>
+                                </div>
+                                {topup.transactionId && (
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">
+                                      Transaction ID
+                                    </p>
+                                    <p className="font-mono text-xs font-medium break-all">
+                                      {topup.transactionId}
+                                    </p>
+                                  </div>
+                                )}
+                                {topup.description && (
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">
+                                      Details
+                                    </p>
+                                    <p className="text-xs">
+                                      {topup.description}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                              {topup.status === "rejected" &&
+                                topup.rejectionReason && (
+                                  <p className="mt-3 text-xs bg-destructive/10 text-destructive rounded px-2 py-2">
+                                    <strong>Reason:</strong>{" "}
+                                    {topup.rejectionReason}
+                                  </p>
+                                )}
+                              {topup.status === "pending" && (
+                                <p className="mt-3 text-xs bg-warning/10 text-warning rounded px-2 py-2">
+                                  Awaiting admin verification. Usually takes 1-2
+                                  hours.
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {topupTotalPages > 1 && (
+                        <div className="mt-8 flex justify-center gap-2">
+                          {Array.from(
+                            { length: topupTotalPages },
+                            (_, i) => i + 1,
+                          ).map((page) => (
+                            <Button
+                              key={page}
+                              variant={
+                                page === topupPage ? "default" : "outline"
+                              }
+                              size="sm"
+                              onClick={() => setTopupPage(page)}
+                              className={
+                                page === topupPage
+                                  ? "bg-gradient-primary text-primary-foreground"
+                                  : ""
+                              }
+                            >
+                              {page}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </>
+            )}
+          </div>
+        )}
+
+        {tab !== "topup" && shown.length === 0 ? (
           <div className="rounded-2xl border border-border bg-card py-20 text-center shadow-card">
             <p className="text-muted-foreground mb-4">
               No {section === "active" ? "active" : "completed"}{" "}

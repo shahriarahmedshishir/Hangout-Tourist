@@ -32,6 +32,32 @@ const _multer = multer({
   limits: { fileSize: MAX_IMAGE_UPLOAD_BYTES },
 });
 
+// Validate image buffer integrity
+async function validateImageBuffer(buffer, mimetype) {
+  try {
+    // Use sharp's metadata to validate without processing
+    const metadata = await sharp(buffer, { failOnError: true }).metadata();
+    return metadata;
+  } catch (err) {
+    throw new Error(`Invalid or corrupted image file: ${err.message}`);
+  }
+}
+
+// Attempt to recover corrupted JPEG by extracting valid data
+async function attemptJpegRecovery(buffer) {
+  try {
+    // Extract what we can and re-encode
+    const recovered = await sharp(buffer, { failOnError: false })
+      .rotate()
+      .resize({ width: 1280, withoutEnlargement: true })
+      .jpeg({ quality: 80, progressive: true, force: true })
+      .toBuffer();
+    return recovered;
+  } catch (err) {
+    return null;
+  }
+}
+
 // Compress and save a single buffer, returns the saved filename
 async function compressAndSave(buffer, originalMimetype) {
   // Determine extension based on mime type
@@ -43,26 +69,50 @@ async function compressAndSave(buffer, originalMimetype) {
   const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
   const dest = path.join(uploadDir, filename);
 
-  let pipeline = sharp(buffer).rotate(); // auto-orient from EXIF
+  try {
+    // First validate the image integrity
+    await validateImageBuffer(buffer, originalMimetype);
 
-  // Resize to max 1280px wide
-  pipeline = pipeline.resize({ width: 1280, withoutEnlargement: true });
+    let pipeline = sharp(buffer).rotate(); // auto-orient from EXIF
 
-  // Apply compression based on format
-  if (ext === ".png") {
-    pipeline = pipeline.png({ quality: 80, compression: 9 });
-  } else if (ext === ".gif") {
-    // GIF stays as-is, just resized
-    pipeline = pipeline.toFormat("gif");
-  } else if (ext === ".webp") {
-    pipeline = pipeline.webp({ quality: 80 });
-  } else {
-    // JPEG default
-    pipeline = pipeline.jpeg({ quality: 80, progressive: true });
+    // Resize to max 1280px wide
+    pipeline = pipeline.resize({ width: 1280, withoutEnlargement: true });
+
+    // Apply compression based on format
+    if (ext === ".png") {
+      pipeline = pipeline.png({ quality: 80, compression: 9 });
+    } else if (ext === ".gif") {
+      // GIF stays as-is, just resized
+      pipeline = pipeline.toFormat("gif");
+    } else if (ext === ".webp") {
+      pipeline = pipeline.webp({ quality: 80 });
+    } else {
+      // JPEG default
+      pipeline = pipeline.jpeg({ quality: 80, progressive: true });
+    }
+
+    await pipeline.toFile(dest);
+    return filename;
+  } catch (err) {
+    // For JPEG corruption, attempt recovery
+    if (originalMimetype === "image/jpeg" || originalMimetype === "image/jpg") {
+      const recovered = await attemptJpegRecovery(buffer);
+      if (recovered) {
+        try {
+          await fs.promises.writeFile(dest, recovered);
+          console.log(`Successfully recovered corrupted JPEG: ${filename}`);
+          return filename;
+        } catch (writeErr) {
+          throw new Error(
+            `Failed to save recovered image: ${writeErr.message}`,
+          );
+        }
+      }
+    }
+
+    // If recovery failed or unsupported format, reject the upload
+    throw new Error(`Invalid or corrupted image file: ${err.message}`);
   }
-
-  await pipeline.toFile(dest);
-  return filename;
 }
 
 // Express middleware that runs after multer and compresses every uploaded file
