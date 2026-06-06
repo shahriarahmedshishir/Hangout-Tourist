@@ -869,6 +869,30 @@ const RoomsView = ({ hotel, onBack }) => {
                 className="bg-muted"
               />
             </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Max Guests (Adult) *
+              </label>
+              <Input
+                name="maxGuests"
+                type="number"
+                min="1"
+                defaultValue={form?.maxGuests || ""}
+                className="bg-muted"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Meal Plan *
+              </label>
+              <Input
+                name="mealPlan"
+                defaultValue={form?.mealPlan || "Breakfast Included"}
+                placeholder="e.g. Breakfast Included, Half Board, Full Board"
+                required
+                className="bg-muted"
+              />
+            </div>
             <div className="sm:col-span-2">
               <label className="mb-1 block text-xs text-muted-foreground">
                 Services (comma separated)
@@ -1007,6 +1031,12 @@ const RoomsView = ({ hotel, onBack }) => {
                   Price/night
                 </th>
                 <th className="px-5 py-3 text-left font-medium text-muted-foreground">
+                  Max Guests
+                </th>
+                <th className="px-5 py-3 text-left font-medium text-muted-foreground">
+                  Meal Plan
+                </th>
+                <th className="px-5 py-3 text-left font-medium text-muted-foreground">
                   Services
                 </th>
                 <th className="px-5 py-3 text-left font-medium text-muted-foreground">
@@ -1031,6 +1061,12 @@ const RoomsView = ({ hotel, onBack }) => {
                       </td>
                       <td className="px-5 py-3 font-medium text-primary">
                         ৳{r.price?.toLocaleString()}
+                      </td>
+                      <td className="px-5 py-3 text-foreground">
+                        {r.maxGuests ? r.maxGuests : "Not Mentioned"}
+                      </td>
+                      <td className="px-5 py-3 text-muted-foreground text-sm">
+                        {r.mealPlan || "Breakfast Included"}
                       </td>
                       <td className="px-5 py-3 text-muted-foreground text-xs">
                         {r.services?.join(", ") || "—"}
@@ -2928,41 +2964,17 @@ const BookingsView = () => {
                             )}
                           {b.type === "coin_topup" &&
                             b.paymentMethod !== "ssl_commerz" && (
-                              <>
-                                <span
-                                  className={`px-2 py-1 text-xs font-medium ${
-                                    b.status === "approved"
-                                      ? "text-success bg-success/10"
-                                      : b.status === "rejected"
-                                        ? "text-destructive bg-destructive/10"
-                                        : "text-warning bg-warning/10"
-                                  }`}
-                                >
-                                  {b.status}
-                                </span>
-                                {b.status === "pending" && (
-                                  <>
-                                    <button
-                                      title="Approve top-up"
-                                      className="rounded-lg p-1.5 text-muted-foreground hover:bg-success/10 hover:text-success transition-colors"
-                                      onClick={() =>
-                                        handleApproveCoinTopup(b._id)
-                                      }
-                                    >
-                                      <Check className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                      title="Reject top-up"
-                                      className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-                                      onClick={() =>
-                                        handleRejectCoinTopup(b._id)
-                                      }
-                                    >
-                                      <X className="h-4 w-4" />
-                                    </button>
-                                  </>
-                                )}
-                              </>
+                              <span
+                                className={`px-2 py-1 text-xs font-medium ${
+                                  b.status === "approved"
+                                    ? "text-success bg-success/10"
+                                    : b.status === "rejected"
+                                      ? "text-destructive bg-destructive/10"
+                                      : "text-warning bg-warning/10"
+                                }`}
+                              >
+                                {b.status}
+                              </span>
                             )}
                         </div>
                       </td>

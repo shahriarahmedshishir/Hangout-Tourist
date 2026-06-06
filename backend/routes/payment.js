@@ -175,6 +175,8 @@ router.post("/initiate/hotel", auth, async (req, res) => {
       checkIn,
       checkOut,
       contactNumber,
+      guestDetails,
+      occupancy,
     } = req.body;
 
     const idsToBook =
@@ -289,6 +291,8 @@ router.post("/initiate/hotel", auth, async (req, res) => {
       days,
       totalAmount,
       contactNumber: contactNumber || "",
+      guestDetails: guestDetails || {},
+      occupancy: occupancy || {},
       createdAt: new Date(),
     });
 
@@ -1143,6 +1147,8 @@ async function _confirmBooking(tran_id, validation = null) {
         pricePerNight: r.pricePerNight,
         totalAmount: r.roomTotal,
         contactNumber: session.contactNumber,
+        guestDetails: session.guestDetails || {},
+        occupancy: session.occupancy || {},
         status: "confirmed",
         transactionId: tran_id,
         paymentMethod: "SSLCommerz",
@@ -1588,7 +1594,15 @@ async function _deleteSession(tran_id) {
 // Coins are NOT credited immediately - requires admin approval in dashboard
 router.post("/submit/manual-coin-topup", auth, async (req, res) => {
   try {
-    const { amount, paymentMethod, proofUrl, description } = req.body;
+    const {
+      amount,
+      paymentMethod,
+      proofUrl,
+      screenshot,
+      description,
+      transactionId,
+    } = req.body;
+    const paymentProof = proofUrl || screenshot || null;
 
     if (!amount || amount <= 0) {
       return res.status(400).json({ message: "Valid amount is required" });
@@ -1601,23 +1615,36 @@ router.post("/submit/manual-coin-topup", auth, async (req, res) => {
       });
     }
 
+    if (paymentProof && typeof paymentProof !== "string") {
+      return res.status(400).json({
+        message: "proofUrl or screenshot must be a valid string",
+      });
+    }
+
+    if (transactionId && typeof transactionId !== "string") {
+      return res.status(400).json({
+        message: "transactionId must be a valid string",
+      });
+    }
+
     const db = await getDb();
     const user = await db
       .collection("users")
       .findOne({ _id: new ObjectId(req.user.id) });
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    const tran_id = makeTranId("HT-MANUAL");
+    const tran_id = transactionId?.trim() || makeTranId("HT-MANUAL");
     const now = new Date();
 
     // Create pending top-up request (requires admin approval)
     const result = await db.collection("coin_topup_requests").insertOne({
       userId: req.user.id,
       amount,
-      paymentMethod, // e.g., "bank_transfer", "mobile_banking", "cash", "cheque"
+      paymentMethod,
       status: "pending",
       transactionId: tran_id,
-      proofUrl: proofUrl || null, // Optional: receipt/screenshot URL
+      proofUrl: paymentProof,
+      screenshot: paymentProof,
       description: description || null,
       submittedAt: now,
       reviewedAt: null,

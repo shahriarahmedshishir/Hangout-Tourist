@@ -267,7 +267,7 @@ router.post(
     try {
       if (!isValidObjectId(req.params.id))
         return res.status(400).json({ message: "Invalid id" });
-      const { roomNumber, price } = req.body;
+      const { roomNumber, price, maxGuests, mealPlan } = req.body;
       let services = [];
       try {
         services = JSON.parse(req.body.services || "[]");
@@ -300,6 +300,8 @@ router.post(
         hotelId: req.params.id,
         roomNumber,
         price: parseFloat(price),
+        maxGuests: maxGuests ? parseInt(maxGuests) : null,
+        mealPlan: mealPlan || "Breakfast Included",
         services,
         images,
         isAvailable: true,
@@ -324,7 +326,7 @@ router.put(
     try {
       if (!isValidObjectId(req.params.id))
         return res.status(400).json({ message: "Invalid id" });
-      const { roomNumber, price } = req.body;
+      const { roomNumber, price, maxGuests, mealPlan } = req.body;
       let services = [];
       try {
         services = JSON.parse(req.body.services || "[]");
@@ -332,6 +334,8 @@ router.put(
 
       const db = await getDb();
       const update = { roomNumber, price: parseFloat(price), services };
+      if (maxGuests) update.maxGuests = parseInt(maxGuests);
+      if (mealPlan) update.mealPlan = mealPlan;
       if (req.files && req.files.length > 0) {
         update.images = req.files.map((f) => `/uploads/${f.filename}`);
       }

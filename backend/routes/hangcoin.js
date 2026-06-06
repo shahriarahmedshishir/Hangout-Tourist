@@ -123,6 +123,7 @@ router.post("/initiate-booking/hotel", auth, async (req, res) => {
       checkIn,
       checkOut,
       contactNumber,
+      guestDetails,
     } = req.body;
 
     const idsToBook = Array.isArray(roomIds) && roomIds.length ? roomIds : [];
@@ -203,6 +204,7 @@ router.post("/initiate-booking/hotel", auth, async (req, res) => {
       pricePerNight: r.pricePerNight,
       totalAmount: r.roomTotal,
       contactNumber: contactNumber || "",
+      guestDetails: guestDetails || {},
       status: "pending", // Pending hangcoin payment
       paymentMethod: "hangcoin",
       createdAt: new Date(),

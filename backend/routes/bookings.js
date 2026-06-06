@@ -585,10 +585,18 @@ router.get("/:id/invoice", auth, async (req, res) => {
 
     // Get property details
     let property;
+    let roomMealPlan = null;
+    let roomMaxGuests = null;
     if (booking.type === "hotel") {
       property = await db
         .collection("hotels")
         .findOne({ _id: new ObjectId(booking.hotelId || booking.hotel) });
+      // Fetch the room to get mealPlan and maxGuests
+      const room = await db
+        .collection("rooms")
+        .findOne({ _id: new ObjectId(booking.roomId) });
+      roomMealPlan = room?.mealPlan || "Breakfast Included";
+      roomMaxGuests = room?.maxGuests || null;
     } else if (booking.type === "car") {
       property = await db
         .collection("carrent")
@@ -667,6 +675,26 @@ router.get("/:id/invoice", auth, async (req, res) => {
       ...(booking.type === "bus" && {
         departureTime: booking.departureTime,
       }),
+      // Additional info for hotels
+      ...(booking.type === "hotel"
+        ? {
+            guestDetails: {
+              fullName: booking.guestDetails?.fullName || user?.name || "N/A",
+              email: booking.guestDetails?.email || user?.email || "N/A",
+              contactNumber:
+                (booking.guestDetails?.contactNumber &&
+                  booking.guestDetails.contactNumber.toString().trim()) ||
+                (booking.contactNumber &&
+                  booking.contactNumber.toString().trim()) ||
+                "N/A",
+              nidNumber: booking.guestDetails?.nidNumber || "N/A",
+              address: booking.guestDetails?.address || "N/A",
+            },
+            occupancy: booking.occupancy || {},
+            maxGuests: roomMaxGuests,
+            mealPlan: roomMealPlan,
+          }
+        : {}),
       // Additional info for holiday packages
       ...(booking.type === "package" || booking.type === "holiday"
         ? {

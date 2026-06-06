@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { api, imgUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import WalletCard from "@/components/user/WalletCard";
-import CoinTopupCard from "@/components/user/CoinTopupCard";
 import BookingDetail from "@/components/booking/BookingDetail";
 import {
   Hotel,
@@ -120,10 +119,12 @@ const BookingCard = ({ booking, onViewDetails }) => {
   const canCancel = canCancelBooking(booking);
   const hoursLeft = canCancel ? getHoursUntilCheckIn(booking) : 0;
 
+  const isPendingPayment = booking.status === "pending";
+
   return (
     <div
-      onClick={() => onViewDetails(booking._id)}
-      className="group cursor-pointer rounded-2xl border border-border bg-card p-5 shadow-card hover:shadow-lg hover:border-primary/50 transition-all duration-300"
+      onClick={isPendingPayment ? undefined : () => onViewDetails(booking._id)}
+      className={`group rounded-2xl border border-border bg-card p-5 shadow-card transition-all duration-300 ${isPendingPayment ? "opacity-90" : "cursor-pointer hover:shadow-lg hover:border-primary/50"}`}
     >
       {isPackage && booking.packageDetails?.image && (
         <div className="mb-4 overflow-hidden rounded-3xl">
@@ -328,8 +329,10 @@ const BookingCard = ({ booking, onViewDetails }) => {
       )}
 
       {/* Click to view details hint */}
-      <div className="text-xs text-muted-foreground mt-3 pt-3 border-t group-hover:text-primary transition-colors">
-        Click to view details and invoice
+      <div className="text-xs text-muted-foreground mt-3 pt-3 border-t transition-colors">
+        {isPendingPayment
+          ? "Payment pending. Booking interactions are disabled until confirmed."
+          : "Click to view details and invoice"}
       </div>
     </div>
   );
@@ -653,19 +656,6 @@ const UserDashboard = () => {
           <div className="md:col-span-2">
             <WalletCard balance={user?.walletBalance || 0} />
           </div>
-          <div>
-            <CoinTopupCard
-              onTopupSuccess={() => {
-                // Refresh topup requests list
-                api
-                  .get("/api/payment/my-coin-topups")
-                  .then((data) => {
-                    setTopupRequests(data);
-                  })
-                  .catch(() => {});
-              }}
-            />
-          </div>
         </div>
 
         {/* Section Toggle - Active vs Completed */}
@@ -960,6 +950,21 @@ const UserDashboard = () => {
                                     <p className="text-xs">
                                       {topup.description}
                                     </p>
+                                  </div>
+                                )}
+                                {(topup.proofUrl || topup.screenshot) && (
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">
+                                      Payment Screenshot
+                                    </p>
+                                    <img
+                                      src={imgUrl(
+                                        topup.proofUrl || topup.screenshot,
+                                      )}
+                                      alt="Payment proof"
+                                      loading="lazy"
+                                      className="mt-2 w-full h-28 object-cover rounded-lg border border-primary/10"
+                                    />
                                   </div>
                                 )}
                               </div>

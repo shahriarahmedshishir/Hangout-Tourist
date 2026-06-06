@@ -808,6 +808,21 @@ function RoomCard({
           </span>
         </div>
 
+        <div className="flex items-center gap-2 mb-3 text-xs text-muted-foreground">
+          <span>
+            👥{" "}
+            {room.maxGuests
+              ? `Max ${room.maxGuests} Guest${room.maxGuests > 1 ? "s" : ""}`
+              : "Max Guests: Not Mentioned"}
+          </span>
+          {room.mealPlan && (
+            <>
+              <span>•</span>
+              <span>🍽️ {room.mealPlan}</span>
+            </>
+          )}
+        </div>
+
         {room.services?.length > 0 && (
           <div className="flex flex-wrap gap-1 mb-3">
             {room.services.slice(0, 2).map((s) => (

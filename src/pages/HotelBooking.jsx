@@ -176,6 +176,7 @@ export default function HotelBooking() {
         checkIn,
         checkOut,
         guestDetails,
+        occupancy: { adult: 1, child: 0 },
         totalAmount: total,
       });
       // Validate gateway response
@@ -522,9 +523,10 @@ export default function HotelBooking() {
                         onChange={(e) =>
                           handleGuestDetailsChange(
                             "contactNumber",
-                            e.target.value,
+                            e.target.value.trim(),
                           )
                         }
+                        required
                         className="pl-9 bg-muted"
                       />
                     </div>

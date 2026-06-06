@@ -313,7 +313,41 @@ const Invoice = ({ invoice, onClose }) => {
           </div>
         </div>
 
-        {/* Booking Details - Type-specific Table */}
+        {/* Guest Information - Appears before Booking Details */}
+        {isHotel && (
+          <div className="mt-4 mb-8 bg-blue-50 rounded-xl p-4 border border-blue-200">
+            <h3 className="font-semibold mb-3 text-md">Guest Information</h3>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <p>
+                <span className="text-muted-foreground">Name: </span>
+                <span className="font-medium">{invoice.customer.name}</span>
+              </p>
+              <p>
+                <span className="text-muted-foreground">Email: </span>
+                <span className="font-medium">{invoice.customer.email}</span>
+              </p>
+              <p>
+                <span className="text-muted-foreground">Phone: </span>
+                <span className="font-medium">
+                  {invoice.guestDetails?.contactNumber || "N/A"}
+                </span>
+              </p>
+              <p>
+                <span className="text-muted-foreground">NID: </span>
+                <span className="font-mono text-xs">
+                  {invoice.guestDetails?.nidNumber || "N/A"}
+                </span>
+              </p>
+              <p className="col-span-2">
+                <span className="text-muted-foreground">Address: </span>
+                <span className="font-medium">
+                  {invoice.guestDetails?.address || "N/A"}
+                </span>
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="mt-4 mb-8 shadow rounded overflow-hidden">
           <div className="bg-blue-600 text-white px-4 py-2 text-lg font-semibold">
             Booking Details
@@ -330,13 +364,7 @@ const Invoice = ({ invoice, onClose }) => {
                       Guest Name
                     </th>
                     <th className="text-center py-2 px-3 font-semibold border">
-                      Occupancy (Adult)
-                    </th>
-                    <th className="text-center py-2 px-3 font-semibold border">
-                      Occupancy (Child Below)
-                    </th>
-                    <th className="text-left py-2 px-3 font-semibold border">
-                      Rate Plan
+                      Max Guests Allowed
                     </th>
                     <th className="text-left py-2 px-3 font-semibold border">
                       Meal Plan
@@ -402,13 +430,7 @@ const Invoice = ({ invoice, onClose }) => {
                 {isHotel && (
                   <>
                     <td className="border px-3 py-3 text-center">
-                      {invoice.occupancy?.adult || "2"}
-                    </td>
-                    <td className="border px-3 py-3 text-center">
-                      {invoice.occupancy?.child || "0"}
-                    </td>
-                    <td className="border px-3 py-3">
-                      {invoice.ratePlan || "Non refundable"}
+                      {invoice.maxGuests || "Not Mentioned"}
                     </td>
                     <td className="border px-3 py-3">
                       {invoice.mealPlan || "Breakfast Included"}

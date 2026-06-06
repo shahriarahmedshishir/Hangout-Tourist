@@ -42,7 +42,7 @@ export default function CoinTopupCard({ onTopupSuccess }) {
   // Manual payment state
   const [manualAmount, setManualAmount] = useState("");
   const [manualPaymentType, setManualPaymentType] = useState("");
-  const [manualDescription, setManualDescription] = useState("");
+  const [manualTransactionId, setManualTransactionId] = useState("");
   const [manualScreenshot, setManualScreenshot] = useState("");
   const [manualLoading, setManualLoading] = useState(false);
 
@@ -159,10 +159,10 @@ export default function CoinTopupCard({ onTopupSuccess }) {
       return;
     }
 
-    if (!manualDescription.trim()) {
+    if (!manualTransactionId.trim()) {
       toast({
-        title: "Payment Details Required",
-        description: "Please provide payment details for verification.",
+        title: "Transaction ID Required",
+        description: "Please enter your transaction ID for verification.",
         variant: "destructive",
       });
       return;
@@ -183,7 +183,7 @@ export default function CoinTopupCard({ onTopupSuccess }) {
         amount: topupAmount,
         paymentMethod: manualPaymentType,
         proofUrl: manualScreenshot,
-        description: manualDescription.trim(),
+        transactionId: manualTransactionId.trim(),
       });
 
       toast({
@@ -197,7 +197,7 @@ export default function CoinTopupCard({ onTopupSuccess }) {
       setOpen(false);
       setManualAmount("");
       setManualPaymentType("");
-      setManualDescription("");
+      setManualTransactionId("");
       setManualScreenshot("");
       // Reset file input
       if (screenshotInputRef.current) {
@@ -381,18 +381,18 @@ export default function CoinTopupCard({ onTopupSuccess }) {
               </Select>
             </div>
 
-            {/* Description */}
+            {/* Transaction ID */}
             <div>
-              <Label htmlFor="description" className="text-sm font-medium">
-                Payment Details
+              <Label htmlFor="transaction-id" className="text-sm font-medium">
+                Transaction ID
               </Label>
-              <Textarea
-                id="description"
-                placeholder="E.g., transaction reference, sender number, or account details"
-                value={manualDescription}
-                onChange={(e) => setManualDescription(e.target.value)}
-                className="mt-1 resize-none"
-                rows={3}
+              <Input
+                id="transaction-id"
+                type="text"
+                placeholder="Enter your payment transaction ID"
+                value={manualTransactionId}
+                onChange={(e) => setManualTransactionId(e.target.value)}
+                className="mt-1"
               />
             </div>
 
@@ -476,7 +476,7 @@ export default function CoinTopupCard({ onTopupSuccess }) {
                 manualLoading ||
                 !manualAmount ||
                 !manualPaymentType ||
-                !manualDescription.trim() ||
+                !manualTransactionId.trim() ||
                 !manualScreenshot
               }
               className="w-full bg-gradient-primary text-primary-foreground hover:opacity-90"
