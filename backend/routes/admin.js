@@ -1,12 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { getDb } = require("../db");
 const { ObjectId } = require("mongodb");
 const { auth, role } = require("../middleware/auth");
 const upload = require("../middleware/upload");
+const { sendVerificationEmail } = require("../utils/emailService");
 
 // Utility to escape user input when building a RegExp for MongoDB queries
 function escapeRegex(input = "") {
@@ -88,20 +90,38 @@ router.post("/staff", auth, role("admin"), async (req, res) => {
       .findOne({ _id: new ObjectId(hotelId) });
     if (!hotel) return res.status(404).json({ message: "Hotel not found" });
 
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(verificationToken)
+      .digest("hex");
+    const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
     const hashed = await bcrypt.hash(password, 10);
     const staffResult = await db.collection("users").insertOne({
-      name: staffName,
+      name: staffName.trim(),
       email: email.toLowerCase(),
       password: hashed,
       role: "hotel_staff",
       hotelId: hotel._id.toString(),
       hotelName: hotel.name,
+      emailVerified: false,
+      verificationToken: tokenHash,
+      verificationTokenExpiry: tokenExpiry,
       createdAt: new Date(),
     });
 
-    res
-      .status(201)
-      .json({ message: "Staff account created", id: staffResult.insertedId });
+    const emailResult = await sendVerificationEmail(
+      email,
+      staffName,
+      verificationToken,
+    );
+
+    res.status(201).json({
+      message: "Staff account created and verification email sent",
+      emailSent: emailResult.success,
+      id: staffResult.insertedId,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1203,11 +1223,12 @@ router.post(
       }
 
       const db = await getDb();
-      const booking = await db
-        .collection("bookings")
-        .findOne({ _id: new ObjectId(req.params.id) });
+      const { booking, collection } = await findBookingAcrossCollections(
+        db,
+        req.params.id,
+      );
 
-      if (!booking) {
+      if (!booking || !collection) {
         return res.status(404).json({ message: "Booking not found" });
       }
 
@@ -1224,7 +1245,7 @@ router.post(
       }
 
       // Update booking with refund amount and set status to in_progress
-      await db.collection("bookings").updateOne(
+      await collection.updateOne(
         { _id: new ObjectId(req.params.id) },
         {
           $set: {
@@ -1284,10 +1305,11 @@ router.post(
       }
 
       const db = await getDb();
-      const booking = await db
-        .collection("bookings")
-        .findOne({ _id: new ObjectId(req.params.id) });
-      if (!booking)
+      const { booking, collection } = await findBookingAcrossCollections(
+        db,
+        req.params.id,
+      );
+      if (!booking || !collection)
         return res.status(404).json({ message: "Booking not found" });
       if (booking.refundStatus !== "in_progress") {
         return res
@@ -1297,7 +1319,7 @@ router.post(
 
       const screenshotUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
-      await db.collection("bookings").updateOne(
+      await collection.updateOne(
         { _id: new ObjectId(req.params.id) },
         {
           $set: {

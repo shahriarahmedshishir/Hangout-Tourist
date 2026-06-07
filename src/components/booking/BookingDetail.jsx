@@ -422,7 +422,12 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
                 </p>
                 <p>
                   <span className="text-muted-foreground">Phone: </span>
-                  <span>{booking.contactNumber || "N/A"}</span>
+                  <span>
+                    {booking.contactNumber ||
+                      booking.guestDetails?.contactNumber ||
+                      user?.phone ||
+                      "N/A"}
+                  </span>
                 </p>
               </div>
             </div>
