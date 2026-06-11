@@ -39,17 +39,19 @@ router.get("/rooms", auth, role("hotel_staff"), async (req, res) => {
       .find({
         hotelId,
         status: { $in: ["confirmed", "pending"] },
-        checkoutDate: { $gt: new Date() }, // Only return bookings where checkout date is in the future
+        checkOut: { $gt: new Date() }, // Only return bookings where checkout date is in the future
       })
       .project({
         userId: 1,
         roomId: 1,
         roomNumber: 1,
         checkIn: 1,
+        checkOut: 1,
         checkout: 1,
         checkoutDate: 1,
         days: 1,
         status: 1,
+        guestDetails: 1,
       })
       .sort({ checkIn: -1 })
       .toArray();

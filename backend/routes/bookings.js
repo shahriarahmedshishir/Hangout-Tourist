@@ -41,6 +41,20 @@ async function findBookingRecord(db, bookingId) {
   return { booking: null, collection: null };
 }
 
+async function getStaffHotelId(req) {
+  if (req.user.role !== "hotel_staff") return null;
+  if (req.user.hotelId) return req.user.hotelId;
+
+  const db = await getDb();
+  const staffUser = await db
+    .collection("users")
+    .findOne(
+      { _id: new ObjectId(req.user.id) },
+      { projection: { hotelId: 1 } },
+    );
+  return staffUser?.hotelId || null;
+}
+
 // POST /api/bookings/hotel — book one or more rooms
 router.post("/hotel", auth, async (req, res) => {
   try {
@@ -499,7 +513,19 @@ router.get("/:id", auth, async (req, res) => {
       booking.userId instanceof ObjectId
         ? booking.userId.toString()
         : booking.userId;
-    if (userIdToCompare !== req.user.id && req.user.role !== "admin") {
+    const staffHotelId = await getStaffHotelId(req);
+    const isHotelStaffAuthorized =
+      req.user.role === "hotel_staff" &&
+      booking.type === "hotel" &&
+      booking.hotelId &&
+      staffHotelId &&
+      booking.hotelId.toString() === staffHotelId.toString();
+
+    if (
+      userIdToCompare !== req.user.id &&
+      req.user.role !== "admin" &&
+      !isHotelStaffAuthorized
+    ) {
       return res.status(403).json({ message: "Not authorized" });
     }
 
@@ -572,7 +598,19 @@ router.get("/:id/invoice", auth, async (req, res) => {
       booking.userId instanceof ObjectId
         ? booking.userId.toString()
         : booking.userId;
-    if (userIdToCompare !== req.user.id && req.user.role !== "admin") {
+    const staffHotelId = await getStaffHotelId(req);
+    const isHotelStaffAuthorized =
+      req.user.role === "hotel_staff" &&
+      booking.type === "hotel" &&
+      booking.hotelId &&
+      staffHotelId &&
+      booking.hotelId.toString() === staffHotelId.toString();
+
+    if (
+      userIdToCompare !== req.user.id &&
+      req.user.role !== "admin" &&
+      !isHotelStaffAuthorized
+    ) {
       return res.status(403).json({ message: "Not authorized" });
     }
 

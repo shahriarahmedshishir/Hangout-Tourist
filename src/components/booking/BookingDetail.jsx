@@ -23,7 +23,12 @@ import {
   Clock,
 } from "lucide-react";
 
-const BookingDetail = ({ isOpen, onClose, bookingId }) => {
+const BookingDetail = ({
+  isOpen,
+  onClose,
+  bookingId,
+  hideSensitiveDetails = false,
+}) => {
   const { user, socket } = useAuth();
   const [booking, setBooking] = useState(null);
   const [invoice, setInvoice] = useState(null);
@@ -180,6 +185,23 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
   const isBus = booking?.type === "bus";
   const isPackage = booking?.type === "package" || booking?.type === "holiday";
 
+  const guestName =
+    booking?.guestDetails?.name ||
+    booking?.user?.name ||
+    booking?.customer?.name ||
+    "N/A";
+  const guestEmail =
+    booking?.guestDetails?.email ||
+    booking?.user?.email ||
+    booking?.customer?.email ||
+    "N/A";
+  const guestPhone =
+    booking?.contactNumber ||
+    booking?.guestDetails?.contactNumber ||
+    booking?.user?.phone ||
+    booking?.customer?.phone ||
+    "N/A";
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
@@ -200,7 +222,7 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
           </DialogDescription>
         </DialogHeader>
 
-        {showInvoice ? (
+        {showInvoice && !hideSensitiveDetails ? (
           <Invoice invoice={invoice} onClose={() => setShowInvoice(false)} />
         ) : loading ? (
           <div className="flex justify-center py-8">
@@ -398,14 +420,16 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
                   </div>
                 </>
               )}
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">
-                  Total Amount
-                </p>
-                <p className="font-bold text-primary">
-                  ৳{(booking.totalAmount || 0).toLocaleString()}
-                </p>
-              </div>
+              {!hideSensitiveDetails && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">
+                    Total Amount
+                  </p>
+                  <p className="font-bold text-primary">
+                    ৳{(booking.totalAmount || 0).toLocaleString()}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Guest Info */}
@@ -414,201 +438,216 @@ const BookingDetail = ({ isOpen, onClose, bookingId }) => {
               <div className="space-y-1 text-sm">
                 <p>
                   <span className="text-muted-foreground">Name: </span>
-                  <span>{user?.name || "N/A"}</span>
+                  <span>{guestName}</span>
                 </p>
                 <p>
                   <span className="text-muted-foreground">Email: </span>
-                  <span>{user?.email || "N/A"}</span>
+                  <span>{guestEmail}</span>
                 </p>
                 <p>
                   <span className="text-muted-foreground">Phone: </span>
-                  <span>
-                    {booking.contactNumber ||
-                      booking.guestDetails?.contactNumber ||
-                      user?.phone ||
-                      "N/A"}
-                  </span>
+                  <span>{guestPhone}</span>
                 </p>
               </div>
             </div>
 
-            {/* Payment Info */}
-            <div className="bg-muted/50 rounded-lg p-4">
-              <h4 className="font-semibold mb-2 text-sm">
-                Payment Information
-              </h4>
-              <div className="space-y-1 text-sm">
-                <p>
-                  <span className="text-muted-foreground">Method: </span>
-                  <span className="capitalize">{booking.paymentMethod}</span>
-                </p>
-                <p>
-                  <span className="text-muted-foreground">
-                    Transaction ID:{" "}
-                  </span>
-                  <span className="font-mono text-xs">
-                    {booking.transactionId}
-                  </span>
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Paid Date: </span>
-                  <span>{formatDate(booking.paidAt)}</span>
-                </p>
-              </div>
-            </div>
-
-            {/* Refund Status */}
-            {booking.status === "cancelled" && (
-              <div
-                className={`rounded-lg p-4 ${
-                  booking.refundStatus === "completed"
-                    ? "bg-success/10 border border-success/20"
-                    : booking.refundStatus === "in_progress"
-                      ? "bg-yellow-50 border border-yellow-200"
-                      : "bg-blue-50 border border-blue-200"
-                }`}
-              >
-                <h4 className="font-semibold mb-2 text-sm">Refund Status</h4>
-                <div className="space-y-2 text-sm">
-                  {booking.refundAmount && (
-                    <p className="font-medium">
-                      Refund Amount:{" "}
-                      <span className="text-primary">
-                        ৳{booking.refundAmount.toFixed(2)}
+            {!hideSensitiveDetails && (
+              <>
+                {/* Payment Info */}
+                <div className="bg-muted/50 rounded-lg p-4">
+                  <h4 className="font-semibold mb-2 text-sm">
+                    Payment Information
+                  </h4>
+                  <div className="space-y-1 text-sm">
+                    <p>
+                      <span className="text-muted-foreground">Method: </span>
+                      <span className="capitalize">
+                        {booking.paymentMethod}
                       </span>
                     </p>
-                  )}
-                  {booking.refundStatus === "completed" ? (
-                    <div className="space-y-1">
-                      <p className="text-success flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4" />
-                        Refund Completed
-                      </p>
-                      {booking.refundScreenshot && (
-                        <a
-                          href={imgUrl(booking.refundScreenshot)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-primary text-xs underline"
-                        >
-                          View refund screenshot
-                        </a>
+                    <p>
+                      <span className="text-muted-foreground">
+                        Transaction ID:{" "}
+                      </span>
+                      <span className="font-mono text-xs">
+                        {booking.transactionId}
+                      </span>
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Paid Date: </span>
+                      <span>{formatDate(booking.paidAt)}</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Refund Status */}
+                {booking.status === "cancelled" && (
+                  <div
+                    className={`rounded-lg p-4 ${
+                      booking.refundStatus === "completed"
+                        ? "bg-success/10 border border-success/20"
+                        : booking.refundStatus === "in_progress"
+                          ? "bg-yellow-50 border border-yellow-200"
+                          : "bg-blue-50 border border-blue-200"
+                    }`}
+                  >
+                    <h4 className="font-semibold mb-2 text-sm">
+                      Refund Status
+                    </h4>
+                    <div className="space-y-2 text-sm">
+                      {booking.refundAmount && (
+                        <p className="font-medium">
+                          Refund Amount:{" "}
+                          <span className="text-primary">
+                            ৳{booking.refundAmount.toFixed(2)}
+                          </span>
+                        </p>
+                      )}
+                      {booking.refundStatus === "completed" ? (
+                        <div className="space-y-1">
+                          <p className="text-success flex items-center gap-2">
+                            <CheckCircle2 className="h-4 w-4" />
+                            Refund Completed
+                          </p>
+                          {booking.refundScreenshot && (
+                            <a
+                              href={imgUrl(booking.refundScreenshot)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-primary text-xs underline"
+                            >
+                              View refund screenshot
+                            </a>
+                          )}
+                        </div>
+                      ) : booking.refundStatus === "in_progress" ? (
+                        <p className="text-yellow-700 flex items-center gap-2">
+                          <Clock className="h-4 w-4 animate-spin" />
+                          Refund in Progress
+                        </p>
+                      ) : (
+                        <p className="text-blue-700">
+                          Cancellation approved. Awaiting refund initiation.
+                        </p>
                       )}
                     </div>
-                  ) : booking.refundStatus === "in_progress" ? (
-                    <p className="text-yellow-700 flex items-center gap-2">
-                      <Clock className="h-4 w-4 animate-spin" />
-                      Refund in Progress
-                    </p>
-                  ) : (
-                    <p className="text-blue-700">
-                      Cancellation approved. Awaiting refund initiation.
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
+                  </div>
+                )}
 
-            {/* Cancellation In Progress */}
-            {cancelling && (
-              <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
-                <p className="text-blue-900 flex items-center gap-2 font-medium">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Cancellation in Progress...
-                </p>
-                <p className="text-sm text-blue-700 mt-2">
-                  Please wait while we process your cancellation request.
-                </p>
-              </div>
-            )}
+                {/* Cancellation In Progress */}
+                {cancelling && (
+                  <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+                    <p className="text-blue-900 flex items-center gap-2 font-medium">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Cancellation in Progress...
+                    </p>
+                    <p className="text-sm text-blue-700 mt-2">
+                      Please wait while we process your cancellation request.
+                    </p>
+                  </div>
+                )}
 
-            {/* Cancel Request Status */}
-            {booking.cancelRequest && (
-              <div
-                className={`rounded-lg p-4 border ${
-                  booking.cancelRequest.status === "approved"
-                    ? "bg-success/10 border-success/20"
-                    : booking.cancelRequest.status === "pending"
-                      ? "bg-blue-50 border-blue-200"
-                      : "bg-destructive/10 border-destructive/20"
-                }`}
-              >
-                <h4 className="font-semibold mb-2 text-sm">Cancel Request</h4>
-                <p className="text-sm capitalize">
-                  Status:{" "}
-                  <span
-                    className={
+                {/* Cancel Request Status */}
+                {booking.cancelRequest && (
+                  <div
+                    className={`rounded-lg p-4 border ${
                       booking.cancelRequest.status === "approved"
-                        ? "text-success font-medium"
+                        ? "bg-success/10 border-success/20"
                         : booking.cancelRequest.status === "pending"
-                          ? "text-blue-700 font-medium"
-                          : "text-destructive font-medium"
-                    }
+                          ? "bg-blue-50 border-blue-200"
+                          : "bg-destructive/10 border-destructive/20"
+                    }`}
                   >
-                    {booking.cancelRequest.status}
-                  </span>
-                </p>
-              </div>
+                    <h4 className="font-semibold mb-2 text-sm">
+                      Cancel Request
+                    </h4>
+                    <p className="text-sm capitalize">
+                      Status:{" "}
+                      <span
+                        className={
+                          booking.cancelRequest.status === "approved"
+                            ? "text-success font-medium"
+                            : booking.cancelRequest.status === "pending"
+                              ? "text-blue-700 font-medium"
+                              : "text-destructive font-medium"
+                        }
+                      >
+                        {booking.cancelRequest.status}
+                      </span>
+                    </p>
+                  </div>
+                )}
+
+                {/* Error Message */}
+                {cancelError && (
+                  <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 flex gap-2">
+                    <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-destructive">{cancelError}</p>
+                  </div>
+                )}
+
+                {/* Cancel Notice */}
+                {canCancelBooking() &&
+                  booking.status === "confirmed" &&
+                  !booking.cancelRequest && (
+                    <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
+                      <p className="text-sm text-blue-900">
+                        ⏰ You have{" "}
+                        <span className="font-semibold">
+                          {getHoursUntilCheckIn()}
+                        </span>{" "}
+                        hours remaining to cancel before the 24-hour cutoff.
+                      </p>
+                    </div>
+                  )}
+
+                {!canCancelBooking() &&
+                  booking.status === "confirmed" &&
+                  !booking.cancelRequest && (
+                    <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
+                      <p className="text-sm text-amber-900">
+                        ⏰ Cancellation deadline has passed. You can no longer
+                        cancel this booking. Please contact support if you need
+                        assistance.
+                      </p>
+                    </div>
+                  )}
+              </>
             )}
 
-            {/* Error Message */}
-            {cancelError && (
-              <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 flex gap-2">
-                <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-destructive">{cancelError}</p>
-              </div>
-            )}
-
-            {/* Cancel Notice */}
-            {canCancelBooking() &&
-              booking.status === "confirmed" &&
-              !booking.cancelRequest && (
-                <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
-                  <p className="text-sm text-blue-900">
-                    ⏰ You have{" "}
-                    <span className="font-semibold">
-                      {getHoursUntilCheckIn()}
-                    </span>{" "}
-                    hours remaining to cancel before the 24-hour cutoff.
-                  </p>
-                </div>
-              )}
-
-            {!canCancelBooking() &&
-              booking.status === "confirmed" &&
-              !booking.cancelRequest && (
-                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
-                  <p className="text-sm text-amber-900">
-                    ⏰ Cancellation deadline has passed. You can no longer
-                    cancel this booking. Please contact support if you need
-                    assistance.
-                  </p>
-                </div>
-              )}
-
-            {/* Actions */}
-            <div className="flex gap-3 pt-4 border-t">
-              <Button
-                variant="outline"
-                onClick={() => setShowInvoice(true)}
-                className="flex-1"
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                View Invoice
-              </Button>
-              {canCancelBooking() &&
-                booking.status === "confirmed" &&
-                !booking.cancelRequest &&
-                !cancelling && (
+            {!hideSensitiveDetails ? (
+              <>
+                {/* Actions */}
+                <div className="flex gap-3 pt-4 border-t">
                   <Button
-                    variant="destructive"
-                    onClick={handleCancelRequest}
+                    variant="outline"
+                    onClick={() => setShowInvoice(true)}
                     className="flex-1"
                   >
-                    Request Cancellation
+                    <FileText className="h-4 w-4 mr-2" />
+                    View Invoice
                   </Button>
-                )}
-            </div>
+                  {canCancelBooking() &&
+                    booking.status === "confirmed" &&
+                    !booking.cancelRequest &&
+                    !cancelling && (
+                      <Button
+                        variant="destructive"
+                        onClick={handleCancelRequest}
+                        className="flex-1"
+                      >
+                        Request Cancellation
+                      </Button>
+                    )}
+                </div>
+              </>
+            ) : (
+              <div className="flex justify-end pt-4 border-t">
+                <Button onClick={onClose} className="w-full">
+                  OK
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="text-center py-8">
