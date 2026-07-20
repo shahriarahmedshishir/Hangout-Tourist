@@ -26,7 +26,7 @@ import { api } from "@/lib/api";
 
 const PRESET_AMOUNTS = [50, 100, 250, 500];
 const MANUAL_PAYMENT_METHODS = [
-  { value: "bkash", label: "bKash" },
+  { value: "bkash ", label: "bKash " },
   { value: "nagad", label: "Nagad" },
 ];
 
@@ -374,7 +374,7 @@ export default function CoinTopupCard({ onTopupSuccess }) {
                 <SelectContent>
                   {MANUAL_PAYMENT_METHODS.map((method) => (
                     <SelectItem key={method.value} value={method.value}>
-                      {method.label}
+                      {method.label} 
                     </SelectItem>
                   ))}
                 </SelectContent>

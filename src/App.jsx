@@ -28,6 +28,7 @@ import PaymentResult from "./pages/PaymentResult";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import FloatingPrivacyButton from "@/components/FloatingPrivacyButton";
 
+
 const queryClient = new QueryClient();
 
 // Redirects unauthenticated users to /login.
@@ -55,7 +56,7 @@ const App = () => (
           future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
         >
           <Routes>
-            <Route path="/" element={<Index />} />
+            <Route path="/" element={<Index />}   />
             <Route path="/hotels" element={<Hotels />} />
             <Route path="/hotels/:id" element={<HotelDetail />} />
             <Route path="/booking/hotel" element={<HotelBooking />} />

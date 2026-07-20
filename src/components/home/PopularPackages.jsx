@@ -54,18 +54,13 @@ export default function PopularPackages() {
               Curated holiday packages
             </p>
           </div>
-          <Link to="/holidays" className="mt-4">
-            <Button variant="outline" size="sm" className="gap-1">
-              View All <ChevronRight className="h-4 w-4" />
-            </Button>
-          </Link>
         </div>
 
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 md:grid-cols-3 lg:grid-cols-4 sm:grid-cols-2 ">
           {packages.map((pkg, i) => (
             <Link key={pkg._id} to="/booking/package" state={{ pkg }}>
               <div
-                className="group cursor-pointer overflow-hidden rounded-2xl bg-card shadow-card transition-all duration-300 hover:shadow-card-hover hover:-translate-y-1 animate-fade-in h-full"
+                className="group cursor-pointer overflow-hidden rounded-3xl bg-card shadow-card transition-all duration-300 hover:shadow-card-hover hover:-translate-y-1 animate-fade-in h-full"
                 style={{ animationDelay: `${i * 0.1}s` }}
               >
                 <div className="relative h-48 overflow-hidden bg-muted">
@@ -87,10 +82,6 @@ export default function PopularPackages() {
                   </h3>
                   <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
                     <span>{pkg.duration || "Custom"}</span>
-                    <span className="flex items-center gap-1">
-                      <Star className="h-4 w-4 fill-warning text-warning" />
-                      {pkg.rating || 4.7}
-                    </span>
                   </div>
                   <div className="mt-4 flex items-center justify-between pt-4 border-t border-border">
                     <span className="text-sm text-muted-foreground flex items-center gap-1">
@@ -108,6 +99,16 @@ export default function PopularPackages() {
               </div>
             </Link>
           ))}
+        </div>
+        <div className="mt-12 flex justify-center">
+          <Link to="/holidays">
+            <Button
+              variant="outline" size="sm" className="gap-1"
+            >
+              View All Packages
+              <ChevronRight className="ml-2 h-5 w-5 transition-transform duration-300 group-hover:translate-x-1" />
+            </Button>
+          </Link>
         </div>
       </div>
     </section>

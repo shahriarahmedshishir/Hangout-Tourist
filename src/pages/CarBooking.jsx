@@ -453,11 +453,11 @@ const CarBooking = () => {
 
             <div className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-foreground">
-                  Pick-up Area *
+                <label className="mb-1  block text-sm font-medium text-foreground">
+                  Pick-up Area <span className="text-destructive">*</span>
                 </label>
                 <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  {/* <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /> */}
                   {car.places?.length > 0 ? (
                     <select
                       value={pickupArea}
@@ -484,7 +484,7 @@ const CarBooking = () => {
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-foreground">
-                  Pick-up Location *
+                  Pick-up Location <span className="text-destructive">*</span>
                 </label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -497,10 +497,10 @@ const CarBooking = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid lg:grid-cols-2 sm:grid-cols-1 gap-4">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-foreground">
-                    Pick-up Date *
+                    Pick-up Date <span className="text-destructive">*</span>
                   </label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -524,7 +524,7 @@ const CarBooking = () => {
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-foreground">
-                    Number of Days *
+                    Number of Days <span className="text-destructive">*</span>
                   </label>
                   <Input
                     type="number"
@@ -537,7 +537,7 @@ const CarBooking = () => {
               </div>
 
               {returnDate && (
-                <p className="text-xs text-muted-foreground">
+                <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
                   Return date:{" "}
                   <span className="font-medium text-foreground">
                     {new Date(returnDate).toLocaleDateString("en-GB", {
@@ -546,7 +546,7 @@ const CarBooking = () => {
                       year: "numeric",
                     })}
                   </span>
-                </p>
+                </div>
               )}
 
               {days > 0 && (
@@ -559,15 +559,16 @@ const CarBooking = () => {
                 </div>
               )}
 
-              <div>
+            <div  className="grid lg:grid-cols-2 sm:grid-cols-1 gap-4">
+                <div>
                 <label className="mb-1 block text-sm font-medium text-foreground">
-                  Contact Number *
+                  Contact Number <span className="text-destructive">*</span>
                 </label>
                 <div className="relative">
                   <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     type="tel"
-                    placeholder="e.g. 01700000000"
+                    placeholder="Enter your contact number"
                     value={contactNumber}
                     onChange={(e) => setContactNumber(e.target.value)}
                     className="pl-9"
@@ -577,7 +578,7 @@ const CarBooking = () => {
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-foreground">
-                  NID Number *
+                  NID Number <span className="text-destructive">*</span>
                 </label>
                 <Input
                   type="text"
@@ -586,6 +587,7 @@ const CarBooking = () => {
                   onChange={(e) => setNidNumber(e.target.value)}
                 />
               </div>
+            </div>
 
               {error && (
                 <div className="rounded-xl bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
@@ -598,12 +600,12 @@ const CarBooking = () => {
                 <Tabs
                   value={activeTab}
                   onValueChange={setActiveTab}
-                  className="w-full"
+                  className="w-full "
                 >
-                  <TabsList className="grid w-full grid-cols-3 mb-4">
-                    <TabsTrigger value="online">Online Payment</TabsTrigger>
-                    <TabsTrigger value="manual">Manual Payment</TabsTrigger>
-                    <TabsTrigger value="coin">Hangcoin</TabsTrigger>
+                  <TabsList className="grid w-full grid-cols-3 mb-4 content-center ">
+                    <TabsTrigger value="online" className="text-xs sm:text-sm py-2">Online Payment</TabsTrigger>
+                    <TabsTrigger value="manual" className="text-xs sm:text-sm py-2">Manual Payment</TabsTrigger>
+                    <TabsTrigger value="coin" className="text-xs sm:text-sm py-2">Hangcoin</TabsTrigger>
                   </TabsList>
 
                   {/* Online Payment Tab */}
@@ -638,21 +640,65 @@ const CarBooking = () => {
                     <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-1">
-                          Payment Method *
+                          Payment Method <span className="text-destructive">*</span>
                         </label>
                         <select
                           value={manualMethod}
                           onChange={(e) => setManualMethod(e.target.value)}
                           className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground"
                         >
-                          <option value="bkash">Bkash</option>
-                          <option value="nagad">Nagad</option>
+                          <option value="bkash" >Bkash </option>
+                          <option value="nagad">Nagad </option>
                         </select>
                       </div>
+                                        {/* Selected Payment Number */}
+
+                  <div
+                    className={`rounded-2xl border p-4 ${
+                      manualMethod === "bkash"
+                        ? "border-pink-200 bg-pink-50"
+                        : "border-orange-200 bg-orange-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p
+                          className={`text-sm font-semibold ${
+                            manualMethod === "bkash"
+                              ? "text-pink-700"
+                              : "text-orange-700"
+                          }`}
+                        >
+                          {manualMethod === "bkash"
+                            ? "bKash Personal Number"
+                            : "Nagad Personal Number"}
+                        </p>
+
+                        <p className="mt-1 text-xl font-bold text-slate-900">
+                          01743-917153
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          Send the payment to this number and enter the
+                          Transaction ID below.
+                        </p>
+                      </div>
+
+                      <div
+                        className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                          manualMethod === "bkash"
+                            ? "bg-pink-100 text-pink-700"
+                            : "bg-orange-100 text-orange-700"
+                        }`}
+                      >
+                        {manualMethod === "bkash" ? "bKash" : "Nagad"}
+                      </div>
+                    </div>
+                  </div>
 
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-1">
-                          Transaction ID *
+                          Transaction ID <span className="text-destructive">*</span>
                         </label>
                         <Input
                           type="text"
@@ -665,31 +711,44 @@ const CarBooking = () => {
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-foreground mb-1">
-                          Screenshot of Payment Proof *
+                      {/* Upload */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">
+                          Payment Proof{" "}
+                          <span className="text-destructive">*</span>
                         </label>
-                        <div className="flex items-center gap-2">
-                          <label className="flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-primary cursor-pointer hover:bg-muted transition-colors">
-                            <Upload className="h-4 w-4" />
-                            <span className="text-sm">
-                              {manualScreenshot
-                                ? "Change Image"
-                                : "Upload Image"}
-                            </span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={handleScreenshotUpload}
-                              className="hidden"
-                            />
-                          </label>
+
+                        <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed p-4 transition hover:border-primary hover:bg-primary/5">
+                          <div className="flex items-center gap-3">
+                            <div className="rounded-full bg-primary/10 p-2">
+                              <Upload className="h-5 w-5 text-primary" />
+                            </div>
+
+                            <div>
+                              <p className="text-sm font-medium">
+                                {manualScreenshot
+                                  ? "Change Image"
+                                  : "Upload Screenshot"}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                PNG, JPG, WEBP
+                              </p>
+                            </div>
+                          </div>
+
                           {manualScreenshot && (
-                            <span className="text-xs text-green-600">
-                              ✓ Image uploaded
+                            <span className="text-xs font-medium text-green-600">
+                              ✓ Uploaded
                             </span>
                           )}
-                        </div>
+
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleScreenshotUpload}
+                            className="hidden"
+                          />
+                        </label>
                       </div>
 
                       <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">

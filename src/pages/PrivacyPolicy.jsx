@@ -1,7 +1,8 @@
 import { Mail, Phone, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import Navbar from '../components/layout/Navbar';
-
+import Navbar from "../components/layout/Navbar";
+import Footer from "../components/layout/Footer";
+import { Helmet } from "react-helmet";
 export default function PrivacyPolicy() {
   const currentDate = new Date().toLocaleDateString("en-US", {
     year: "numeric",
@@ -11,7 +12,10 @@ export default function PrivacyPolicy() {
 
   return (
     <div className="min-h-screen bg-white">
-      <Navbar/>
+      <Helmet>
+        <title>Hang Out Tourist | Privacy Policy</title>
+      </Helmet>
+      <Navbar />
       {/* Header */}
       <div className=" bg-white sticky top-0 z-50">
         <div className="container px-4 sm:px-6 py-4 sm:py-6">
@@ -28,194 +32,230 @@ export default function PrivacyPolicy() {
 
       {/* Main Content */}
       <div className="container px-4 sm:px-6 py-8 sm:py-12">
-        <div className="max-w-3xl mx-auto prose prose-sm sm:prose lg:prose-lg">
+        <div className="max-w-4xl mx-auto">
           {/* Introduction */}
-          <section className="mb-8 sm:mb-12">
-            <p className="text-gray-700 leading-relaxed text-base sm:text-lg">
-              Welcome to Hangout Tourist. We are committed to protecting your
-              personal data and respecting your privacy. This Privacy Policy
-              explains how we collect, use, disclose, and safeguard your
-              information when you visit our website and use our services.
+          <section className="mb-10">
+            <p className="text-gray-700 leading-8">
+              At <strong>Hang Out Tourist</strong>, we value your privacy and
+              are committed to protecting your personal information. This
+              Privacy Policy explains how we collect, use, disclose, and
+              safeguard your information when you use our website, mobile
+              application, or booking services. By accessing or using our
+              services, you agree to the practices described in this Privacy
+              Policy.
             </p>
           </section>
 
-          {/* 1. Information We Collect */}
-          <section className="mb-8 sm:mb-12">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
+          {/* 1 */}
+          <section className="mb-10">
+            <h2 className="text-2xl font-bold text-gray-900 mb-5">
               1. Information We Collect
             </h2>
-            <p className="text-gray-700 mb-4">
-              We may collect information about you in a variety of ways:
+
+            <p className="text-gray-700 mb-5">
+              We may collect the following categories of personal information:
             </p>
-            <ul className="space-y-3 text-gray-700">
-              <li className="flex gap-3">
-                <span className="text-gray-900 font-semibold min-w-fit">
-                  Personal Data:
-                </span>
-                <span>
-                  Name, email address, phone number, and payment information
-                </span>
+
+            <ul className="list-disc pl-6 space-y-2 text-gray-700">
+              <li>Full name</li>
+              <li>Mobile phone number</li>
+              <li>Email address</li>
+              <li>
+                Government-issued identification details (such as National ID or
+                Passport), where required
               </li>
-              <li className="flex gap-3">
-                <span className="text-gray-900 font-semibold min-w-fit">
-                  Booking Information:
-                </span>
-                <span>Travel dates, preferences, and destination choices</span>
+              <li>Hotel booking and reservation information</li>
+              <li>
+                Payment-related information (processed securely through
+                authorized payment providers)
               </li>
-              <li className="flex gap-3">
-                <span className="text-gray-900 font-semibold min-w-fit">
-                  Device Information:
-                </span>
-                <span>IP address, browser type, and operating system</span>
-              </li>
-              <li className="flex gap-3">
-                <span className="text-gray-900 font-semibold min-w-fit">
-                  Usage Data:
-                </span>
-                <span>
-                  Pages visited, time spent, and interactions with our platform
-                </span>
+              <li>
+                Any additional information voluntarily provided by you during
+                the booking or customer support process
               </li>
             </ul>
           </section>
 
-          {/* 2. How We Use Your Information */}
-          <section className="mb-8 sm:mb-12">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
+          {/* 2 */}
+          <section className="mb-10">
+            <h2 className="text-2xl font-bold text-gray-900 mb-5">
               2. How We Use Your Information
             </h2>
-            <p className="text-gray-700 mb-4">
-              We use the collected information to:
+
+            <p className="text-gray-700 mb-5">
+              Your personal information may be used for the following purposes:
             </p>
-            <ul className="space-y-2 text-gray-700 list-disc list-inside">
-              <li>Process and fulfill your bookings and purchases</li>
-              <li>Send you transaction confirmations and updates</li>
-              <li>Provide customer support and respond to inquiries</li>
-              <li>Improve our website, services, and user experience</li>
-              <li>Comply with legal obligations</li>
-              <li>Prevent fraud and enhance security</li>
+
+            <ul className="list-disc pl-6 space-y-2 text-gray-700">
+              <li>Processing and managing hotel reservations</li>
+              <li>Verifying payments and preventing fraudulent transactions</li>
+              <li>Providing customer support and responding to inquiries</li>
+              <li>
+                Communicating booking confirmations, updates, and important
+                service notifications
+              </li>
+              <li>
+                Complying with applicable legal, regulatory, and contractual
+                obligations
+              </li>
+              <li>
+                Improving our services, website functionality, and customer
+                experience
+              </li>
             </ul>
           </section>
 
-          {/* 3. Data Security */}
-          <section className="mb-8 sm:mb-12">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
-              3. Data Security
+          {/* 3 */}
+          <section className="mb-10">
+            <h2 className="text-2xl font-bold text-gray-900 mb-5">
+              3. Information Sharing and Disclosure
             </h2>
-            <p className="text-gray-700 leading-relaxed">
-              We implement appropriate technical and organizational measures to
-              protect your personal data against unauthorized access,
-              alteration, disclosure, or destruction. However, no method of
-              transmission over the internet is 100% secure, and we cannot
-              guarantee absolute security.
-            </p>
-          </section>
 
-          {/* 4. Your Rights */}
-          <section className="mb-8 sm:mb-12">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
-              4. Your Rights
-            </h2>
-            <p className="text-gray-700 mb-4">
-              Depending on your location, you may have the right to:
+            <p className="text-gray-700 mb-5">
+              We may share your personal information only when necessary and for
+              legitimate business purposes, including:
             </p>
-            <ul className="space-y-2 text-gray-700 list-disc list-inside">
-              <li>Access your personal data</li>
-              <li>Correct inaccurate data</li>
-              <li>Request deletion of your data</li>
-              <li>Withdraw consent at any time</li>
-              <li>Request a copy of your data in a portable format</li>
+
+            <ul className="list-disc pl-6 space-y-2 text-gray-700">
+              <li>
+                With the respective hotel to complete and manage your
+                reservation
+              </li>
+              <li>
+                With authorized payment service providers to process
+                transactions securely
+              </li>
+              <li>
+                With trusted third-party service providers who assist in
+                operating our services
+              </li>
+              <li>
+                With government authorities, regulatory bodies, or law
+                enforcement agencies where required by applicable law or legal
+                process
+              </li>
             </ul>
           </section>
 
-          {/* 5. Cookies */}
-          <section className="mb-8 sm:mb-12">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
-              5. Cookies
+          {/* 4 */}
+          <section className="mb-10">
+            <h2 className="text-2xl font-bold text-gray-900 mb-5">
+              4. Protection of Your Personal Information
             </h2>
-            <p className="text-gray-700 leading-relaxed">
-              Our website uses cookies to enhance your experience. You can
-              control cookie settings through your browser preferences. Some
-              features of the website may not function properly if cookies are
-              disabled.
+
+            <p className="text-gray-700 leading-8">
+              We do not sell, rent, or trade your personal information to third
+              parties for marketing or commercial purposes without your explicit
+              consent, except where disclosure is required by law or is
+              necessary to provide our services.
             </p>
           </section>
 
-          {/* 6. Third-Party Links */}
-          <section className="mb-8 sm:mb-12">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
-              6. Third-Party Links
+          {/* 5 */}
+          <section className="mb-10">
+            <h2 className="text-2xl font-bold text-gray-900 mb-5">
+              5. Data Security
             </h2>
-            <p className="text-gray-700 leading-relaxed">
-              Our website may contain links to third-party websites. We are not
-              responsible for the privacy practices of these external sites and
-              encourage you to review their privacy policies.
+
+            <p className="text-gray-700 leading-8">
+              We implement reasonable administrative, technical, and
+              organizational security measures to protect your personal
+              information from unauthorized access, disclosure, alteration, or
+              destruction. While we strive to safeguard your data, no method of
+              electronic transmission or online storage is completely secure.
+              Accordingly, we cannot guarantee absolute security.
             </p>
           </section>
 
-          {/* 7. Contact Us */}
-          <section className="mb-8 sm:mb-12">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
-              7. Contact Us
+          {/* 6 */}
+          <section className="mb-10">
+            <h2 className="text-2xl font-bold text-gray-900 mb-5">
+              6. Data Retention
             </h2>
-            <p className="text-gray-700 mb-6">
-              If you have any questions about this Privacy Policy or your
-              personal data, please contact us:
+
+            <p className="text-gray-700 leading-8">
+              We retain your personal information only for as long as necessary
+              to fulfill the purposes outlined in this Privacy Policy, comply
+              with legal obligations, resolve disputes, and enforce our
+              contractual rights.
             </p>
-            <div className="space-y-3 sm:space-y-4">
+          </section>
+
+          {/* 7 */}
+          <section className="mb-10">
+            <h2 className="text-2xl font-bold text-gray-900 mb-5">
+              7. Changes to This Privacy Policy
+            </h2>
+
+            <p className="text-gray-700 leading-8">
+              Hang Out Tourist reserves the right to modify or update this
+              Privacy Policy at any time. Any changes will become effective upon
+              publication on our website unless otherwise required by applicable
+              law. We encourage users to review this Privacy Policy
+              periodically.
+            </p>
+          </section>
+
+          {/* 8 */}
+          <section className="mb-10">
+            <h2 className="text-2xl font-bold text-gray-900 mb-5">
+              8. Your Acceptance of This Policy
+            </h2>
+
+            <p className="text-gray-700 leading-8">
+              By accessing or using the services of Hang Out Tourist, you
+              acknowledge that you have read, understood, and agreed to this
+              Privacy Policy. If you do not agree with any part of this Policy,
+              you should discontinue the use of our services.
+            </p>
+          </section>
+
+          {/* 9 */}
+          <section className="mb-12">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">
+              9. Contact Us
+            </h2>
+
+            <p className="text-gray-700 mb-8">
+              If you have any questions, concerns, or requests regarding this
+              Privacy Policy or the handling of your personal information,
+              please contact us through the official customer support channels
+              provided on the Hang Out Tourist website.
+            </p>
+
+            <div className="space-y-5">
               <div className="flex items-start gap-3">
-                <Mail className="w-5 h-5 text-gray-700 mt-0.5 flex-shrink-0" />
+                <Mail className="w-5 h-5 mt-1 text-gray-700" />
                 <div>
-                  <p className="text-sm text-gray-600">Email</p>
-                  <p className="text-gray-900 font-medium break-all">
-                    privacy@hangoutourist.com
-                  </p>
+                  <p className="text-sm text-gray-500">Email</p>
+                  <p className="font-medium">privacy@hangouttourist.com</p>
                 </div>
               </div>
+
               <div className="flex items-start gap-3">
-                <Phone className="w-5 h-5 text-gray-700 mt-0.5 flex-shrink-0" />
+                <Phone className="w-5 h-5 mt-1 text-gray-700" />
                 <div>
-                  <p className="text-sm text-gray-600">Phone</p>
-                  <p className="text-gray-900 font-medium">+880-1700-123-456</p>
+                  <p className="text-sm text-gray-500">Phone</p>
+                  <p className="font-medium">+880-1700-123-456</p>
                 </div>
               </div>
+
               <div className="flex items-start gap-3">
-                <MapPin className="w-5 h-5 text-gray-700 mt-0.5 flex-shrink-0" />
+                <MapPin className="w-5 h-5 mt-1 text-gray-700" />
                 <div>
-                  <p className="text-sm text-gray-600">Address</p>
-                  <p className="text-gray-900 font-medium">
-                    Hangout Tourist Services<br />
-                    123 Travel Street, Dhaka, Bangladesh
+                  <p className="text-sm text-gray-500">Address</p>
+                  <p className="font-medium">
+                    Hang Out Tourist
+                    <br />
+                    Dhaka, Bangladesh
                   </p>
                 </div>
               </div>
             </div>
           </section>
-
-          {/* 8. Changes to This Policy */}
-          <section className="mb-8 sm:mb-12">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
-              8. Changes to This Policy
-            </h2>
-            <p className="text-gray-700 leading-relaxed">
-              We may update this Privacy Policy from time to time. We will
-              notify you of any changes by updating the "Last updated" date at
-              the top of this page. Your continued use of the website following
-              such modifications constitutes your acceptance of the updated
-              Privacy Policy.
-            </p>
-          </section>
-
-          {/* Closing */}
-          <section className="pt-8 sm:pt-12 border-t border-gray-200">
-            <p className="text-gray-700 leading-relaxed">
-              Thank you for trusting Hangout Tourist with your personal
-              information. We are committed to maintaining your privacy and
-              ensuring you have a positive experience on our platform.
-            </p>
-          </section>
         </div>
       </div>
+      <Footer/>
     </div>
   );
 }

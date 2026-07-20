@@ -19,6 +19,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Helmet } from "react-helmet";
 
 const Flights = () => {
   const { toast } = useToast();
@@ -26,7 +27,7 @@ const Flights = () => {
   const [expandedFaq, setExpandedFaq] = useState(null);
   const [hoveredAirline, setHoveredAirline] = useState(null);
 
-  const BOOKING_PHONE = "+880-1700-123-456";
+  const BOOKING_PHONE = "+8801700123456";
   const WHATSAPP_PHONE = "8801700123456";
 
   const copyToClipboard = () => {
@@ -112,6 +113,10 @@ const Flights = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Helmet>
+        <meta charSet="utf-8" />
+        <title>Hang Out Tourist | Flights</title>
+      </Helmet>
       <Navbar />
 
       {/* Hero Section */}
@@ -127,7 +132,7 @@ const Flights = () => {
             <div className="flex-1 animate-fade-in w-full">
               <div className="inline-flex items-center gap-2 mb-3 sm:mb-4 px-3 sm:px-4 py-2 bg-white/20 rounded-full backdrop-blur-sm">
                 <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white rounded-full animate-pulse" />
-                <span className="text-xs sm:text-sm text-white font-semibold">Trusted by 50,000+ travelers</span>
+                <span className="text-[11px] sm:text-sm leading-5 text-white font-semibold">Trusted by 50,000+ travelers</span>
               </div>
 
               <h1 className="font-heading text-2xl sm:text-3xl md:text-4xl lg:text-6xl font-bold text-white mb-4 sm:mb-6 leading-tight">
@@ -139,8 +144,8 @@ const Flights = () => {
               </p>
 
               <div className="inline-block px-4 sm:px-5 py-2 sm:py-3 bg-white/15 border border-white/30 rounded-lg sm:rounded-xl backdrop-blur-sm">
-                <p className="text-orange-50 text-xs sm:text-sm font-medium flex items-center gap-2">
-                  <Zap className="h-3 w-3 sm:h-4 sm:w-4" />
+                <p className="text-orange-50 text-[11px] sm:text-sm leading-5 font-medium flex items-center gap-2">
+                  <Zap className="h-3 w-3 sm:h-4 sm:w-4 " />
                   ✈️ Coming Soon: Online booking system
                 </p>
               </div>
@@ -157,7 +162,7 @@ const Flights = () => {
                   {/* Center plane */}
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="p-4 sm:p-6 bg-white/10 backdrop-blur-md rounded-full">
-                      <Plane className="h-12 w-12 sm:h-20 sm:w-20 lg:h-24 lg:w-24 text-white animate-bounce" />
+                      <Plane className="h-12 w-12 sm:h-20 sm:w-20 lg:h-24 lg:w-24  text-white animate-bounce" />
                     </div>
                   </div>
                 </div>
@@ -168,30 +173,8 @@ const Flights = () => {
       </div>
 
       <div className="container px-4 sm:px-6 py-8 sm:py-12 md:py-16">
-        {/* Coming Soon Notice */}
-        <div className="mb-12 sm:mb-16 max-w-4xl mx-auto">
-          <div className="rounded-xl sm:rounded-2xl border-2 border-orange-200 bg-gradient-to-r from-orange-50 via-white to-amber-50 p-6 sm:p-8 shadow-lg relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 bg-orange-100/30 rounded-full -mr-12 sm:-mr-16 -mt-12 sm:-mt-16" />
-            <div className="relative flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
-              <div className="p-3 sm:p-4 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex-shrink-0">
-                <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-orange-700" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-heading text-lg sm:text-xl md:text-2xl font-bold text-orange-900 mb-2 sm:mb-3">
-                  🎉 Coming Soon: Online Booking
-                </h3>
-                <p className="text-orange-800 mb-2 sm:mb-3 leading-relaxed text-sm sm:text-base">
-                  Our online flight booking system is coming soon! In the meantime, enjoy seamless direct booking through our dedicated team of flight experts.
-                </p>
-                <p className="text-xs sm:text-sm text-orange-700">
-                  With 24/7 availability, instant confirmations, and exclusive deals – booking your flight has never been easier!
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
                 {/* Direct Booking Section */}
-        <div className="mb-12 sm:mb-16">
+        <div className="mb-12 sm:mb-16 ">
           <h2 className="font-heading text-2xl sm:text-3xl md:text-4xl font-bold text-center mb-2 sm:mb-3 text-foreground">
             Book Directly With Us
           </h2>
@@ -199,64 +182,64 @@ const Flights = () => {
             Call or message our expert agents for instant booking assistance
           </p>
 
-          <div className="grid gap-6 sm:gap-7 md:gap-8 md:grid-cols-2 max-w-3xl mx-auto mb-8">
+          <div className="grid grid-cols-2 gap-3 sm:gap-5 max-w-3xl mx-auto mb-8">
             {/* Phone Call Card */}
-            <div className="group rounded-xl sm:rounded-2xl border-2 border-orange-200 bg-gradient-to-br from-white to-orange-50 p-6 sm:p-8 md:p-10 shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-3 animate-fade-in">
-              <div className="mb-4 sm:mb-6 p-4 sm:p-5 bg-gradient-to-r from-orange-400 to-orange-600 rounded-xl sm:rounded-2xl inline-flex shadow-lg group-hover:shadow-xl transition-shadow">
-                <Phone className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
+            <div className="group rounded-lg sm:rounded-2xl border-2 border-orange-200 bg-gradient-to-br from-white to-orange-50 p-3 sm:p-6 md:p-10 shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-3 animate-fade-in">
+              <div className="mb-3 sm:mb-6 p-2.5 sm:p-5 bg-gradient-to-r from-orange-400 to-orange-600 rounded-xl sm:rounded-2xl inline-flex shadow-lg group-hover:shadow-xl transition-shadow">
+                <Phone className="h-5 w-5 sm:h-8 sm:w-8 text-white" />
               </div>
 
-              <h3 className="font-heading text-lg sm:text-xl md:text-2xl font-bold text-foreground mb-2 sm:mb-3">
+              <h3 className="font-heading text-base sm:text-xl md:text-2xl font-bold text-foreground mb-2 sm:mb-3">
                 Call Us Now
               </h3>
-              <p className="text-xs sm:text-sm text-muted-foreground mb-4 sm:mb-6 md:mb-8">
+              <p className="text-[11px] sm:text-sm leading-5 text-muted-foreground mb-3 sm:mb-6 md:mb-8">
                 Speak directly with our flight booking agents for instant assistance
               </p>
 
-              <div className="mb-4 sm:mb-6 md:mb-8 p-4 sm:p-5 bg-gradient-to-br from-orange-100 to-orange-200 rounded-xl sm:rounded-2xl border-2 border-orange-300">
+              <div className="mb-3 sm:mb-6 md:mb-8 p-2.5 sm:p-5 bg-gradient-to-br from-orange-100 to-orange-200 rounded-xl sm:rounded-2xl border-2 border-orange-300">
                 <div className="text-xs text-orange-700 font-bold mb-2 sm:mb-3 uppercase tracking-wide">
                   📞 Phone Number
                 </div>
-                <div className="text-2xl sm:text-3xl md:text-2xl font-bold text-orange-600 font-mono tracking-tight break-all">
+                <div className="text-base sm:text-3xl md:text-2xl font-bold text-orange-600 font-mono tracking-tight break-all">
                   {BOOKING_PHONE}
                 </div>
               </div>
 
-              <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
+              <div className="space-y-2 mb-3 sm:mb-6">
                 <Button
                   size="lg"
-                  className="w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white font-semibold hover:shadow-lg transition-all duration-300 transform hover:scale-105 text-sm sm:text-base py-4 sm:py-5 md:py-6"
+                  className="w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white font-semibold hover:shadow-lg transition-all duration-300 transform hover:scale-105 h-9 sm:h-12 md:h-14 text-xs sm:text-base"
                   onClick={() =>
                     (window.location.href = `tel:${BOOKING_PHONE}`)
                   }
                 >
-                  <Phone className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                  <Phone className="mr-2 h-3.5 w-3.5 sm:h-5 sm:w-5" />
                   Call Now
                 </Button>
                 <Button
                   size="lg"
                   variant="outline"
-                  className="w-full border-2 border-orange-300 text-orange-600 hover:bg-orange-50 font-semibold text-sm sm:text-base py-4 sm:py-5 md:py-6"
+                  className="w-full border-2 border-orange-300 text-orange-600 hover:bg-orange-50 font-semibold h-9 sm:h-12 md:h-14 text-xs sm:text-base"
                   onClick={copyToClipboard}
                 >
                   {copied ? (
                     <>
-                      <Check className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                      <Check className="mr-2 h-3.5 w-3.5 sm:h-5 sm:w-5" />
                       Copied!
                     </>
                   ) : (
                     <>
-                      <Copy className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                      <Copy className="mr-2 h-3.5 w-3.5 sm:h-5 sm:w-5" />
                       Copy Number
                     </>
                   )}
                 </Button>
               </div>
 
-              <div className="pt-4 sm:pt-6 border-t-2 border-orange-200 space-y-1 sm:space-y-2">
+              <div className="pt-3 sm:pt-6 border-t-2 border-orange-200 space-y-1 sm:space-y-2">
                 <div className="flex items-center gap-2">
-                  <Zap className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-orange-600 flex-shrink-0" />
-                  <p className="text-xs sm:text-sm font-semibold text-orange-700">Available: 24/7</p>
+                  <Zap className="h-3 w-3 sm:h-4 sm:w-4 text-orange-600 flex-shrink-0" />
+                  <p className="text-[11px] sm:text-sm leading-5 font-semibold text-orange-700">Available: 24/7</p>
                 </div>
                 <p className="text-xs text-muted-foreground pl-5.5">
                   Response time: Within 2 minutes
@@ -265,28 +248,28 @@ const Flights = () => {
             </div>
 
             {/* WhatsApp Card */}
-            <div className="group rounded-xl sm:rounded-2xl border-2 border-green-200 bg-gradient-to-br from-white to-green-50 p-6 sm:p-8 md:p-10 shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-3 animate-fade-in" style={{ animationDelay: "0.15s" }}>
-              <div className="mb-4 sm:mb-6 p-4 sm:p-5 bg-gradient-to-r from-green-400 to-green-600 rounded-xl sm:rounded-2xl inline-flex shadow-lg group-hover:shadow-xl transition-shadow">
-                <MessageCircle className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
+            <div className="group rounded-lg sm:rounded-2xl border-2 border-green-200 bg-gradient-to-br from-white to-green-50 p-3 sm:p-6 md:p-10 shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-3 animate-fade-in" style={{ animationDelay: "0.15s" }}>
+              <div className="mb-3 sm:mb-6 p-2.5 sm:p-5 bg-gradient-to-r from-green-400 to-green-600 rounded-xl sm:rounded-2xl inline-flex shadow-lg group-hover:shadow-xl transition-shadow">
+                <MessageCircle className="h-5 w-5 sm:h-8 sm:w-8 text-white" />
               </div>
 
-              <h3 className="font-heading text-lg sm:text-xl md:text-2xl font-bold text-foreground mb-2 sm:mb-3">
+              <h3 className="font-heading text-base sm:text-xl md:text-2xl font-bold text-foreground mb-2 sm:mb-3">
                 WhatsApp Us
               </h3>
-              <p className="text-xs sm:text-sm text-muted-foreground mb-4 sm:mb-6 md:mb-8">
+              <p className="text-[11px] sm:text-sm leading-5 text-muted-foreground mb-3 sm:mb-6 md:mb-8">
                 Quick messaging for flight booking inquiries and quotes
               </p>
 
-              <div className="mb-4 sm:mb-6 md:mb-8 p-4 sm:p-5 bg-gradient-to-br from-green-100 to-green-200 rounded-xl sm:rounded-2xl border-2 border-green-300">
+              <div className="mb-3 sm:mb-6 md:mb-8 p-2.5 sm:p-5 bg-gradient-to-br from-green-100 to-green-200 rounded-xl sm:rounded-2xl border-2 border-green-300">
                 <div className="text-xs text-green-700 font-bold mb-2 sm:mb-3 uppercase tracking-wide">
                   💬 WhatsApp Number
                 </div>
-                <div className="text-2xl sm:text-3xl md:text-2xl font-bold text-green-600 font-mono tracking-tight break-all">
+                <div className="text-base sm:text-3xl md:text-2xl font-bold text-green-600 font-mono tracking-tight break-all">
                   {BOOKING_PHONE}
                 </div>
               </div>
 
-              <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
+              <div className="space-y-2 mb-3 sm:mb-6">
                 <Button
                   size="lg"
                   className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white font-semibold hover:shadow-lg transition-all duration-300 transform hover:scale-105 text-sm sm:text-base  py-4 sm:py-5 md:py-6"
@@ -297,33 +280,33 @@ const Flights = () => {
                     )
                   }
                 >
-                  <MessageCircle className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                  <MessageCircle className="mr-2 h-3.5 w-3.5 sm:h-5 sm:w-5" />
                   WhatsApp Now
                 </Button>
                 <Button
                   size="lg"
                   variant="outline"
-                  className="w-full border-2 border-green-300 text-green-600 hover:bg-green-50 font-semibold text-sm sm:text-base py-4 sm:py-5 md:py-6"
+                  className="w-full border-2 border-green-300 text-green-600 hover:bg-green-50 font-semibold h-9 sm:h-12 md:h-14 text-xs sm:text-base"
                   onClick={copyToClipboard}
                 >
                   {copied ? (
                     <>
-                      <Check className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                      <Check className="mr-2 h-3.5 w-3.5 sm:h-5 sm:w-5" />
                       Copied!
                     </>
                   ) : (
                     <>
-                      <Copy className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                      <Copy className="mr-2 h-3.5 w-3.5 sm:h-5 sm:w-5" />
                       Copy Number
                     </>
                   )}
                 </Button>
               </div>
 
-              <div className="pt-4 sm:pt-6 border-t-2 border-green-200 space-y-1 sm:space-y-2">
+              <div className="pt-3 sm:pt-6 border-t-2 border-green-200 space-y-1 sm:space-y-2">
                 <div className="flex items-center gap-2">
-                  <Zap className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-600 flex-shrink-0" />
-                  <p className="text-xs sm:text-sm font-semibold text-green-700">Available: 24/7</p>
+                  <Zap className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 flex-shrink-0" />
+                  <p className="text-[11px] sm:text-sm leading-5 font-semibold text-green-700">Available: 24/7</p>
                 </div>
                 <p className="text-xs text-muted-foreground pl-5.5">
                   Response time: Within 5 minutes
@@ -372,7 +355,7 @@ const Flights = () => {
                     </div>
                     <div className="flex items-center gap-0.5 bg-yellow-100 px-2 py-1 sm:px-3 sm:py-1.5 rounded-full shadow-sm flex-shrink-0">
                       <Star className="h-3 w-3 sm:h-4 sm:w-4 fill-yellow-400 text-yellow-400" />
-                      <span className="text-xs sm:text-sm font-bold text-yellow-700">{airline.rating}</span>
+                      <span className="text-[11px] sm:text-sm leading-5 font-bold text-yellow-700">{airline.rating}</span>
                     </div>
                   </div>
 
@@ -382,12 +365,12 @@ const Flights = () => {
                   </h3>
 
                   {/* Description */}
-                  <p className="text-xs sm:text-sm text-muted-foreground mb-2 sm:mb-3 md:mb-4 line-clamp-2">
+                  <p className="text-[11px] sm:text-sm leading-5 text-muted-foreground mb-2 sm:mb-3 md:mb-4 line-clamp-2">
                     {airline.description}
                   </p>
 
                   {/* Routes */}
-                  <div className="flex items-center gap-1.5 mb-2 sm:mb-3 md:mb-4 text-xs sm:text-sm text-orange-700 font-medium">
+                  <div className="flex items-center gap-1.5 mb-2 sm:mb-3 md:mb-4 text-[11px] sm:text-sm leading-5 text-orange-700 font-medium">
                     <MapPin className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
                     <span className="line-clamp-1">{airline.routes}</span>
                   </div>
@@ -408,11 +391,11 @@ const Flights = () => {
                   <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4 md:mb-6">
                     <div className="p-2 sm:p-3 bg-orange-100/50 rounded-lg text-center hover:bg-orange-100 transition">
                       <p className="text-xs text-muted-foreground mb-0.5">Reliability</p>
-                      <p className="text-xs sm:text-sm font-bold text-orange-700">{(airline.rating * 20).toFixed(0)}%</p>
+                      <p className="text-[11px] sm:text-sm leading-5 font-bold text-orange-700">{(airline.rating * 20).toFixed(0)}%</p>
                     </div>
                     <div className="p-2 sm:p-3 bg-orange-100/50 rounded-lg text-center hover:bg-orange-100 transition">
                       <p className="text-xs text-muted-foreground mb-0.5">Rating</p>
-                      <p className="text-xs sm:text-sm font-bold text-orange-700">{airline.rating}/5</p>
+                      <p className="text-[11px] sm:text-sm leading-5 font-bold text-orange-700">{airline.rating}/5</p>
                     </div>
                   </div>
                 </div>
@@ -485,7 +468,7 @@ const Flights = () => {
                 <h3 className="font-heading text-base sm:text-lg md:text-lg font-bold mb-2 sm:mb-3 text-foreground">
                   {item.title}
                 </h3>
-                <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">{item.description}</p>
+                <p className="text-[11px] sm:text-sm leading-5 text-muted-foreground leading-relaxed">{item.description}</p>
               </div>
             ))}
           </div>
@@ -515,7 +498,7 @@ const Flights = () => {
                         {item.step}
                       </div>
                     </div>
-                    <h3 className="font-heading font-bold text-xs sm:text-sm md:text-lg mb-1 sm:mb-2 text-foreground line-clamp-1">
+                    <h3 className="font-heading font-bold text-[11px] sm:text-sm leading-5 md:text-lg mb-1 sm:mb-2 text-foreground line-clamp-1">
                       {item.title}
                     </h3>
                     <p className="text-xs sm:text-xs md:text-sm text-muted-foreground leading-tight sm:leading-relaxed line-clamp-2">
@@ -551,14 +534,14 @@ const Flights = () => {
                     {faq.question}
                   </h3>
                   <ChevronDown
-                    className={`h-4 w-4 sm:h-5 sm:w-5 text-orange-600 transition-transform duration-300 flex-shrink-0 group-hover:text-orange-700 ${
+                    className={`h-3.5 w-3.5 sm:h-5 sm:w-5 text-orange-600 transition-transform duration-300 flex-shrink-0 group-hover:text-orange-700 ${
                       expandedFaq === idx ? "rotate-180" : ""
                     }`}
                   />
                 </button>
                 {expandedFaq === idx && (
                   <div className="px-4 sm:px-6 pb-4 sm:pb-6 border-t-2 border-orange-100 bg-gradient-to-br from-orange-50 to-white animate-in fade-in slide-in-from-top-2">
-                    <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">{faq.answer}</p>
+                    <p className="text-[11px] sm:text-sm leading-5 text-muted-foreground leading-relaxed">{faq.answer}</p>
                   </div>
                 )}
               </div>
@@ -586,7 +569,7 @@ const Flights = () => {
                   (window.location.href = `tel:${BOOKING_PHONE}`)
                 }
               >
-                <Phone className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                <Phone className="mr-2 h-3.5 w-3.5 sm:h-5 sm:w-5" />
                 Call Now
               </Button>
               <Button
@@ -600,7 +583,7 @@ const Flights = () => {
                   )
                 }
               >
-                <MessageCircle className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                <MessageCircle className="mr-2 h-3.5 w-3.5 sm:h-5 sm:w-5" />
                 WhatsApp Us
               </Button>
             </div>

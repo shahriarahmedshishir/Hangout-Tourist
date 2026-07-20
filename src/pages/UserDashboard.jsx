@@ -7,6 +7,7 @@ import { api, imgUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import WalletCard from "@/components/user/WalletCard";
 import BookingDetail from "@/components/booking/BookingDetail";
+import { Helmet } from "react-helmet";
 import {
   Hotel,
   Car,
@@ -589,6 +590,9 @@ const UserDashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Helmet>
+        <title>My Dashboard</title>
+      </Helmet>
       <Navbar />
       <div className="bg-gradient-primary py-8">
         <div className="container">
@@ -697,7 +701,7 @@ const UserDashboard = () => {
         </div>
 
         {/* Tabs */}
-        <div className="mb-6 flex gap-2">
+        <div className="mb-6 flex gap-4 flex-wrap">
           <Button
             variant={tab === "hotel" ? "default" : "outline"}
             onClick={() => {

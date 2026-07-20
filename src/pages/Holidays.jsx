@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import { Helmet } from "react-helmet";
 import {
   Palmtree,
   Clock,
@@ -46,6 +47,10 @@ const Holidays = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Helmet>
+        <meta charSet="utf-8" />
+        <title>Hang Out Tourist | Holidays</title>
+      </Helmet>
       <Navbar />
       <div className="px-4 py-12 mx-auto max-w-7xl sm:px-6 lg:px-8">
         <div className="rounded-[2rem] bg-gradient-to-r from-sky-900 via-slate-900 to-slate-950 p-10 text-white shadow-2xl shadow-slate-900/20">
@@ -96,69 +101,82 @@ const Holidays = () => {
               {packages.map((pkg) => (
                 <div
                   key={pkg._id}
-                  className="group overflow-hidden rounded-[2rem] border border-slate-200/10 bg-white shadow-lg shadow-slate-900/10 transition hover:-translate-y-1 hover:shadow-2xl"
+                  className="group relative overflow-hidden rounded-[32px] bg-black shadow-xl transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl"
                 >
-                  {pkg.image && (
-                    <div className="h-56 overflow-hidden">
-                      <img
-                        src={imgUrl(pkg.image)}
-                        alt={pkg.name || "Holiday package"}
-                        className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                      />
-                    </div>
-                  )}
-                  <div className="bg-gradient-to-r from-sky-600 to-cyan-500 p-6 text-white">
-                    <p className="text-sm uppercase tracking-[0.24em] text-cyan-100">
-                      {pkg.duration || "Holiday Package"}
-                    </p>
-                    <h2 className="mt-4 text-2xl font-semibold">{pkg.name}</h2>
-                    <p className="mt-3 text-sm text-white/80 line-clamp-3">
-                      {pkg.description ||
-                        "A memorable getaway crafted just for you."}
-                    </p>
-                  </div>
-                  <div className="p-6">
-                    <div className="mb-4 grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
-                      <div className="inline-flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-3">
-                        <MapPin className="h-4 w-4 text-sky-500" />
-                        {pkg.hotel || "Hotel included"}
+                  {/* Background Image */}
+                  <div className="relative h-[560px] overflow-hidden">
+                    <img
+                      src={imgUrl(pkg.image)}
+                      alt={pkg.name || "Holiday Package"}
+                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+                    />
+
+                    {/* Gradient Overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+
+                    {/* Content */}
+                    <div className="absolute inset-x-0 bottom-0 p-6 text-white">
+                      {/* Duration */}
+                      <span className="inline-flex rounded-full bg-white/15 px-4 py-1 text-xs font-medium backdrop-blur-md">
+                        {pkg.duration || "Holiday Package"}
+                      </span>
+
+                      {/* Title */}
+                      <h2 className="mt-4 text-3xl font-bold tracking-tight">
+                        {pkg.name}
+                      </h2>
+
+                      {/* Info Chips */}
+                      <div className="mt-5 flex flex-wrap gap-3">
+                        <div className="flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 backdrop-blur-md">
+                          <MapPin className="h-4 w-4" />
+                          <span className="text-xs">
+                            {pkg.hotel || "Hotel Included"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 backdrop-blur-md">
+                          <Briefcase className="h-4 w-4" />
+                          <span className="text-xs">
+                            {pkg.transportation || "Transport"}
+                          </span>
+                        </div>
                       </div>
-                      <div className="inline-flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-3">
-                        <Briefcase className="h-4 w-4 text-slate-700" />
-                        {pkg.transportation || "Transport included"}
+
+                      {/* Bottom */}
+                      <div className="mt-6 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-white/60">From</p>
+
+                          <h3 className="text-2xl font-bold">
+                            ৳{Number(pkg.pricePerPerson || 0).toLocaleString()}
+                          </h3>
+
+                          <p className="text-xs text-white/70">
+                            {pkg.minimumPerson || 1}+ People
+                          </p>
+                        </div>
+
+                        <Button
+                          onClick={() => {
+                            if (!user) {
+                              navigate("/login", {
+                                state: {
+                                  redirectTo: "/booking/package",
+                                  pkg,
+                                },
+                              });
+                            } else {
+                              navigate("/booking/package", {
+                                state: { pkg },
+                              });
+                            }
+                          }}
+                          className="rounded-full bg-white px-7 py-6 text-base font-semibold text-slate-900 transition hover:bg-slate-100"
+                        >
+                          Reserve Now
+                        </Button>
                       </div>
-                    </div>
-                    <div className="space-y-3 border-t border-slate-200/70 pt-4">
-                      <p className="text-sm text-slate-500">Meals:</p>
-                      <p className="font-medium text-slate-900">
-                        {pkg.meal || "Included"}
-                      </p>
-                      <p className="text-sm text-slate-500">Price / Person:</p>
-                      <p className="font-semibold text-slate-900 text-lg">
-                        ৳{Number(pkg.pricePerPerson || 0).toLocaleString()}
-                      </p>
-                      <p className="text-sm text-slate-500">Minimum:</p>
-                      <p className="font-medium text-slate-900">
-                        {pkg.minimumPerson || 1} people
-                      </p>
-                    </div>
-                    <div className="mt-6 flex items-center justify-between gap-4">
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => {
-                          if (!user) {
-                            // Redirect to login with intended destination
-                            navigate("/login", {
-                              state: { redirectTo: "/booking/package", pkg },
-                            });
-                          } else {
-                            navigate("/booking/package", { state: { pkg } });
-                          }
-                        }}
-                      >
-                        Book Now
-                      </Button>
                     </div>
                   </div>
                 </div>

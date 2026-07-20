@@ -38,6 +38,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Helmet } from "react-helmet";
 
 export default function HotelDetail() {
   const { id } = useParams();
@@ -152,6 +153,9 @@ export default function HotelDetail() {
   if (loading && !hotel) {
     return (
       <div className="min-h-screen bg-background">
+        <Helmet>
+          <title>Hang Out Tourist - Hotel Details</title>
+        </Helmet>
         <Navbar />
         <div className="h-96 bg-muted animate-pulse" />
         <div className="container py-12">
@@ -217,19 +221,6 @@ export default function HotelDetail() {
               </button>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setIsFavorite(!isFavorite)}
-                  className={`p-2 rounded-full transition-all shadow-md ${
-                    isFavorite
-                      ? "bg-red-500 text-white"
-                      : "bg-white/90 hover:bg-white text-foreground"
-                  }`}
-                >
-                  <Heart
-                    className="h-5 w-5"
-                    fill={isFavorite ? "currentColor" : "none"}
-                  />
-                </button>
-                <button
                   onClick={handleShare}
                   className="bg-white/90 hover:bg-white text-foreground p-2 rounded-full transition-colors shadow-md"
                 >
@@ -288,23 +279,7 @@ export default function HotelDetail() {
                       <MapPin className="h-4 w-4" /> {hotel.area}
                     </p>
                   )}
-                  <div className="flex items-center gap-3 mt-2">
-                    <div className="flex items-center gap-1">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`h-3.5 w-3.5 ${
-                            i < 4
-                              ? "fill-amber-400 text-amber-400"
-                              : "text-gray-300"
-                          }`}
-                        />
-                      ))}
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      4.5 (128 reviews)
-                    </span>
-                  </div>
+
                 </div>
 
                 {/* Price Display */}
@@ -439,7 +414,7 @@ export default function HotelDetail() {
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4 mt-4">
+                      {/* <div className="grid grid-cols-2 gap-4 mt-4">
                         <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
                           <Award className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                           <div>
@@ -462,7 +437,7 @@ export default function HotelDetail() {
                             </p>
                           </div>
                         </div>
-                      </div>
+                      </div> */}
                     </TabsContent>
 
                     {/* Amenities Tab */}
@@ -552,7 +527,7 @@ export default function HotelDetail() {
                       <PolicyItem
                         icon={<AlertCircle className="h-5 w-5" />}
                         title="Cancellation Policy"
-                        content="Free cancellation up to 48 hours before check-in. Cancellations within 48 hours may incur a full charge."
+                        content="Cancellations within 48 hours may incur a full charge."
                       />
                       <PolicyItem
                         icon={<Users className="h-5 w-5" />}
@@ -562,14 +537,14 @@ export default function HotelDetail() {
                       <PolicyItem
                         icon={<Info className="h-5 w-5" />}
                         title="Important Information"
-                        content="Valid ID required at check-in. Payment must be completed 24 hours before check-in. For any queries, contact our 24/7 support."
+                        content="Valid ID required at check-in. For any queries, contact our 24/7 support."
                       />
                     </TabsContent>
                   </Tabs>
                 </div>
 
                 {/* Featured Reviews Section */}
-                <div className="rounded-2xl border border-border bg-card p-6 shadow-card">
+                {/* <div className="rounded-2xl border border-border bg-card p-6 shadow-card">
                   <h3 className="font-heading text-lg font-bold text-foreground mb-4 flex items-center gap-2">
                     <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
                     Guest Reviews
@@ -606,7 +581,7 @@ export default function HotelDetail() {
                       </div>
                     ))}
                   </div>
-                </div>
+                </div> */}
               </div>
 
               {/* Sidebar - Booking Card */}
@@ -694,7 +669,7 @@ export default function HotelDetail() {
                             Support
                           </p>
                           <p className="font-medium text-foreground text-sm">
-                            +880 1234 567890
+                            +8801795-606900
                           </p>
                         </div>
                       </div>

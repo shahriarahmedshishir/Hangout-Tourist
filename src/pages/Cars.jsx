@@ -23,6 +23,7 @@ import {
   Clock,
 } from "lucide-react";
 import { api, imgUrl } from "@/lib/api";
+import { Helmet } from "react-helmet";
 
 const COXS_BAZAR_TRANSPORTS = [
   {
@@ -196,6 +197,10 @@ const Cars = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Helmet>
+        <meta charSet="utf-8" />
+        <title>Hang Out Tourist | Cars</title>
+      </Helmet>
       <Navbar />
 
       {/* Option Selection */}
@@ -212,8 +217,8 @@ const Cars = () => {
               size="lg"
               className={
                 selectedTab === "car"
-                  ? "bg-white text-primary"
-                  : "bg-card border shadow hover:bg-secondary"
+                  ? "bg-white text-primary hover:bg-white hover:text-primary"
+                  : "bg-card border shadow "
               }
               variant={selectedTab === "car" ? "default" : "outline"}
               onClick={() => {
@@ -228,8 +233,8 @@ const Cars = () => {
               size="lg"
               className={
                 selectedTab === "bus"
-                  ? "bg-white text-primary"
-                  : "bg-card border shadow hover:bg-secondary"
+                  ? "bg-white text-primary hover:bg-white hover:text-primary"
+                  : "bg-card border shadow "
               }
               variant={selectedTab === "bus" ? "default" : "outline"}
               onClick={() => {
@@ -244,8 +249,8 @@ const Cars = () => {
               size="lg"
               className={
                 selectedTab === "coxs_bazar"
-                  ? "bg-white text-primary"
-                  : "bg-card border shadow hover:bg-secondary"
+                  ? "bg-white text-primary hover:bg-white hover:text-primary"
+                  : "bg-card border shadow "
               }
               variant={selectedTab === "coxs_bazar" ? "default" : "outline"}
               onClick={() => {
@@ -265,29 +270,29 @@ const Cars = () => {
         {selectedTab === "car" && (
           <>
             {/* Search */}
-            <div className="mb-8 rounded-2xl border border-border bg-card p-5 shadow-card">
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="mb-1 block text-xs text-muted-foreground">
-                    Search by place or car name
-                  </label>
+            <div className="mb-8 rounded-2xl  bg-card p-4 sm:p-5 ">
+              <label className="mb-2 block text-xs text-muted-foreground">
+                Search by place or car name
+              </label>
+
+              <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                <div className="w-full sm:max-w-sm md:max-w-md">
                   <Input
                     placeholder="e.g. Dhaka, Sedan, Toyota..."
-                    className="bg-muted"
+                    className="h-9 bg-muted text-sm"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
                 </div>
-                <div className="flex items-end">
-                  <Button className="bg-gradient-primary text-primary-foreground">
-                    Search
-                  </Button>
-                </div>
+
+                <Button className="h-9 px-6 sm:w-auto w-full bg-gradient-primary text-primary-foreground">
+                  Search
+                </Button>
               </div>
             </div>
             {/* Car Grid - same as original */}
             {loading ? (
-              <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-5 md:grid-cols-3 lg:grid-cols-4 sm:grid-cols-2">
                 {[...Array(6)].map((_, i) => (
                   <div
                     key={i}
@@ -390,7 +395,7 @@ const Cars = () => {
                       </h3>
                       <div className="mb-3 flex items-center gap-2">
                         <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                          {car.type === "CC" ? "🚗 CC" : "🏎️ MC"}
+                          {car.type}
                         </span>
                       </div>
                       {car.places?.length > 0 && (
