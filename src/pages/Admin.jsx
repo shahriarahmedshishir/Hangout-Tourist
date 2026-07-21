@@ -43,6 +43,7 @@ import logo from "@/assets/logo.png";
 const sidebarItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "hotels", label: "Hotels", icon: Building2 },
+  { id: "hotel-bookings", label: "Hotel Bookings", icon: Building2 },
   { id: "cars", label: "Car Rental", icon: Car },
   { id: "cars rent", label: "Cox's Bazar", icon: Car },
   { id: "buses", label: "Buses", icon: BusFront },
@@ -197,6 +198,7 @@ const Admin = () => {
         <main className="p-6 overflow-auto">
           {view === "dashboard" && <DashboardView />}
           {view === "hotels" && <HotelsView />}
+          {view === "hotel-bookings" && <HotelBookingsView />}
           {view === "cars" && <CarsView />}
           {view === "cars rent" && <CarsRentView />}
           {view === "buses" && <BusesView />}
@@ -407,6 +409,284 @@ const DashboardView = () => {
           </table>
         </div>
       </div>
+    </div>
+  );
+};
+
+// ─── HOTEL BOOKINGS VIEW ───────────────────────────────────────────────────
+const HotelBookingsView = () => {
+  const [month, setMonth] = useState("");
+  const [hotels, setHotels] = useState([]);
+  const [hotelId, setHotelId] = useState("");
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    api
+      .get("/api/admin/hotels")
+      .then(setHotels)
+      .catch(() => {});
+  }, []);
+
+  const loadForRange = async (from, to, hId) => {
+    setLoading(true);
+    try {
+      let url = `/api/admin/bookings?type=hotel&dateFrom=${encodeURIComponent(from)}&dateTo=${encodeURIComponent(to)}&viewMode=all`;
+      if (hId) url += `&hotelId=${hId}`;
+      const res = await api.get(url);
+      setBookings(res.bookings || []);
+    } catch (err) {
+      console.error(err);
+      setBookings([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMonthChange = (m) => {
+    setMonth(m);
+    if (!m) {
+      setBookings([]);
+      return;
+    }
+    const [y, mm] = m.split("-");
+    const from = new Date(Number(y), Number(mm) - 1, 1);
+    const to = new Date(Number(y), Number(mm), 0);
+    const fromIso = from.toISOString();
+    const toIso = new Date(
+      to.getFullYear(),
+      to.getMonth(),
+      to.getDate(),
+      23,
+      59,
+      59,
+    ).toISOString();
+    loadForRange(fromIso, toIso, hotelId);
+  };
+
+  useEffect(() => {
+    if (!month) return;
+    // reload when hotel changes
+    const [y, mm] = month.split("-");
+    const from = new Date(Number(y), Number(mm) - 1, 1);
+    const to = new Date(Number(y), Number(mm), 0);
+    loadForRange(
+      from.toISOString(),
+      new Date(
+        to.getFullYear(),
+        to.getMonth(),
+        to.getDate(),
+        23,
+        59,
+        59,
+      ).toISOString(),
+      hotelId,
+    );
+  }, [hotelId]);
+
+  // Group bookings by room and source
+  const grouped = bookings.reduce((acc, b) => {
+    const roomKey = b.roomNumber || b.roomId || "unknown";
+    acc[roomKey] = acc[roomKey] || { roomNumber: roomKey, sources: {} };
+    const src = b.source === "staff" ? "staff" : "website";
+    acc[roomKey].sources[src] = acc[roomKey].sources[src] || {
+      bookings: [],
+      totalNights: 0,
+    };
+    acc[roomKey].sources[src].bookings.push(b);
+    acc[roomKey].sources[src].totalNights += b.days || 0;
+    return acc;
+  }, {});
+
+  const websiteCount = bookings.filter((b) => b.source !== "staff").length;
+  const staffCount = bookings.filter((b) => b.source === "staff").length;
+  const totalNights = bookings.reduce((s, b) => s + (b.days || 0), 0);
+
+  const handleExportCSV = () => {
+    if (!hotelId) return alert("Select a hotel to export CSV");
+    if (!month) return alert("Select a month first");
+    const hotel = hotels.find((h) => h._id === hotelId);
+    const rows = [];
+    rows.push(
+      [
+        "Hotel",
+        "Month",
+        "Room",
+        "Source",
+        "Bookings",
+        "TotalNights",
+        "Ranges",
+      ].join(","),
+    );
+    Object.values(grouped).forEach((room) => {
+      Object.entries(room.sources).forEach(([src, data]) => {
+        const ranges = data.bookings
+          .map(
+            (b) =>
+              `${new Date(b.checkIn).toLocaleDateString()} - ${new Date(b.checkOut || b.checkout || b.checkoutDate).toLocaleDateString()}`,
+          )
+          .join("; ");
+        rows.push(
+          [
+            (hotel && hotel.name) || "-",
+            month,
+            room.roomNumber,
+            src,
+            data.bookings.length,
+            data.totalNights,
+            `"${ranges}"`,
+          ].join(","),
+        );
+      });
+    });
+    const csv = rows.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${hotels.find((h) => h._id === hotelId)?.name || "hotel"}-${month}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="font-heading text-lg font-bold text-foreground">
+          Hotel Bookings
+        </h2>
+        <div className="flex items-center gap-3">
+          <select
+            value={hotelId}
+            onChange={(e) => setHotelId(e.target.value)}
+            className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+          >
+            <option value="">-- Select Hotel --</option>
+            {hotels.map((h) => (
+              <option key={h._id} value={h._id}>
+                {h.name}
+              </option>
+            ))}
+          </select>
+          <input
+            type="month"
+            value={month}
+            onChange={(e) => handleMonthChange(e.target.value)}
+            className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+          />
+          <button
+            onClick={() => {
+              setMonth("");
+              setBookings([]);
+            }}
+            className="rounded-xl border border-border bg-muted px-3 py-2 text-sm"
+          >
+            Clear
+          </button>
+          <button
+            onClick={handleExportCSV}
+            className="rounded-xl bg-gradient-primary px-3 py-2 text-sm text-primary-foreground"
+          >
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-6 grid grid-cols-3 gap-4">
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
+          <div className="text-sm text-muted-foreground">Website Bookings</div>
+          <div className="mt-1 font-heading text-2xl font-bold">
+            {websiteCount}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
+          <div className="text-sm text-muted-foreground">Staff Bookings</div>
+          <div className="mt-1 font-heading text-2xl font-bold">
+            {staffCount}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
+          <div className="text-sm text-muted-foreground">Total Nights</div>
+          <div className="mt-1 font-heading text-2xl font-bold">
+            {totalNights}
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="text-muted-foreground">Loading...</div>
+      ) : bookings.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card p-6 text-center text-muted-foreground">
+          No bookings for selected month / hotel.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {Object.values(grouped).map((room) => (
+            <div
+              key={room.roomNumber}
+              className="rounded-2xl border border-border bg-card p-4 shadow-card"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-medium text-foreground">
+                    Room {room.roomNumber}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Total nights:{" "}
+                    {Object.values(room.sources).reduce(
+                      (s, x) => s + x.totalNights,
+                      0,
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {Object.entries(room.sources).map(([src, data]) => (
+                    <div key={src} className="text-sm text-muted-foreground">
+                      <div className="font-semibold text-foreground">
+                        {src === "staff" ? "Staff" : "Website"}
+                      </div>
+                      <div className="text-xs">
+                        Bookings: {data.bookings.length} · Nights:{" "}
+                        {data.totalNights}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {Object.entries(room.sources).reduce((acc, [src, data]) => {
+                  data.bookings.forEach((b) => {
+                    acc.push(
+                      <div
+                        key={b._id}
+                        className="rounded-xl bg-muted p-3 text-xs"
+                      >
+                        <div className="text-muted-foreground">
+                          {src === "staff" ? "Staff" : "Website"}
+                        </div>
+                        <div className="font-medium text-foreground">
+                          {new Date(b.checkIn).toLocaleDateString()} →{" "}
+                          {new Date(
+                            b.checkOut || b.checkout || b.checkoutDate,
+                          ).toLocaleDateString()}
+                        </div>
+                        <div className="text-muted-foreground">
+                          {b.days || 0} night{b.days !== 1 ? "s" : ""} · Room{" "}
+                          {room.roomNumber}
+                        </div>
+                      </div>,
+                    );
+                  });
+                  return acc;
+                }, [])}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

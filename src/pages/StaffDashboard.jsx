@@ -25,6 +25,15 @@ const StaffDashboard = () => {
   const [selectedBookingId, setSelectedBookingId] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Booking form state
+  const [bookingForm, setBookingForm] = useState({
+    roomId: "",
+    checkIn: "",
+    checkOut: "",
+  });
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [bookingError, setBookingError] = useState("");
+
   useEffect(() => {
     if (!authLoading) {
       if (!user) {
@@ -78,6 +87,58 @@ const StaffDashboard = () => {
     const startDate = normalizeDate(start);
     const endDate = normalizeDate(end);
     return date >= startDate && date < endDate;
+  };
+
+  const handleBookRoom = async (e) => {
+    e.preventDefault();
+    setBookingError("");
+
+    if (!bookingForm.roomId || !bookingForm.checkIn || !bookingForm.checkOut) {
+      setBookingError("Please select room and dates");
+      return;
+    }
+
+    const checkInDate = new Date(bookingForm.checkIn);
+    const checkOutDate = new Date(bookingForm.checkOut);
+
+    if (checkOutDate <= checkInDate) {
+      setBookingError("Check-out date must be after check-in date");
+      return;
+    }
+
+    setBookingLoading(true);
+    try {
+      await api.post("/api/staff/bookings/hotel", {
+        roomId: bookingForm.roomId,
+        checkIn: bookingForm.checkIn,
+        checkOut: bookingForm.checkOut,
+      });
+
+      // Success
+      alert(
+        "✓ Room booked successfully!\nThis booking will not count toward admin revenue.",
+      );
+      setBookingForm({ roomId: "", checkIn: "", checkOut: "" });
+
+      // Refresh data
+      Promise.all([api.get("/api/staff/hotel"), api.get("/api/staff/rooms")])
+        .then(([hotelData, { rooms: roomList, bookings: bookingList }]) => {
+          setHotel(hotelData);
+          const roomsWithBookings = roomList.map((room) => ({
+            ...room,
+            activeBookings: bookingList.filter(
+              (b) => b.roomId === room._id.toString(),
+            ),
+          }));
+          setRooms(roomsWithBookings);
+          setBookings(bookingList);
+        })
+        .catch(() => {});
+    } catch (err) {
+      setBookingError(err.message || "Booking failed");
+    } finally {
+      setBookingLoading(false);
+    }
   };
 
   const selectedDate = filterDate ? normalizeDate(filterDate) : null;
@@ -195,6 +256,93 @@ const StaffDashboard = () => {
               <div className="text-xs text-muted-foreground">{s.label}</div>
             </div>
           ))}
+        </div>
+
+        {/* Book a Room Section */}
+        <div className="mb-8 rounded-2xl border border-border bg-card p-6 shadow-card">
+          <h2 className="font-heading text-xl font-bold text-foreground mb-4">
+            📋 Book a Room
+          </h2>
+          <p className="text-sm text-muted-foreground mb-6">
+            Quick booking for your hotel. Select a room and dates, then confirm.
+            This booking will not add to admin revenue.
+          </p>
+
+          {bookingError && (
+            <div className="mb-4 rounded-xl bg-destructive/10 p-3 text-sm text-destructive border border-destructive/20">
+              {bookingError}
+            </div>
+          )}
+
+          <form
+            onSubmit={handleBookRoom}
+            className="grid gap-4 md:grid-cols-4 md:items-end"
+          >
+            <div>
+              <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                Select Room *
+              </label>
+              <select
+                value={bookingForm.roomId}
+                onChange={(e) =>
+                  setBookingForm({ ...bookingForm, roomId: e.target.value })
+                }
+                className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
+                disabled={rooms.length === 0 || bookingLoading}
+              >
+                <option value="">-- Select Room --</option>
+                {rooms
+                  .filter((r) => r.isAvailable !== false)
+                  .map((room) => (
+                    <option key={room._id} value={room._id}>
+                      Room {room.roomNumber}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                Check-in *
+              </label>
+              <input
+                type="date"
+                value={bookingForm.checkIn}
+                onChange={(e) =>
+                  setBookingForm({ ...bookingForm, checkIn: e.target.value })
+                }
+                min={new Date().toISOString().split("T")[0]}
+                className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
+                disabled={bookingLoading}
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                Check-out *
+              </label>
+              <input
+                type="date"
+                value={bookingForm.checkOut}
+                onChange={(e) =>
+                  setBookingForm({ ...bookingForm, checkOut: e.target.value })
+                }
+                min={
+                  bookingForm.checkIn || new Date().toISOString().split("T")[0]
+                }
+                className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
+                disabled={bookingLoading}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={bookingLoading || !bookingForm.roomId}
+              className="rounded-xl bg-gradient-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {bookingLoading ? "Booking..." : "✓ Confirm"}
+            </button>
+          </form>
         </div>
 
         {/* Booking search and list */}

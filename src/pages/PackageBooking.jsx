@@ -154,8 +154,8 @@ export default function PackageBooking() {
     }
 
     if (!validateBooking()) return;
-    if (!manualTransactionId.trim() || !manualScreenshot.trim()) {
-      setError("Please provide transaction ID and screenshot link.");
+    if (!manualTransactionId.trim() || !manualScreenshot) {
+      setError("Please provide transaction ID and upload a screenshot.");
       return;
     }
 
@@ -190,6 +190,17 @@ export default function PackageBooking() {
       setError(err.message || "Unable to submit manual payment.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleScreenshotUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setManualScreenshot(event.target?.result);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -521,12 +532,19 @@ export default function PackageBooking() {
                     </div>
                     <div className="grid gap-2">
                       <label className="text-sm text-slate-400">
-                        Screenshot URL
+                        Payment Screenshot
                       </label>
-                      <Input
-                        value={manualScreenshot}
-                        onChange={(e) => setManualScreenshot(e.target.value)}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleScreenshotUpload}
+                        className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none"
                       />
+                      {manualScreenshot && (
+                        <div className="mt-2 text-xs text-slate-300">
+                          ✓ Screenshot attached
+                        </div>
+                      )}
                     </div>
                   </div>
                   <Button

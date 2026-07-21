@@ -817,6 +817,7 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
       search,
       dateFrom,
       dateTo,
+      hotelId,
       viewMode = "upcoming", // "upcoming" = today+future (default), "past" = before today, "all" = no filter
     } = req.query;
 
@@ -851,6 +852,10 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
     } else if (viewMode === "past") {
       // Show past bookings (before today)
       bookingsMatch.startDate = { $lt: today };
+    }
+    // Filter by hotelId when provided
+    if (hotelId && isValidObjectId(hotelId)) {
+      bookingsMatch.hotelId = hotelId;
     }
     // If viewMode === "all", no date filter applied
 
@@ -1373,10 +1378,10 @@ router.get("/stats", auth, role("admin"), async (req, res) => {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Count total bookings from all sources
+    // Count total bookings from all sources (exclude staff-sourced bookings for admin-facing counts)
     const hotelBookingsCount = await db
       .collection("bookings")
-      .countDocuments({ status: "confirmed" });
+      .countDocuments({ status: "confirmed", source: { $ne: "staff" } });
     const carBookingsCount = await db
       .collection("carrentBookings")
       .countDocuments({ status: "confirmed" });
@@ -1404,7 +1409,7 @@ router.get("/stats", auth, role("admin"), async (req, res) => {
       db.collection("hotels").countDocuments({ isActive: { $ne: false } }),
       db.collection("cars").countDocuments({ isActive: { $ne: false } }),
       db.collection("users").countDocuments({ role: "user" }),
-      // Total revenue from confirmed bookings (EXCLUDE coin-paid bookings to avoid double counting)
+      // Total revenue from confirmed bookings (EXCLUDE coin-paid bookings and staff-created bookings)
       db
         .collection("bookings")
         .aggregate([
@@ -1412,12 +1417,13 @@ router.get("/stats", auth, role("admin"), async (req, res) => {
             $match: {
               status: "confirmed",
               paidWithCoins: { $ne: true }, // Exclude bookings paid with coins
+              source: { $ne: "staff" }, // Exclude bookings created by staff (offline)
             },
           },
           { $group: { _id: null, total: { $sum: "$totalAmount" } } },
         ])
         .toArray(),
-      // Total refunded amount (EXCLUDE coin-paid bookings)
+      // Total refunded amount (EXCLUDE coin-paid bookings and refunds for staff-created bookings)
       db
         .collection("bookings")
         .aggregate([
@@ -1426,12 +1432,13 @@ router.get("/stats", auth, role("admin"), async (req, res) => {
               status: "confirmed",
               refundStatus: "completed",
               paidWithCoins: { $ne: true }, // Exclude coin-paid bookings
+              source: { $ne: "staff" }, // Exclude staff bookings
             },
           },
           { $group: { _id: null, total: { $sum: "$totalAmount" } } },
         ])
         .toArray(),
-      // Today's revenue (EXCLUDE coin-paid bookings)
+      // Today's revenue (EXCLUDE coin-paid bookings and staff-created bookings)
       db
         .collection("bookings")
         .aggregate([
@@ -1440,6 +1447,7 @@ router.get("/stats", auth, role("admin"), async (req, res) => {
               status: "confirmed",
               paidAt: { $gte: today, $lt: tomorrow },
               paidWithCoins: { $ne: true }, // Exclude coin-paid bookings
+              source: { $ne: "staff" }, // Exclude staff bookings
             },
           },
           { $group: { _id: null, total: { $sum: "$totalAmount" } } },
