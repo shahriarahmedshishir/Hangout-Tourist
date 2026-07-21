@@ -52,6 +52,22 @@ const statusBadge = (booking) => {
       </span>
     );
   }
+  if (booking.status === "pending_payment") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-800">
+        <AlertCircle className="h-3 w-3" /> Pending Confirmation
+      </span>
+    );
+  }
+
+  if (booking.status === "payment_failed") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700">
+        <XCircle className="h-3 w-3" /> Payment Failed
+      </span>
+    );
+  }
+
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
       {booking.status}
@@ -120,7 +136,11 @@ const BookingCard = ({ booking, onViewDetails }) => {
   const canCancel = canCancelBooking(booking);
   const hoursLeft = canCancel ? getHoursUntilCheckIn(booking) : 0;
 
-  const isPendingPayment = booking.status === "pending";
+  const isPendingPayment = [
+    "pending",
+    "pending_payment",
+    "payment_failed",
+  ].includes(booking.status);
 
   return (
     <div
@@ -497,6 +517,11 @@ const UserDashboard = () => {
   // Check if a booking is upcoming (not yet completed or cancelled)
   const isUpcoming = (booking) => {
     if (booking.status === "cancelled") return false;
+    if (
+      ["pending", "pending_payment", "payment_failed"].includes(booking.status)
+    ) {
+      return true;
+    }
     const endDate =
       booking.type === "hotel"
         ? booking.checkOut

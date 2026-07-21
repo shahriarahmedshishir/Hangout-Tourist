@@ -123,7 +123,20 @@ export default function HotelBooking() {
       return false;
     }
     if (!termsAccepted || !policyAccepted) {
-      setError("Please accept terms and policy to proceed.");
+      const msg =
+        "You must accept Terms & Conditions and Privacy Policy to proceed.";
+      setError(msg);
+      try {
+        toast({
+          title: "Terms Required",
+          description: msg,
+          variant: "destructive",
+          duration: 4000,
+        });
+      } catch (e) {}
+      try {
+        window.alert(msg);
+      } catch (e) {}
       return false;
     }
     return true;
@@ -354,7 +367,7 @@ export default function HotelBooking() {
 
   return (
     <div className="min-h-screen bg-background">
-            <Helmet>
+      <Helmet>
         <meta charSet="utf-8" />
         <title>Hang Out Tourist - Hotel Booking</title>
       </Helmet>
@@ -766,162 +779,165 @@ export default function HotelBooking() {
                 </Button>
               </TabsContent>
 
-{/* Manual Payment Tab */}
-<TabsContent value="manual" className="mt-6 space-y-6">
-  {/* Header */}
-  <div className="rounded-2xl border border-primary/15 bg-gradient-to-r from-primary/5 to-primary/10 p-5">
-    <h3 className="text-base font-semibold text-foreground">
-      Manual Payment
-    </h3>
-    <p className="mt-1 text-sm text-muted-foreground">
-      Complete your payment via <span className="font-medium">bKash</span> or{" "}
-      <span className="font-medium">Nagad</span>, then submit your transaction
-      details for verification.
-    </p>
-  </div>
+              {/* Manual Payment Tab */}
+              <TabsContent value="manual" className="mt-6 space-y-6">
+                {/* Header */}
+                <div className="rounded-2xl border border-primary/15 bg-gradient-to-r from-primary/5 to-primary/10 p-5">
+                  <h3 className="text-base font-semibold text-foreground">
+                    Manual Payment
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Complete your payment via{" "}
+                    <span className="font-medium">bKash</span> or{" "}
+                    <span className="font-medium">Nagad</span>, then submit your
+                    transaction details for verification.
+                  </p>
+                </div>
 
-  <div className="grid gap-5 lg:grid-cols-2">
-    {/* Left Side */}
-    <div className="space-y-5">
-      {/* Payment Method */}
-      <div className="rounded-2xl border bg-card p-5 shadow-sm">
-        <label className="mb-3 block text-sm font-semibold text-foreground">
-          Payment Method *
-        </label>
+                <div className="grid gap-5 lg:grid-cols-2">
+                  {/* Left Side */}
+                  <div className="space-y-5">
+                    {/* Payment Method */}
+                    <div className="rounded-2xl border bg-card p-5 shadow-sm">
+                      <label className="mb-3 block text-sm font-semibold text-foreground">
+                        Payment Method *
+                      </label>
 
-        <select
-          value={manualMethod}
-          onChange={(e) => setManualMethod(e.target.value)}
-          className="h-12 w-full rounded-xl border border-border bg-background px-4 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-        >
-          <option value="bkash"> bKash</option>
-          <option value="nagad"> Nagad</option>
-        </select>
-      </div>
+                      <select
+                        value={manualMethod}
+                        onChange={(e) => setManualMethod(e.target.value)}
+                        className="h-12 w-full rounded-xl border border-border bg-background px-4 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      >
+                        <option value="bkash"> bKash</option>
+                        <option value="nagad"> Nagad</option>
+                      </select>
+                    </div>
 
-      {/* Payment Number */}
-      <div
-        className={`rounded-2xl border p-5 transition-all duration-300 ${
-          manualMethod === "bkash"
-            ? "border-pink-200 bg-pink-50"
-            : "border-orange-200 bg-orange-50"
-        }`}
-      >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p
-              className={`text-sm font-semibold ${
-                manualMethod === "bkash"
-                  ? "text-pink-700"
-                  : "text-orange-700"
-              }`}
-            >
-              {manualMethod === "bkash"
-                ? "bKash Personal Number"
-                : "Nagad Personal Number"}
-            </p>
+                    {/* Payment Number */}
+                    <div
+                      className={`rounded-2xl border p-5 transition-all duration-300 ${
+                        manualMethod === "bkash"
+                          ? "border-pink-200 bg-pink-50"
+                          : "border-orange-200 bg-orange-50"
+                      }`}
+                    >
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p
+                            className={`text-sm font-semibold ${
+                              manualMethod === "bkash"
+                                ? "text-pink-700"
+                                : "text-orange-700"
+                            }`}
+                          >
+                            {manualMethod === "bkash"
+                              ? "bKash Personal Number"
+                              : "Nagad Personal Number"}
+                          </p>
 
-            <h3 className="mt-2 text-2xl font-bold tracking-wide text-slate-900">
-              01743-917153
-            </h3>
+                          <h3 className="mt-2 text-2xl font-bold tracking-wide text-slate-900">
+                            01743-917153
+                          </h3>
 
-            <p className="mt-2 text-xs leading-5 text-slate-600">
-              Send the payment to this number and use the received
-              transaction ID below.
-            </p>
-          </div>
+                          <p className="mt-2 text-xs leading-5 text-slate-600">
+                            Send the payment to this number and use the received
+                            transaction ID below.
+                          </p>
+                        </div>
 
-          <div
-            className={`inline-flex w-fit rounded-full px-4 py-2 text-sm font-semibold ${
-              manualMethod === "bkash"
-                ? "bg-pink-100 text-pink-700"
-                : "bg-orange-100 text-orange-700"
-            }`}
-          >
-            {manualMethod === "bkash" ? "bKash" : "Nagad"}
-          </div>
-        </div>
-      </div>
+                        <div
+                          className={`inline-flex w-fit rounded-full px-4 py-2 text-sm font-semibold ${
+                            manualMethod === "bkash"
+                              ? "bg-pink-100 text-pink-700"
+                              : "bg-orange-100 text-orange-700"
+                          }`}
+                        >
+                          {manualMethod === "bkash" ? "bKash" : "Nagad"}
+                        </div>
+                      </div>
+                    </div>
 
-      {/* Transaction ID */}
-      <div className="rounded-2xl border bg-card p-5 shadow-sm">
-        <label className="mb-3 block text-sm font-semibold text-foreground">
-          Transaction ID *
-        </label>
+                    {/* Transaction ID */}
+                    <div className="rounded-2xl border bg-card p-5 shadow-sm">
+                      <label className="mb-3 block text-sm font-semibold text-foreground">
+                        Transaction ID *
+                      </label>
 
-        <Input
-          type="text"
-          placeholder="Enter your transaction ID"
-          value={manualTransactionId}
-          onChange={(e) => setManualTransactionId(e.target.value)}
-          className="h-12 rounded-xl"
-        />
-      </div>
-    </div>
+                      <Input
+                        type="text"
+                        placeholder="Enter your transaction ID"
+                        value={manualTransactionId}
+                        onChange={(e) => setManualTransactionId(e.target.value)}
+                        className="h-12 rounded-xl"
+                      />
+                    </div>
+                  </div>
 
-    {/* Right Side */}
-    <div className="space-y-5">
-      {/* Upload */}
-      <div className="rounded-2xl border bg-card p-5 shadow-sm">
-        <label className="mb-3 block text-sm font-semibold text-foreground">
-          Payment Proof *
-        </label>
+                  {/* Right Side */}
+                  <div className="space-y-5">
+                    {/* Upload */}
+                    <div className="rounded-2xl border bg-card p-5 shadow-sm">
+                      <label className="mb-3 block text-sm font-semibold text-foreground">
+                        Payment Proof *
+                      </label>
 
-        <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-primary/25 bg-primary/5 px-6 py-10 transition hover:border-primary hover:bg-primary/10">
-          <Upload className="mb-3 h-10 w-10 text-primary" />
+                      <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-primary/25 bg-primary/5 px-6 py-10 transition hover:border-primary hover:bg-primary/10">
+                        <Upload className="mb-3 h-10 w-10 text-primary" />
 
-          <h4 className="font-semibold text-foreground">
-            {manualScreenshot ? "Screenshot Uploaded" : "Upload Screenshot"}
-          </h4>
+                        <h4 className="font-semibold text-foreground">
+                          {manualScreenshot
+                            ? "Screenshot Uploaded"
+                            : "Upload Screenshot"}
+                        </h4>
 
-          <p className="mt-1 text-center text-xs text-muted-foreground">
-            PNG, JPG or JPEG (Maximum 5MB)
-          </p>
+                        <p className="mt-1 text-center text-xs text-muted-foreground">
+                          PNG, JPG or JPEG (Maximum 5MB)
+                        </p>
 
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleScreenshotUpload}
-            className="hidden"
-          />
-        </label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleScreenshotUpload}
+                          className="hidden"
+                        />
+                      </label>
 
-        {manualScreenshot && (
-          <div className="mt-4 flex items-center gap-2 rounded-xl bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
-            <Check className="h-4 w-4" />
-            Screenshot uploaded successfully.
-          </div>
-        )}
-      </div>
+                      {manualScreenshot && (
+                        <div className="mt-4 flex items-center gap-2 rounded-xl bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
+                          <Check className="h-4 w-4" />
+                          Screenshot uploaded successfully.
+                        </div>
+                      )}
+                    </div>
 
-      {/* Instructions */}
-      <div className="rounded-2xl border bg-slate-50 p-5">
-        <h4 className="mb-4 font-semibold text-slate-900">
-          Payment Instructions
-        </h4>
+                    {/* Instructions */}
+                    <div className="rounded-2xl border bg-slate-50 p-5">
+                      <h4 className="mb-4 font-semibold text-slate-900">
+                        Payment Instructions
+                      </h4>
 
-        <ol className="space-y-3 text-sm text-slate-600">
-          <li>1. Send payment via bKash or Nagad.</li>
-          <li>2. Save your Transaction ID.</li>
-          <li>3. Capture the payment confirmation.</li>
-          <li>4. Upload the screenshot above.</li>
-          <li>5. Submit and wait for verification.</li>
-        </ol>
-      </div>
-    </div>
-  </div>
+                      <ol className="space-y-3 text-sm text-slate-600">
+                        <li>1. Send payment via bKash or Nagad.</li>
+                        <li>2. Save your Transaction ID.</li>
+                        <li>3. Capture the payment confirmation.</li>
+                        <li>4. Upload the screenshot above.</li>
+                        <li>5. Submit and wait for verification.</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
 
-  {/* Submit */}
-  <Button
-    onClick={handleManualPayment}
-    disabled={loading || !termsAccepted || !policyAccepted}
-    className="h-14 w-full rounded-2xl bg-gradient-primary text-base font-semibold text-primary-foreground transition hover:opacity-90"
-  >
-    {loading
-      ? "Submitting..."
-      : "Submit Payment for Verification"}
-  </Button>
-</TabsContent>
+                {/* Submit */}
+                <Button
+                  onClick={handleManualPayment}
+                  disabled={loading || !termsAccepted || !policyAccepted}
+                  className="h-14 w-full rounded-2xl bg-gradient-primary text-base font-semibold text-primary-foreground transition hover:opacity-90"
+                >
+                  {loading
+                    ? "Submitting..."
+                    : "Submit Payment for Verification"}
+                </Button>
+              </TabsContent>
 
               {/* Hangcoin Payment Tab */}
               <TabsContent value="coin" className="space-y-4 mt-6">

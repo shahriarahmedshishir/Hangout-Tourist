@@ -112,7 +112,20 @@ export default function PackageBooking() {
     }
 
     if (!termsAccepted || !policyAccepted) {
-      setError("Please accept terms and policy to continue.");
+      const msg =
+        "You must accept Terms & Conditions and Privacy Policy to continue.";
+      setError(msg);
+      try {
+        toast({
+          title: "Terms Required",
+          description: msg,
+          variant: "destructive",
+          duration: 4000,
+        });
+      } catch (e) {}
+      try {
+        window.alert(msg);
+      } catch (e) {}
       return false;
     }
 
@@ -253,10 +266,6 @@ export default function PackageBooking() {
               <h1 className="mt-4 text-4xl font-bold tracking-tight">
                 {pkg.name}
               </h1>
-              <p className="mt-3 max-w-2xl text-slate-300">
-                {pkg.description ||
-                  "Complete your package booking and pay securely."}
-              </p>
             </div>
             <div className="rounded-3xl border border-white/10 bg-white/5 p-6 text-right">
               <p className="text-sm text-slate-400">Duration</p>
@@ -301,60 +310,80 @@ export default function PackageBooking() {
 
             <div className="rounded-3xl border border-slate-200/80 bg-white p-6">
               <h2 className="text-xl font-semibold text-slate-900">
-                Package details
+                Package Details
               </h2>
-              <div className="mt-4 space-y-3 text-slate-700">
-                <p>
-                  <span className="font-semibold">Hotel:</span>{" "}
-                  {pkg.hotel || "Included"}
-                </p>
-                <p>
-                  <span className="font-semibold">Meals:</span>{" "}
-                  {pkg.meal || "Included"}
-                </p>
-                <p>
-                  <span className="font-semibold">Local transport:</span>{" "}
-                  {pkg.localTransport || "Included"}
-                </p>
-                {pkg.additionalInfo ? (
+
+              <div className="mt-5 space-y-4">
+                <div className="grid grid-cols-1 gap-4 text-sm text-slate-700">
                   <p>
-                    <span className="font-semibold">Info:</span>{" "}
-                    {pkg.additionalInfo}
+                    <span className="font-semibold text-slate-900">Hotel:</span>{" "}
+                    {pkg.hotel || "Included"}
                   </p>
-                ) : null}
-                <details className="rounded-3xl border border-slate-200/80 bg-slate-50 p-4">
-                  <summary className="cursor-pointer text-sm font-semibold text-slate-900">
-                    Package Description
-                  </summary>
-                  <p className="mt-3 text-sm text-slate-700">
-                    {pkg.description ||
-                      "No description has been provided for this package."}
+
+                  <p>
+                    <span className="font-semibold text-slate-900">Meals:</span>{" "}
+                    {pkg.meal || "Included"}
                   </p>
-                </details>
-                <details className="rounded-3xl border border-slate-200/80 bg-slate-50 p-4">
-                  <summary className="cursor-pointer text-sm font-semibold text-slate-900">
-                    Terms & Conditions
-                  </summary>
-                  <p className="mt-3 text-sm text-slate-700">
-                    {pkg.termsAndConditions ||
-                      "No terms and conditions have been provided for this package."}
+
+                  <p>
+                    <span className="font-semibold text-slate-900">
+                      Local Transport:
+                    </span>{" "}
+                    {pkg.localTransport || "Included"}
                   </p>
-                </details>
+
+                  {pkg.additionalInfo && (
+                    <p>
+                      <span className="font-semibold text-slate-900">
+                        Info:
+                      </span>{" "}
+                      {pkg.additionalInfo}
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 gap-4">
+                  <details className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                    <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-slate-900">
+                      Package Description
+                    </summary>
+
+                    <div className="border-t border-slate-200 px-5 py-4">
+                      <p className="break-words whitespace-pre-wrap text-sm leading-7 text-slate-600">
+                        {pkg.description ||
+                          "No description has been provided for this package."}
+                      </p>
+                    </div>
+                  </details>
+
+                  <details className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                    <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-slate-900">
+                      Terms & Conditions
+                    </summary>
+
+                    <div className="border-t border-slate-200 px-5 py-4">
+                      <p className="break-words whitespace-pre-wrap text-sm leading-7 text-slate-600">
+                        {pkg.termsAndConditions ||
+                          "No terms and conditions have been provided for this package."}
+                      </p>
+                    </div>
+                  </details>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="space-y-6 rounded-3xl border border-slate-200/10 bg-slate-950/90 p-8 text-white shadow-xl shadow-slate-900/20">
+          <div className="space-y-6 rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 text-slate-900 shadow-xl">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm uppercase tracking-[0.24em] text-sky-300">
+                <p className="text-sm uppercase tracking-[0.24em] text-sky-600">
                   Payment Options
                 </p>
-                <h2 className="mt-3 text-2xl font-semibold">
+                <h2 className="mt-3 text-2xl font-bold text-slate-900">
                   Complete booking
                 </h2>
               </div>
-              <div className="rounded-full bg-slate-900 px-4 py-2 text-sm text-slate-300">
+              <div className="rounded-full border border-sky-100 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-700">
                 Total: ৳{totalAmount.toLocaleString()}
               </div>
             </div>
@@ -365,10 +394,12 @@ export default function PackageBooking() {
               </div>
             ) : null}
 
-            <div className="space-y-4 rounded-3xl border border-slate-800/80 bg-slate-900/95 p-6">
+            <div className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
               <div className="grid gap-4">
                 <div className="grid gap-2">
-                  <label className="text-sm text-slate-300">Full Name</label>
+                  <label className="text-sm text-slate-700 font-medium">
+                    Full Name
+                  </label>
                   <Input
                     value={guestDetails.fullName}
                     onChange={(e) =>
@@ -377,20 +408,23 @@ export default function PackageBooking() {
                         fullName: e.target.value,
                       }))
                     }
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                    placeholder="Enter your full name"
+                    className="border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-sky-500"
                   />
                 </div>
                 <div className="grid gap-2">
-                  <label className="text-sm text-slate-300">Email</label>
+                  <label className="text-sm text-slate-700 font-medium">
+                    Email
+                  </label>
                   <Input
                     value={guestDetails.email}
                     readOnly
                     disabled
-                    className="bg-slate-700 border-slate-600 text-slate-300 cursor-not-allowed"
+                    className="bg-slate-100 border-slate-300 text-slate-500 cursor-not-allowed"
                   />
                 </div>
                 <div className="grid gap-2">
-                  <label className="text-sm text-slate-300">
+                  <label className="text-sm text-slate-700 font-medium">
                     Contact Number
                   </label>
                   <Input
@@ -401,11 +435,14 @@ export default function PackageBooking() {
                         contactNumber: e.target.value,
                       }))
                     }
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                    placeholder="Enter your contact number"
+                    className="border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-sky-500"
                   />
                 </div>
                 <div className="grid gap-2">
-                  <label className="text-sm text-slate-300">Address</label>
+                  <label className="text-sm text-slate-700 font-medium">
+                    Address
+                  </label>
                   <Input
                     value={guestDetails.address}
                     onChange={(e) =>
@@ -414,11 +451,14 @@ export default function PackageBooking() {
                         address: e.target.value,
                       }))
                     }
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                    placeholder="Enter your address"
+                    className="border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-sky-500"
                   />
                 </div>
                 <div className="grid gap-2">
-                  <label className="text-sm text-slate-300">NID Number</label>
+                  <label className="text-sm text-slate-700 font-medium">
+                    NID Number
+                  </label>
                   <Input
                     value={guestDetails.nidNumber}
                     onChange={(e) =>
@@ -427,26 +467,31 @@ export default function PackageBooking() {
                         nidNumber: e.target.value,
                       }))
                     }
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                    placeholder="Enter your NID number"
+                    className="border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-sky-500"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="grid gap-4 rounded-3xl border border-slate-800/80 bg-slate-900/95 p-6">
+            <div className="grid gap-4 rounded-3xl border border-slate-200 bg-slate-50 text-slate-900 p-6">
               <div className="grid gap-4">
                 <div className="grid gap-2">
-                  <label className="text-sm text-slate-400">Travel Date</label>
+                  <label className="text-sm text-slate-700 font-medium">
+                    Travel Date
+                  </label>
                   <input
                     type="date"
                     value={travelDate}
                     min={new Date().toISOString().slice(0, 10)}
                     onChange={(e) => setTravelDate(e.target.value)}
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-sky-500"
+                    className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-sky-500"
                   />
                 </div>
                 <div className="grid gap-2">
-                  <label className="text-sm text-slate-300">People</label>
+                  <label className="text-sm text-slate-700 font-medium">
+                    People
+                  </label>
                   <input
                     type="number"
                     min="1"
@@ -455,10 +500,10 @@ export default function PackageBooking() {
                       const value = Number(e.target.value) || 1;
                       setPeopleCount(value);
                     }}
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-800 px-4 py-3 text-white outline-none transition focus:border-sky-500"
+                    className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-sky-500"
                   />
                   {belowMinimum ? (
-                    <p className="text-sm text-amber-400 flex items-center gap-1">
+                    <p className="text-sm text-amber-600 flex items-center gap-1">
                       <AlertCircle className="h-3.5 w-3.5" />
                       You cannot select lower than {minPeople} people. Minimum
                       is required.
@@ -467,9 +512,55 @@ export default function PackageBooking() {
                 </div>
               </div>
             </div>
+            <div className="space-y-3 rounded-3xl border border-slate-200 bg-slate-50 text-slate-900 p-6">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-1 h-5 w-5 text-amber-600" />
+                <div>
+                  <p className="font-semibold">Important</p>
+                  <p className="text-sm leading-6">
+                    Please keep your booking details accurate. Once payment is
+                    confirmed, your holiday package will be reserved.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-3">
+                <label className="inline-flex items-center gap-2 text-sm text-slate-900">
+                  <Checkbox
+                    checked={termsAccepted}
+                    onCheckedChange={(checked) =>
+                      setTermsAccepted(Boolean(checked))
+                    }
+                  />
+                  I agree to the
+                  <button
+                    type="button"
+                    onClick={() => setShowTermsDialog(true)}
+                    className="text-amber-500 underline underline-offset-4"
+                  >
+                    Terms & Conditions
+                  </button>
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm text-slate-900">
+                  <Checkbox
+                    checked={policyAccepted}
+                    onCheckedChange={(checked) =>
+                      setPolicyAccepted(Boolean(checked))
+                    }
+                  />
+                  I agree to the
+                  <button
+                    type="button"
+                    onClick={() => setShowPolicyDialog(true)}
+                    className="text-amber-500 underline underline-offset-4"
+                  >
+                    Privacy Policy
+                  </button>
+                </label>
+              </div>
+            </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-3 rounded-3xl bg-slate-900/90 p-1">
+              <TabsList className="grid w-full grid-cols-3 rounded-2xl border border-slate-200 bg-slate-100 p-1">
                 <TabsTrigger value="online" className="rounded-3xl">
                   <CreditCard className="mr-2 inline-block h-4 w-4" />
                   Online
@@ -486,10 +577,10 @@ export default function PackageBooking() {
 
               <TabsContent
                 value="online"
-                className="rounded-3xl border border-slate-800/80 bg-slate-950/95 p-6"
+                className="rounded-3xl border border-slate-200 bg-slate-50 p-6"
               >
                 <div className="space-y-4">
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-slate-900">
                     Pay instantly through our secure gateway.
                   </p>
                   <Button
@@ -504,49 +595,91 @@ export default function PackageBooking() {
 
               <TabsContent
                 value="manual"
-                className="rounded-3xl border border-slate-800/80 bg-slate-950/95 p-6"
+                className="rounded-3xl border border-slate-200 bg-slate-50 p-6"
               >
-                <div className="space-y-4">
-                  <div className="grid gap-4">
-                    <div className="grid gap-2">
-                      <label className="text-sm text-slate-400">
-                        Transaction ID
-                      </label>
-                      <Input
-                        value={manualTransactionId}
-                        onChange={(e) => setManualTransactionId(e.target.value)}
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <label className="text-sm text-slate-400">
-                        Payment Method
-                      </label>
-                      <select
-                        value={manualMethod}
-                        onChange={(e) => setManualMethod(e.target.value)}
-                        className="rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none"
+                <div className="space-y-5">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700">
+                      Payment Method
+                    </label>
+                    <select
+                      value={manualMethod}
+                      onChange={(e) => setManualMethod(e.target.value)}
+                      className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+                    >
+                      <option value="bkash">bKash</option>
+                      <option value="nagad">Nagad</option>
+                    </select>
+                  </div>
+
+                  <div
+                    className={`rounded-2xl border p-4 ${
+                      manualMethod === "bkash"
+                        ? "border-pink-200 bg-pink-50"
+                        : "border-orange-200 bg-orange-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p
+                          className={`text-sm font-semibold ${
+                            manualMethod === "bkash"
+                              ? "text-pink-700"
+                              : "text-orange-700"
+                          }`}
+                        >
+                          {manualMethod === "bkash"
+                            ? "bKash Personal Number"
+                            : "Nagad Personal Number"}
+                        </p>
+                        <p className="mt-1 text-xl font-bold text-slate-900">
+                          01743-917153
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Send the payment to this number and enter the
+                          Transaction ID below.
+                        </p>
+                      </div>
+                      <div
+                        className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                          manualMethod === "bkash"
+                            ? "bg-pink-100 text-pink-700"
+                            : "bg-orange-100 text-orange-700"
+                        }`}
                       >
-                        <option value="bkash">BKash</option>
-                        <option value="nagad">Nagad</option>
-                      </select>
-                    </div>
-                    <div className="grid gap-2">
-                      <label className="text-sm text-slate-400">
-                        Payment Screenshot
-                      </label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleScreenshotUpload}
-                        className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none"
-                      />
-                      {manualScreenshot && (
-                        <div className="mt-2 text-xs text-slate-300">
-                          ✓ Screenshot attached
-                        </div>
-                      )}
+                        {manualMethod === "bkash" ? "bKash" : "Nagad"}
+                      </div>
                     </div>
                   </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700">
+                      Transaction ID
+                    </label>
+                    <Input
+                      value={manualTransactionId}
+                      placeholder="Enter your payment transaction ID"
+                      onChange={(e) => setManualTransactionId(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700">
+                      Payment Screenshot
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleScreenshotUpload}
+                      className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none"
+                    />
+                    {manualScreenshot && (
+                      <div className="mt-2 text-xs text-emerald-600 font-medium">
+                        ✓ Screenshot attached successfully
+                      </div>
+                    )}
+                  </div>
+
                   <Button
                     onClick={handleManualPayment}
                     disabled={loading || belowMinimum}
@@ -559,10 +692,10 @@ export default function PackageBooking() {
 
               <TabsContent
                 value="coins"
-                className="rounded-3xl border border-slate-800/80 bg-slate-950/95 p-6"
+                className="rounded-3xl border border-slate-200 bg-slate-50 p-6"
               >
                 <div className="space-y-4">
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-slate-900">
                     Use your hangcoin balance to pay instantly.
                   </p>
                   <Button
@@ -575,53 +708,6 @@ export default function PackageBooking() {
                 </div>
               </TabsContent>
             </Tabs>
-
-            <div className="space-y-3 rounded-3xl border border-slate-800/80 bg-slate-900/95 p-6 text-slate-300">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="mt-1 h-5 w-5 text-amber-400" />
-                <div>
-                  <p className="font-semibold text-white">Important</p>
-                  <p className="text-sm leading-6">
-                    Please keep your booking details accurate. Once payment is
-                    confirmed, your holiday package will be reserved.
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-col gap-3">
-                <label className="inline-flex items-center gap-2 text-sm text-slate-300">
-                  <Checkbox
-                    checked={termsAccepted}
-                    onCheckedChange={(checked) =>
-                      setTermsAccepted(Boolean(checked))
-                    }
-                  />
-                  I agree to the
-                  <button
-                    type="button"
-                    onClick={() => setShowTermsDialog(true)}
-                    className="text-sky-300 underline underline-offset-4"
-                  >
-                    Terms & Conditions
-                  </button>
-                </label>
-                <label className="inline-flex items-center gap-2 text-sm text-slate-300">
-                  <Checkbox
-                    checked={policyAccepted}
-                    onCheckedChange={(checked) =>
-                      setPolicyAccepted(Boolean(checked))
-                    }
-                  />
-                  I agree to the
-                  <button
-                    type="button"
-                    onClick={() => setShowPolicyDialog(true)}
-                    className="text-sky-300 underline underline-offset-4"
-                  >
-                    Privacy Policy
-                  </button>
-                </label>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -646,18 +732,44 @@ export default function PackageBooking() {
       </Dialog>
 
       <Dialog open={showPolicyDialog} onOpenChange={setShowPolicyDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>Privacy Policy</DialogTitle>
+            <DialogTitle className="text-xl font-bold">
+              Privacy Policy
+            </DialogTitle>
             <DialogDescription>
-              Your booking information is handled safely and securely.
+              How we collect and use your information for package bookings.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 text-sm leading-6 text-slate-700">
+
+          <div className="space-y-4 text-sm leading-7 text-muted-foreground">
             <p>
-              Your personal and booking details will only be used to process
-              your package reservation and payment.
+              At <strong className="text-foreground">Hang Out Tourist</strong>,
+              your personal information is collected solely to process and
+              manage your package booking.
             </p>
+
+            <ul className="list-disc pl-5 space-y-2">
+              <li>
+                We collect only the information required to confirm your booking
+                and process payment.
+              </li>
+              <li>
+                Your information may be shared only with the relevant travel
+                service providers to complete your reservation.
+              </li>
+              <li>
+                We do not sell, rent, or disclose your personal information for
+                marketing purposes.
+              </li>
+              <li>
+                Reasonable security measures are used to protect your personal
+                data.
+              </li>
+              <li>
+                By confirming your booking, you agree to this Privacy Policy.
+              </li>
+            </ul>
           </div>
         </DialogContent>
       </Dialog>

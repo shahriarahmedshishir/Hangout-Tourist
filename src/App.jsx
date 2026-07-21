@@ -28,7 +28,6 @@ import PaymentResult from "./pages/PaymentResult";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import FloatingPrivacyButton from "@/components/FloatingPrivacyButton";
 
-
 const queryClient = new QueryClient();
 
 // Redirects unauthenticated users to /login.
@@ -36,7 +35,8 @@ const queryClient = new QueryClient();
 // While verifying token (loading) but with a stored user, trusts the stored role.
 const ProtectedRoute = ({ element, roles }) => {
   const { user, loading } = useAuth();
-  if (loading && !user) return null; // No stored session yet, wait silently
+  // While verifying token, wait to avoid redirecting based on stale stored user
+  if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
   if (roles && !roles.includes(user.role)) {
     if (user.role === "admin") return <Navigate to="/admin" replace />;
@@ -56,7 +56,7 @@ const App = () => (
           future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
         >
           <Routes>
-            <Route path="/" element={<Index />}   />
+            <Route path="/" element={<Index />} />
             <Route path="/hotels" element={<Hotels />} />
             <Route path="/hotels/:id" element={<HotelDetail />} />
             <Route path="/booking/hotel" element={<HotelBooking />} />

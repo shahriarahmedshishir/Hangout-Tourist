@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { api, imgUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import logo from "@/assets/logo.png";
 
@@ -65,7 +66,14 @@ const sidebarItems = [
 const STATUS_COLORS = {
   confirmed: "bg-success/10 text-success",
   pending: "bg-warning/10 text-warning",
+  pending_payment: "bg-warning/10 text-warning",
+  payment_failed: "bg-destructive/10 text-destructive",
   cancelled: "bg-destructive/10 text-destructive",
+};
+
+const STATUS_LABELS = {
+  pending_payment: "Pending Confirmation",
+  payment_failed: "Payment Failed",
 };
 
 const Admin = () => {
@@ -2667,6 +2675,7 @@ const CarsRentView = () => {
 
 // ─── BOOKINGS ────────────────────────────────────────────────────────────────
 const BookingsView = () => {
+  const { toast } = useToast();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refundForm, setRefundForm] = useState(null);
@@ -2678,6 +2687,11 @@ const BookingsView = () => {
   const [rescheduling, setRescheduling] = useState(false);
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
+  const [serviceFilter, setServiceFilter] = useState("all");
+  const [reportService, setReportService] = useState("all");
+  const [reportFrom, setReportFrom] = useState("");
+  const [reportTo, setReportTo] = useState("");
+  const [reporting, setReporting] = useState(false);
   const [expanded, setExpanded] = useState(null);
   const [viewMode, setViewMode] = useState("upcoming"); // "upcoming" (default: today+future), "past", "all"
   const [currentPage, setCurrentPage] = useState(1);
@@ -2761,6 +2775,21 @@ const BookingsView = () => {
     }
   };
 
+  const handleConfirmManualPayment = async (manualPaymentId) => {
+    if (!manualPaymentId) return;
+    try {
+      await api.post(`/api/admin/manual-payments/${manualPaymentId}/confirm`);
+      toast({ title: "Manual payment approved", duration: 2000 });
+      load();
+    } catch (err) {
+      toast({
+        title: "Unable to approve payment",
+        description: err.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleRescheduleSubmit = async (e) => {
     e.preventDefault();
     if (!rescheduleModal) return;
@@ -2815,6 +2844,150 @@ const BookingsView = () => {
     return `${day}/${month}/${year}`;
   };
 
+  const formatCSVCell = (value) => {
+    const text = value === null || value === undefined ? "" : String(value);
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+
+  const buildReportRows = (bookingsToSummarize) => {
+    const groups = new Map();
+
+    bookingsToSummarize.forEach((booking) => {
+      let service = "Other";
+      let item = "Unknown";
+      let unit = "";
+      let quantity = 0;
+      let extra = "";
+      const totalAmount = Number(booking.totalAmount || 0);
+
+      if (booking.type === "hotel") {
+        service = "Hotel";
+        item = `${booking.hotelName || "Hotel"} room ${booking.roomNumber || "—"}`;
+        quantity = Number(booking.days || 0);
+        unit = "nights";
+        extra = "";
+      } else if (booking.type === "car") {
+        service = "Car";
+        item = booking.carName || "Car";
+        quantity = Number(booking.days || 0) || 1;
+        unit = "days";
+        extra = "";
+      } else if (booking.type === "package" || booking.type === "holiday") {
+        service = "Holidays";
+        item = booking.packageName || "Holiday Package";
+        quantity = Number(booking.peopleCount || 0);
+        unit = "persons";
+        extra = "";
+      } else {
+        return;
+      }
+
+      const key = `${service}|${item}`;
+      const existing = groups.get(key) || {
+        service,
+        item,
+        unit,
+        totalAmount: 0,
+        count: 0,
+        quantity: 0,
+        extraNotes: new Set(),
+      };
+
+      existing.totalAmount += totalAmount;
+      existing.count += 1;
+      existing.quantity += quantity;
+      if (extra) existing.extraNotes.add(extra);
+      groups.set(key, existing);
+    });
+
+    return Array.from(groups.values()).map((group) => ({
+      service: group.service,
+      item: group.item,
+      description:
+        group.service === "Hotel"
+          ? `${group.item} x ${group.quantity} ${group.unit} = ${group.totalAmount}`
+          : group.service === "Holidays"
+            ? `${group.item} x ${group.quantity} ${group.unit} = ${group.totalAmount}`
+            : `${group.item} x ${group.quantity} ${group.unit} = ${group.totalAmount}`,
+      totalQuantity: group.quantity,
+      times: group.count,
+      unit: group.unit,
+      totalAmount: group.totalAmount,
+    }));
+  };
+
+  const handleExportReportCSV = async () => {
+    if (!reportFrom || !reportTo) {
+      return alert("Select both report start and end dates.");
+    }
+    setReporting(true);
+    try {
+      const params = new URLSearchParams({ viewMode: "all", limit: 10000 });
+      if (reportService !== "all") {
+        params.set(
+          "type",
+          reportService === "holidays" ? "package" : reportService,
+        );
+      }
+      params.set("dateFrom", reportFrom);
+      params.set("dateTo", reportTo);
+
+      const response = await api.get(
+        `/api/admin/bookings?${params.toString()}`,
+      );
+      const bookingsForReport = response.bookings || [];
+      if (bookingsForReport.length === 0) {
+        return alert("No bookings found for this report range.");
+      }
+
+      const rows = [];
+      rows.push(
+        [
+          "Service",
+          "Item",
+          "Description",
+          "TotalQuantity",
+          "Times",
+          "Unit",
+          "TotalAmount",
+          "From",
+          "To",
+        ].join(","),
+      );
+
+      buildReportRows(bookingsForReport).forEach((row) => {
+        rows.push(
+          [
+            formatCSVCell(row.service),
+            formatCSVCell(row.item),
+            formatCSVCell(row.description),
+            formatCSVCell(row.totalQuantity),
+            formatCSVCell(row.times),
+            formatCSVCell(row.unit),
+            formatCSVCell(row.totalAmount),
+            formatCSVCell(reportFrom),
+            formatCSVCell(reportTo),
+          ].join(","),
+        );
+      });
+
+      const csv = rows.join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `booking-report-${reportFrom}-${reportTo}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err.message || "Failed to export report.");
+    } finally {
+      setReporting(false);
+    }
+  };
+
   const filtered = bookings.filter((b) => {
     const q = search.toLowerCase();
     const matchesSearch =
@@ -2823,7 +2996,9 @@ const BookingsView = () => {
       b.userEmail?.toLowerCase().includes(q) ||
       b.carName?.toLowerCase().includes(q) ||
       b.hotelName?.toLowerCase().includes(q) ||
-      b.transactionId?.toLowerCase().includes(q) ||
+      String(b.transactionId || "")
+        .toLowerCase()
+        .includes(q) ||
       (b.type === "coin_topup" && "coin topup".includes(q)) ||
       formatDate(b.createdAt).includes(q);
 
@@ -2843,7 +3018,14 @@ const BookingsView = () => {
       const bookingEnd = new Date(endDate);
       matchesDate = selectedDate >= bookingStart && selectedDate < bookingEnd;
     }
-    return matchesSearch && matchesDate;
+    const matchesService =
+      serviceFilter === "all" ||
+      (serviceFilter === "hotel" && b.type === "hotel") ||
+      (serviceFilter === "car" && b.type === "car") ||
+      (serviceFilter === "holidays" &&
+        (b.type === "package" || b.type === "holiday"));
+
+    return matchesSearch && matchesDate && matchesService;
   });
 
   return (
@@ -2886,8 +3068,96 @@ const BookingsView = () => {
         </button>
       </div>
 
+      {/* Report Export Controls */}
+      <div className="mb-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
+            <label className="block text-xs font-semibold text-muted-foreground">
+              Report From
+            </label>
+            <Input
+              type="date"
+              value={reportFrom}
+              onChange={(e) => setReportFrom(e.target.value)}
+              className="bg-muted mt-2"
+            />
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
+            <label className="block text-xs font-semibold text-muted-foreground">
+              Report To
+            </label>
+            <Input
+              type="date"
+              value={reportTo}
+              onChange={(e) => setReportTo(e.target.value)}
+              className="bg-muted mt-2"
+            />
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
+            <label className="block text-xs font-semibold text-muted-foreground">
+              Report Service
+            </label>
+            <select
+              value={reportService}
+              onChange={(e) => setReportService(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
+            >
+              <option value="all">All Services</option>
+              <option value="hotel">Hotel</option>
+              <option value="car">Car</option>
+              <option value="holidays">Holidays</option>
+            </select>
+          </div>
+        </div>
+        <div className="flex items-end gap-2">
+          <Button
+            onClick={() => {
+              setReportFrom("");
+              setReportTo("");
+              setReportService("all");
+            }}
+            variant="outline"
+          >
+            Reset Report
+          </Button>
+          <Button onClick={handleExportReportCSV} disabled={reporting}>
+            {reporting ? "Exporting..." : "Export Booking Report CSV"}
+          </Button>
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="mb-5 flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant={serviceFilter === "all" ? "default" : "outline"}
+            onClick={() => setServiceFilter("all")}
+          >
+            All Services
+          </Button>
+          <Button
+            size="sm"
+            variant={serviceFilter === "hotel" ? "default" : "outline"}
+            onClick={() => setServiceFilter("hotel")}
+          >
+            Hotel
+          </Button>
+          <Button
+            size="sm"
+            variant={serviceFilter === "car" ? "default" : "outline"}
+            onClick={() => setServiceFilter("car")}
+          >
+            Car
+          </Button>
+          <Button
+            size="sm"
+            variant={serviceFilter === "holidays" ? "default" : "outline"}
+            onClick={() => setServiceFilter("holidays")}
+          >
+            Holidays
+          </Button>
+        </div>
         <Input
           placeholder="Search by user name, car/hotel..."
           value={search}
@@ -2901,13 +3171,14 @@ const BookingsView = () => {
           className="bg-muted w-44"
           title="Filter by date - shows all bookings that overlap with this date"
         />
-        {(search || dateFilter) && (
+        {(search || dateFilter || serviceFilter !== "all") && (
           <Button
             variant="outline"
             size="sm"
             onClick={() => {
               setSearch("");
               setDateFilter("");
+              setServiceFilter("all");
             }}
           >
             Clear
@@ -3097,9 +3368,8 @@ const BookingsView = () => {
                   new Date(startDate).toDateString() ===
                     new Date().toDateString();
                 return (
-                  <>
+                  <Fragment key={b._id}>
                     <tr
-                      key={b._id}
                       className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
                       onClick={() =>
                         setExpanded(expanded === b._id ? null : b._id)
@@ -3159,7 +3429,7 @@ const BookingsView = () => {
                         <span
                           className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_COLORS[b.status] || "bg-muted text-muted-foreground"}`}
                         >
-                          {b.status}
+                          {STATUS_LABELS[b.status] || b.status}
                         </span>
                         {b.refundStatus && (
                           <span
@@ -3176,6 +3446,22 @@ const BookingsView = () => {
                           className="flex gap-2"
                           onClick={(e) => e.stopPropagation()}
                         >
+                          {(b.status === "pending_payment" ||
+                            b.manualPayment?.status === "pending") &&
+                            b.manualPayment?._id && (
+                              <button
+                                title="Approve manual payment"
+                                className="rounded-lg inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-success border border-success/20 bg-success/5 hover:bg-success/10 transition-colors"
+                                onClick={() =>
+                                  handleConfirmManualPayment(
+                                    b.manualPayment._id,
+                                  )
+                                }
+                              >
+                                <Check className="h-4 w-4" />
+                                Accept
+                              </button>
+                            )}
                           {b.type !== "coin_topup" &&
                             b.type !== "package" &&
                             b.status !== "cancelled" &&
@@ -3355,6 +3641,19 @@ const BookingsView = () => {
                                 {b.transactionId || "—"}
                               </p>
                             </div>
+                            {typeof b.screenshot === "string" &&
+                              b.screenshot && (
+                                <div>
+                                  <span className="text-muted-foreground text-xs">
+                                    Payment Proof
+                                  </span>
+                                  <img
+                                    src={imgUrl(b.screenshot)}
+                                    alt="Payment proof"
+                                    className="mt-2 max-h-44 w-full rounded-lg object-cover"
+                                  />
+                                </div>
+                              )}
                             <div>
                               <span className="text-muted-foreground text-xs">
                                 {b.type === "coin_topup"
@@ -3369,7 +3668,7 @@ const BookingsView = () => {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -3427,6 +3726,7 @@ const BookingsView = () => {
 
 // ─── PACKAGE BOOKINGS ─────────────────────────────────────────────────────────
 const PackageBookingsView = () => {
+  const { toast } = useToast();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refundForm, setRefundForm] = useState(null);
@@ -3481,6 +3781,21 @@ const PackageBookingsView = () => {
       load();
     } catch (err) {
       alert(err.message || "Unable to process refund");
+    }
+  };
+
+  const handleConfirmManualPayment = async (manualPaymentId) => {
+    if (!manualPaymentId) return;
+    try {
+      await api.post(`/api/admin/manual-payments/${manualPaymentId}/confirm`);
+      toast({ title: "Manual payment approved", duration: 2000 });
+      load();
+    } catch (err) {
+      toast({
+        title: "Unable to approve payment",
+        description: err.message || "Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -3651,6 +3966,9 @@ const PackageBookingsView = () => {
                   Amount
                 </th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                  Transaction ID
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                   Status
                 </th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">
@@ -3702,11 +4020,37 @@ const PackageBookingsView = () => {
                       <td className="px-4 py-3 font-medium text-foreground">
                         ৳{b.totalAmount?.toLocaleString()}
                       </td>
+                      <td
+                        className="px-4 py-3 font-mono text-xs text-muted-foreground"
+                        title={
+                          b.manualPayment?.transactionId || b.transactionId
+                        }
+                      >
+                        {b.manualPayment?.transactionId || b.transactionId
+                          ? (
+                              b.manualPayment?.transactionId || b.transactionId
+                            ).slice(-12)
+                          : "—"}
+                        {b.manualPayment?.screenshot && (
+                          <a
+                            href={imgUrl(b.manualPayment.screenshot)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-block ml-2 align-middle"
+                          >
+                            <img
+                              src={imgUrl(b.manualPayment.screenshot)}
+                              alt="receipt"
+                              className="inline-block h-6 w-6 rounded-sm object-cover border"
+                            />
+                          </a>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <span
                           className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_COLORS[b.status] || "bg-muted text-muted-foreground"}`}
                         >
-                          {b.status}
+                          {STATUS_LABELS[b.status] || b.status}
                         </span>
                         {b.refundStatus && (
                           <span
@@ -3723,6 +4067,22 @@ const PackageBookingsView = () => {
                           className="flex gap-2"
                           onClick={(e) => e.stopPropagation()}
                         >
+                          {(b.status === "pending_payment" ||
+                            b.manualPayment?.status === "pending") &&
+                            b.manualPayment?._id && (
+                              <button
+                                title="Approve manual payment"
+                                className="rounded-lg inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-success border border-success/20 bg-success/5 hover:bg-success/10 transition-colors"
+                                onClick={() =>
+                                  handleConfirmManualPayment(
+                                    b.manualPayment._id,
+                                  )
+                                }
+                              >
+                                <Check className="h-4 w-4" />
+                                Accept
+                              </button>
+                            )}
                           {b.status !== "cancelled" && (
                             <button
                               title="Cancel booking"
@@ -3746,7 +4106,7 @@ const PackageBookingsView = () => {
                     </tr>
                     {expanded === b._id && (
                       <tr className="bg-muted/20">
-                        <td colSpan={7} className="px-6 py-4">
+                        <td colSpan={8} className="px-6 py-4">
                           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-sm">
                             <div>
                               <span className="text-muted-foreground text-xs">
@@ -3806,6 +4166,19 @@ const PackageBookingsView = () => {
                                 {b.transactionId || "—"}
                               </p>
                             </div>
+                            {typeof b.screenshot === "string" &&
+                              b.screenshot && (
+                                <div className="sm:col-span-2">
+                                  <span className="text-muted-foreground text-xs">
+                                    Payment Proof
+                                  </span>
+                                  <img
+                                    src={imgUrl(b.screenshot)}
+                                    alt="Payment proof"
+                                    className="mt-2 max-h-48 w-full rounded-lg object-cover"
+                                  />
+                                </div>
+                              )}
                             <div>
                               <span className="text-muted-foreground text-xs">
                                 Booked On
@@ -4081,11 +4454,15 @@ const StaffView = () => {
 // ─── MANUAL PAYMENTS VIEW ───────────────────────────────────────────────────
 
 const ManualPaymentsView = () => {
+  const { toast } = useToast();
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState("pending");
   const [selected, setSelected] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [showRejectForm, setShowRejectForm] = useState(false);
+
+  const selectedPayment = payments.find((p) => p._id === selected);
 
   useEffect(() => {
     fetchPayments();
@@ -4113,24 +4490,39 @@ const ManualPaymentsView = () => {
       setSelected(null);
     } catch (err) {
       console.error("Failed to confirm:", err);
+      toast({
+        title: "Failed to confirm payment",
+        description: err.message || "Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
   const handleReject = async (paymentId) => {
     if (!rejectReason.trim()) {
-      alert("Please enter a rejection reason");
+      toast({
+        title: "Enter rejection reason",
+        description: "A reason is required to reject a manual payment.",
+        variant: "destructive",
+      });
       return;
     }
     try {
       await api.post(`/api/admin/manual-payments/${paymentId}/reject`, {
         reason: rejectReason,
       });
-      alert("Payment rejected");
+      toast({ title: "Payment rejected", duration: 2000 });
       fetchPayments();
       setSelected(null);
       setRejectReason("");
+      setShowRejectForm(false);
     } catch (err) {
       console.error("Failed to reject:", err);
+      toast({
+        title: "Failed to reject payment",
+        description: err.message || "Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -4184,18 +4576,52 @@ const ManualPaymentsView = () => {
                   <p className="font-mono text-sm">{payment.transactionId}</p>
                 </div>
               </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-700">
+                  {payment.status || "Unknown"}
+                </span>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-700">
+                  {payment.paymentMethod || "Manual"}
+                </span>
+              </div>
+              <div className="mt-4">
+                <p className="text-xs text-muted-foreground">Screenshot</p>
+                {payment.screenshot ? (
+                  <img
+                    src={imgUrl(payment.screenshot)}
+                    alt="Payment proof"
+                    className="mt-2 h-24 w-full max-w-xs rounded-lg object-cover"
+                  />
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    No screenshot uploaded
+                  </p>
+                )}
+              </div>
 
-              {payment.status === "pending" && (
-                <div className="mt-4 flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => setSelected(payment._id)}
-                    className="flex-1"
-                  >
-                    <Eye className="h-4 w-4 mr-1" /> Review
-                  </Button>
-                </div>
-              )}
+              {payment.status !== "approved" &&
+                payment.status !== "rejected" && (
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                    <Button
+                      size="sm"
+                      onClick={() => handleConfirm(payment._id)}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                    >
+                      <Check className="h-4 w-4 mr-1" /> Accept
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => {
+                        setSelected(payment._id);
+                        setShowRejectForm(false);
+                      }}
+                      className="flex-1"
+                    >
+                      <Eye className="h-4 w-4 mr-1" /> Review
+                    </Button>
+                  </div>
+                )}
             </div>
           ))
         )}
@@ -4206,14 +4632,39 @@ const ManualPaymentsView = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-card rounded-lg p-6 max-w-md w-full space-y-4">
             <h3 className="font-semibold">Review Payment</h3>
-            <img
-              src={payments.find((p) => p._id === selected)?.screenshot}
-              alt="Payment proof"
-              className="w-full rounded-lg max-h-80 object-cover"
-            />
+            {selectedPayment?.screenshot ? (
+              <img
+                src={imgUrl(selectedPayment.screenshot)}
+                alt="Payment proof"
+                className="w-full rounded-lg max-h-80 object-cover"
+              />
+            ) : (
+              <div className="rounded-lg border border-dashed border-muted p-8 text-center text-sm text-muted-foreground">
+                No screenshot available
+              </div>
+            )}
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-900">
+                <p className="text-xs uppercase tracking-wider text-slate-500">
+                  Transaction ID
+                </p>
+                <p className="font-mono mt-2 break-all">
+                  {selectedPayment?.transactionId || "Not provided"}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-900">
+                <p className="text-xs uppercase tracking-wider text-slate-500">
+                  Payment Status
+                </p>
+                <p className="mt-2">{selectedPayment?.status || "Unknown"}</p>
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-2">
               <Button
-                onClick={() => handleConfirm(selected)}
+                onClick={() => {
+                  handleConfirm(selected);
+                  setShowRejectForm(false);
+                }}
                 className="bg-green-600 hover:bg-green-700"
               >
                 <CheckCircle className="h-4 w-4 mr-1" /> Confirm
@@ -4221,22 +4672,21 @@ const ManualPaymentsView = () => {
               <Button
                 variant="destructive"
                 onClick={() => {
+                  setShowRejectForm(true);
                   setRejectReason("");
-                  // Show rejection form
                 }}
               >
                 <XCircle className="h-4 w-4 mr-1" /> Reject
               </Button>
             </div>
-            {/* Rejection Reason Input */}
-            <div>
-              <Input
-                placeholder="Rejection reason..."
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                className="text-sm"
-              />
-              {rejectReason && (
+            {showRejectForm && (
+              <div>
+                <Input
+                  placeholder="Rejection reason..."
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  className="text-sm"
+                />
                 <Button
                   onClick={() => handleReject(selected)}
                   variant="destructive"
@@ -4244,12 +4694,13 @@ const ManualPaymentsView = () => {
                 >
                   Submit Rejection
                 </Button>
-              )}
-            </div>
+              </div>
+            )}
             <Button
               onClick={() => {
                 setSelected(null);
                 setRejectReason("");
+                setShowRejectForm(false);
               }}
               variant="outline"
               className="w-full"

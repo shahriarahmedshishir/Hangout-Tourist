@@ -252,12 +252,10 @@ const Invoice = ({ invoice, onClose }) => {
                   {formatDate(invoice.dates.checkOut)}
                 </div>
                 <div>
-                  <strong>Standard Check in time:</strong>{" "}
-                  {formatTime(invoice.dates.checkIn) || "02:00 PM"}
+                  <strong>Standard Check in time:</strong> {"02:00 PM"}
                 </div>
                 <div>
-                  <strong>Standard Check out time:</strong>{" "}
-                  {formatTime(invoice.dates.checkOut) || "11:00 AM"}
+                  <strong>Standard Check out time:</strong> {"12:00 AM"}
                 </div>
               </>
             )}
@@ -722,7 +720,8 @@ const Invoice = ({ invoice, onClose }) => {
               </a>
             </div>
             <div className="mt-1">
-              <span className="font-semibold">Address:</span> Demra, Dhaka-1360, Bangladesh
+              <span className="font-semibold">Address:</span> Demra, Dhaka-1360,
+              Bangladesh
             </div>
           </div>
           <div className="mt-3 text-left">

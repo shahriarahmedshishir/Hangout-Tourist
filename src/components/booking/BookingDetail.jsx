@@ -184,6 +184,7 @@ const BookingDetail = ({
   const isCar = booking?.type === "car";
   const isBus = booking?.type === "bus";
   const isPackage = booking?.type === "package" || booking?.type === "holiday";
+  const manualPayment = booking?.manualPayment;
 
   const guestName =
     booking?.guestDetails?.name ||
@@ -462,7 +463,7 @@ const BookingDetail = ({
                     <p>
                       <span className="text-muted-foreground">Method: </span>
                       <span className="capitalize">
-                        {booking.paymentMethod}
+                        {booking.paymentMethod || "N/A"}
                       </span>
                     </p>
                     <p>
@@ -470,7 +471,7 @@ const BookingDetail = ({
                         Transaction ID:{" "}
                       </span>
                       <span className="font-mono text-xs">
-                        {booking.transactionId}
+                        {booking.transactionId || "N/A"}
                       </span>
                     </p>
                     <p>
@@ -479,6 +480,61 @@ const BookingDetail = ({
                     </p>
                   </div>
                 </div>
+
+                {manualPayment && (
+                  <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                    <h4 className="font-semibold mb-2 text-sm">
+                      Manual Payment Submission
+                    </h4>
+                    <div className="space-y-2 text-sm">
+                      <p className="text-sm">
+                        Status:{" "}
+                        <span className="font-medium capitalize">
+                          {manualPayment.status}
+                        </span>
+                      </p>
+                      {manualPayment.transactionId && (
+                        <p>
+                          <span className="text-muted-foreground">
+                            Submitted Transaction ID:{" "}
+                          </span>
+                          <span className="font-mono text-xs">
+                            {manualPayment.transactionId}
+                          </span>
+                        </p>
+                      )}
+                      {manualPayment.submittedAt && (
+                        <p>
+                          <span className="text-muted-foreground">
+                            Submitted:{" "}
+                          </span>
+                          <span>{formatDate(manualPayment.submittedAt)}</span>
+                        </p>
+                      )}
+                      {manualPayment.message && (
+                        <p>
+                          <span className="text-muted-foreground">Note: </span>
+                          <span>{manualPayment.message}</span>
+                        </p>
+                      )}
+                      {manualPayment.screenshot && (
+                        <div>
+                          <p className="text-muted-foreground mb-1">
+                            Receipt Screenshot
+                          </p>
+                          <a
+                            href={imgUrl(manualPayment.screenshot)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary text-xs underline"
+                          >
+                            View receipt screenshot
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Refund Status */}
                 {booking.status === "cancelled" && (
