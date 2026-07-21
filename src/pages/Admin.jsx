@@ -171,7 +171,7 @@ const Admin = () => {
           <Link to="/">
             <Button
               variant="ghost"
-              className="w-full justify-start gap-2 text-sidebar-foreground/70 hover:text-sidebar-foreground"
+              className="w-full justify-start gap-2 text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive"
             >
               <LogOut className="h-4 w-4" /> Back to Site
             </Button>

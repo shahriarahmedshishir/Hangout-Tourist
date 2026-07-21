@@ -302,15 +302,20 @@ const Navbar = () => {
                         : "My Dashboard"}
                   </Link>
                   {user.role === "user" && (
-                    <button
-                      onClick={() => {
-                        setTopupOpen(true);
-                        setUserMenuOpen(false);
-                      }}
-                      className="flex w-full items-center gap-2 px-4 py-2.5 text-sm hover:bg-accent transition-colors"
-                    >
-                      <Coins className="h-4 w-4" /> Top Up Coins
-                    </button>
+                    <>
+                      {/* Top Up Button */}
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-start gap-2"
+                        onClick={() => {
+                          setTopupOpen(true);
+                          setMobileOpen(false);
+                        }}
+                      >
+                        <Coins className="h-4 w-4" />
+                        Top Up Coins
+                      </Button>
+                    </>
                   )}
                   <button
                     onClick={openChangePw}
@@ -343,94 +348,142 @@ const Navbar = () => {
 
         {/* Mobile toggle */}
         <button
-          className="md:hidden"
+          className="rounded-lg p-2 transition-colors hover:bg-accent md:hidden"
           onClick={() => setMobileOpen(!mobileOpen)}
         >
-          {mobileOpen ? (
-            <X className="h-6 w-6" />
-          ) : (
-            <Menu className="h-6 w-6" />
-          )}
+          <div className="relative h-6 w-6">
+            <Menu
+              className={`absolute inset-0 h-6 w-6 transition-all duration-300 ${
+                mobileOpen
+                  ? "rotate-90 scale-0 opacity-0"
+                  : "rotate-0 scale-100 opacity-100"
+              }`}
+            />
+
+            <X
+              className={`absolute inset-0 h-6 w-6 transition-all duration-300 ${
+                mobileOpen
+                  ? "rotate-0 scale-100 opacity-100"
+                  : "-rotate-90 scale-0 opacity-0"
+              }`}
+            />
+          </div>
         </button>
       </div>
 
       {/* Mobile Nav */}
-      {mobileOpen && (
-        <div className="border-t border-border bg-background p-4 md:hidden">
-          <div className="flex flex-col gap-2">
+      <div
+        className={`overflow-hidden border-t border-border bg-background transition-all duration-300 ease-in-out md:hidden ${
+          mobileOpen
+            ? "max-h-[700px] opacity-100"
+            : "max-h-0 opacity-0 border-transparent"
+        }`}
+      >
+        <div
+          className={`space-y-2 p-4 transition-all duration-300 ${
+            mobileOpen ? "translate-y-0" : "-translate-y-3"
+          }`}
+        >
+          <Link
+            to="/"
+            onClick={() => setMobileOpen(false)}
+            className={`block rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 hover:bg-accent ${
+              location.pathname === "/"
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground"
+            }`}
+          >
+            Home
+          </Link>
+
+          {visibleNavLinks.map((link) => (
             <Link
-              to="/"
+              key={link.path}
+              to={link.path}
               onClick={() => setMobileOpen(false)}
-              className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent ${location.pathname === "/" ? "bg-accent text-accent-foreground" : "text-muted-foreground"}`}
+              className={`block rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 hover:bg-accent ${
+                location.pathname === link.path
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground"
+              }`}
             >
-              Home
+              {link.label}
             </Link>
-            {visibleNavLinks.map((link) => (
-              <Link
-                key={link.path}
-                to={link.path}
-                onClick={() => setMobileOpen(false)}
-                className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent ${location.pathname === link.path ? "bg-accent text-accent-foreground" : "text-muted-foreground"}`}
-              >
-                {link.label}
+          ))}
+
+          <hr className="my-2 border-border" />
+
+          {user ? (
+            <>
+              <Link to={dashboardLink} onClick={() => setMobileOpen(false)}>
+                <Button variant="ghost" className="w-full justify-start gap-2">
+                  <LayoutDashboard className="h-4 w-4" />
+                  {user.role === "admin"
+                    ? "Admin Panel"
+                    : user.role === "hotel_staff"
+                      ? "Staff Dashboard"
+                      : "My Dashboard"}
+                </Button>
               </Link>
-            ))}
-            {(visibleNavLinks.length > 0 || true) && (
-              <hr className="my-2 border-border" />
-            )}
-            {user ? (
-              <>
-                <Link to={dashboardLink} onClick={() => setMobileOpen(false)}>
+
+              {user.role === "user" && (
+                <>
+                  <div className="flex items-center  justify-between rounded-lg border border-border bg-muted/50 px-3 py-3">
+                    <div className="flex items-center gap-2">
+                      <Coins className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-medium">Hangcoins</span>
+                    </div>
+
+                    <span className="rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
+                      {coinBalance}
+                    </span>
+                  </div>
+
                   <Button
                     variant="ghost"
                     className="w-full justify-start gap-2"
+                    onClick={() => {
+                      setTopupOpen(true);
+                      setMobileOpen(false);
+                    }}
                   >
-                    <LayoutDashboard className="h-4 w-4" />
-                    {user.role === "admin"
-                      ? "Admin Panel"
-                      : user.role === "hotel_staff"
-                        ? "Staff Dashboard"
-                        : "My Dashboard"}
+                    <Coins className="h-4 w-4" />
+                    Top Up Coins
                   </Button>
-                </Link>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start gap-2"
-                  onClick={openChangePw}
-                >
-                  <KeyRound className="h-4 w-4" /> Change Password
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start gap-2 text-destructive hover:bg-destructive/10"
-                  onClick={() => {
-                    handleLogout();
-                    setMobileOpen(false);
-                  }}
-                >
-                  <LogOut className="h-4 w-4" /> Logout
-                </Button>
-              </>
-            ) : (
-              <>
-                {/* <Link to="/login" onClick={() => setMobileOpen(false)}>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start gap-2"
-                  >
-                    <User className="h-4 w-4" /> Login
-                  </Button>
-                </Link> */}
-                <Link to="/login" onClick={() => setMobileOpen(false)}>
-                  <Button className="w-full bg-gradient-primary text-primary-foreground">
-                    <User className="h-4 w-4" /> Login
-                  </Button>
-                </Link>
-              </>
-            )}
-          </div>
+                </>
+              )}
+
+              <Button
+                variant="ghost"
+                className="w-full justify-start gap-2"
+                onClick={openChangePw}
+              >
+                <KeyRound className="h-4 w-4" />
+                Change Password
+              </Button>
+
+              <Button
+                variant="ghost"
+                className="w-full justify-start gap-2 text-destructive hover:bg-destructive/10"
+                onClick={() => {
+                  handleLogout();
+                  setMobileOpen(false);
+                }}
+              >
+                <LogOut className="h-4 w-4" />
+                Logout
+              </Button>
+            </>
+          ) : (
+            <Link to="/login" onClick={() => setMobileOpen(false)}>
+              <Button className="w-full bg-gradient-primary text-primary-foreground">
+                <User className="h-4 w-4" />
+                Login
+              </Button>
+            </Link>
+          )}
         </div>
-      )}
+      </div>
       {/* Change Password Dialog */}
       <Dialog open={pwOpen} onOpenChange={setPwOpen}>
         <DialogContent className="max-w-sm">
@@ -490,7 +543,7 @@ const Navbar = () => {
 
       {/* Coin Top-up Dialog */}
       <Dialog open={topupOpen} onOpenChange={setTopupOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm rounded-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Coins className="h-5 w-5 text-primary" /> Top Up Hangcoins
@@ -571,8 +624,8 @@ const Navbar = () => {
                     onChange={(e) => setTopupPaymentMethod(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
                   >
-                    <option value="bkash">Bkash</option>
-                    <option value="nagad">Nagad</option>
+                    <option value="bkash">Bkash ( 01743-917153 )</option>
+                    <option value="nagad">Nagad ( 01743-917153 )</option>
                   </select>
                 </div>
 
@@ -592,7 +645,7 @@ const Navbar = () => {
                   <label className="mb-2 block text-sm font-medium text-foreground">
                     Payment Screenshot *
                   </label>
-                  <label className="flex items-center justify-center gap-2 px-4 py-6 rounded-lg border-2 border-dashed border-border cursor-pointer hover:bg-muted transition-colors">
+                  <label className="flex items-center justify-center gap-2 px-4 py-6 rounded-lg border-2 border-dashed border-border border-sky-300 hover:border-amber-500 cursor-pointer hover:bg-muted transition-colors">
                     <input
                       type="file"
                       accept="image/*"

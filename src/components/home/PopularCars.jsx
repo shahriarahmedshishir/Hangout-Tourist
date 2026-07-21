@@ -39,7 +39,7 @@ export default function PopularCars() {
   if (!cars.length) return null;
 
   return (
-    <section className="py-16">
+    <section className="py-16 ">
       <div className="container">
         <div className="mb-8 flex flex-col items-center justify-center text-center">
           <div>
@@ -50,14 +50,9 @@ export default function PopularCars() {
               Rent the perfect car for your journey
             </p>
           </div>
-          <Link to="/cars" className="mt-4">
-            <Button variant="outline" size="sm" className="gap-1">
-              View All <ChevronRight className="h-4 w-4" />
-            </Button>
-          </Link>
         </div>
 
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
           {cars.map((car, i) => (
             <Link key={car._id} to="/booking/car" state={{ car }}>
               <div
@@ -83,10 +78,6 @@ export default function PopularCars() {
                   </h3>
                   <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
                     <span>{car.type || "Standard"}</span>
-                    <span className="flex items-center gap-1">
-                      <Star className="h-4 w-4 fill-warning text-warning" />
-                      {car.rating || 4.5}
-                    </span>
                   </div>
                   <div className="mt-4 flex items-center justify-between pt-4 border-t border-border">
                     <span className="text-sm text-muted-foreground flex items-center gap-1">
@@ -102,6 +93,13 @@ export default function PopularCars() {
             </Link>
           ))}
         </div>
+      </div>
+      <div className="container flex justify-center mt-6">
+        <Link to="/cars" className="mt-4">
+          <Button variant="outline" size="sm" className="gap-1">
+            View All Cars <ChevronRight className="h-4 w-4" />
+          </Button>
+        </Link>
       </div>
     </section>
   );

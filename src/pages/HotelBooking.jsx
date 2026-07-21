@@ -9,6 +9,7 @@ import { api, imgUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Helmet } from "react-helmet";
 import {
   BedDouble,
   CalendarCheck,
@@ -353,6 +354,10 @@ export default function HotelBooking() {
 
   return (
     <div className="min-h-screen bg-background">
+            <Helmet>
+        <meta charSet="utf-8" />
+        <title>Hang Out Tourist - Hotel Booking</title>
+      </Helmet>
       <Navbar />
       <div className="container py-8 px-4 md:px-6">
         <button
@@ -761,104 +766,162 @@ export default function HotelBooking() {
                 </Button>
               </TabsContent>
 
-              {/* Manual Payment Tab */}
-              <TabsContent value="manual" className="space-y-4 mt-6">
-                <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-                  <p className="text-sm font-semibold text-foreground mb-2">
-                    Manual Payment Submission
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Pay via Bkash or Nagad and submit your transaction details
-                    for verification.
-                  </p>
-                </div>
+{/* Manual Payment Tab */}
+<TabsContent value="manual" className="mt-6 space-y-6">
+  {/* Header */}
+  <div className="rounded-2xl border border-primary/15 bg-gradient-to-r from-primary/5 to-primary/10 p-5">
+    <h3 className="text-base font-semibold text-foreground">
+      Manual Payment
+    </h3>
+    <p className="mt-1 text-sm text-muted-foreground">
+      Complete your payment via <span className="font-medium">bKash</span> or{" "}
+      <span className="font-medium">Nagad</span>, then submit your transaction
+      details for verification.
+    </p>
+  </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-foreground mb-2">
-                      Payment Method *
-                    </label>
-                    <select
-                      value={manualMethod}
-                      onChange={(e) => setManualMethod(e.target.value)}
-                      className="w-full px-4 py-3 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                    >
-                      <option value="bkash">🏦 Bkash</option>
-                      <option value="nagad">📱 Nagad</option>
-                    </select>
-                  </div>
+  <div className="grid gap-5 lg:grid-cols-2">
+    {/* Left Side */}
+    <div className="space-y-5">
+      {/* Payment Method */}
+      <div className="rounded-2xl border bg-card p-5 shadow-sm">
+        <label className="mb-3 block text-sm font-semibold text-foreground">
+          Payment Method *
+        </label>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-foreground mb-2">
-                      Transaction ID *
-                    </label>
-                    <Input
-                      type="text"
-                      placeholder="e.g., ABC123XYZ456"
-                      value={manualTransactionId}
-                      onChange={(e) => setManualTransactionId(e.target.value)}
-                      className="bg-muted h-11"
-                    />
-                  </div>
-                </div>
+        <select
+          value={manualMethod}
+          onChange={(e) => setManualMethod(e.target.value)}
+          className="h-12 w-full rounded-xl border border-border bg-background px-4 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+        >
+          <option value="bkash"> bKash</option>
+          <option value="nagad"> Nagad</option>
+        </select>
+      </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-foreground mb-2">
-                    Payment Proof Screenshot *
-                  </label>
-                  <div className="rounded-lg border-2 border-dashed border-primary/30 p-6 text-center hover:border-primary/50 transition-colors">
-                    <label className="cursor-pointer block">
-                      <div className="flex flex-col items-center gap-2">
-                        <Upload className="h-8 w-8 text-primary" />
-                        <div>
-                          <span className="text-sm font-semibold text-foreground">
-                            {manualScreenshot
-                              ? "Image Uploaded"
-                              : "Upload Screenshot"}
-                          </span>
-                          <p className="text-xs text-muted-foreground">
-                            PNG, JPG up to 5MB
-                          </p>
-                        </div>
-                      </div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleScreenshotUpload}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                  {manualScreenshot && (
-                    <p className="text-xs text-green-600 font-medium mt-2 flex items-center gap-1">
-                      <Check className="h-3 w-3" /> Image successfully uploaded
-                    </p>
-                  )}
-                </div>
+      {/* Payment Number */}
+      <div
+        className={`rounded-2xl border p-5 transition-all duration-300 ${
+          manualMethod === "bkash"
+            ? "border-pink-200 bg-pink-50"
+            : "border-orange-200 bg-orange-50"
+        }`}
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p
+              className={`text-sm font-semibold ${
+                manualMethod === "bkash"
+                  ? "text-pink-700"
+                  : "text-orange-700"
+              }`}
+            >
+              {manualMethod === "bkash"
+                ? "bKash Personal Number"
+                : "Nagad Personal Number"}
+            </p>
 
-                <div className="rounded-lg bg-muted p-4">
-                  <p className="text-sm font-semibold text-foreground mb-3">
-                    📋 Submission Steps:
-                  </p>
-                  <ol className="text-sm space-y-2 text-muted-foreground list-decimal list-inside">
-                    <li>Transfer amount via Bkash or Nagad</li>
-                    <li>Note the transaction ID from confirmation</li>
-                    <li>Take a screenshot of payment confirmation</li>
-                    <li>Upload the screenshot here</li>
-                    <li>Wait for admin verification (check dashboard)</li>
-                  </ol>
-                </div>
+            <h3 className="mt-2 text-2xl font-bold tracking-wide text-slate-900">
+              01743-917153
+            </h3>
 
-                <Button
-                  onClick={handleManualPayment}
-                  disabled={loading || !termsAccepted || !policyAccepted}
-                  className="w-full bg-gradient-primary text-primary-foreground hover:opacity-90 py-6 text-lg font-semibold rounded-xl"
-                >
-                  {loading
-                    ? "Submitting..."
-                    : "Submit Payment for Verification"}
-                </Button>
-              </TabsContent>
+            <p className="mt-2 text-xs leading-5 text-slate-600">
+              Send the payment to this number and use the received
+              transaction ID below.
+            </p>
+          </div>
+
+          <div
+            className={`inline-flex w-fit rounded-full px-4 py-2 text-sm font-semibold ${
+              manualMethod === "bkash"
+                ? "bg-pink-100 text-pink-700"
+                : "bg-orange-100 text-orange-700"
+            }`}
+          >
+            {manualMethod === "bkash" ? "bKash" : "Nagad"}
+          </div>
+        </div>
+      </div>
+
+      {/* Transaction ID */}
+      <div className="rounded-2xl border bg-card p-5 shadow-sm">
+        <label className="mb-3 block text-sm font-semibold text-foreground">
+          Transaction ID *
+        </label>
+
+        <Input
+          type="text"
+          placeholder="Enter your transaction ID"
+          value={manualTransactionId}
+          onChange={(e) => setManualTransactionId(e.target.value)}
+          className="h-12 rounded-xl"
+        />
+      </div>
+    </div>
+
+    {/* Right Side */}
+    <div className="space-y-5">
+      {/* Upload */}
+      <div className="rounded-2xl border bg-card p-5 shadow-sm">
+        <label className="mb-3 block text-sm font-semibold text-foreground">
+          Payment Proof *
+        </label>
+
+        <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-primary/25 bg-primary/5 px-6 py-10 transition hover:border-primary hover:bg-primary/10">
+          <Upload className="mb-3 h-10 w-10 text-primary" />
+
+          <h4 className="font-semibold text-foreground">
+            {manualScreenshot ? "Screenshot Uploaded" : "Upload Screenshot"}
+          </h4>
+
+          <p className="mt-1 text-center text-xs text-muted-foreground">
+            PNG, JPG or JPEG (Maximum 5MB)
+          </p>
+
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleScreenshotUpload}
+            className="hidden"
+          />
+        </label>
+
+        {manualScreenshot && (
+          <div className="mt-4 flex items-center gap-2 rounded-xl bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
+            <Check className="h-4 w-4" />
+            Screenshot uploaded successfully.
+          </div>
+        )}
+      </div>
+
+      {/* Instructions */}
+      <div className="rounded-2xl border bg-slate-50 p-5">
+        <h4 className="mb-4 font-semibold text-slate-900">
+          Payment Instructions
+        </h4>
+
+        <ol className="space-y-3 text-sm text-slate-600">
+          <li>1. Send payment via bKash or Nagad.</li>
+          <li>2. Save your Transaction ID.</li>
+          <li>3. Capture the payment confirmation.</li>
+          <li>4. Upload the screenshot above.</li>
+          <li>5. Submit and wait for verification.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  {/* Submit */}
+  <Button
+    onClick={handleManualPayment}
+    disabled={loading || !termsAccepted || !policyAccepted}
+    className="h-14 w-full rounded-2xl bg-gradient-primary text-base font-semibold text-primary-foreground transition hover:opacity-90"
+  >
+    {loading
+      ? "Submitting..."
+      : "Submit Payment for Verification"}
+  </Button>
+</TabsContent>
 
               {/* Hangcoin Payment Tab */}
               <TabsContent value="coin" className="space-y-4 mt-6">
@@ -974,7 +1037,7 @@ export default function HotelBooking() {
 
       {/* Terms Dialog */}
       <Dialog open={showTermsDialog} onOpenChange={setShowTermsDialog}>
-        <DialogContent className="max-w-2xl max-h-[80vh]">
+        <DialogContent className="max-w-3xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold">
               Hotel Booking Terms & Conditions
@@ -983,90 +1046,171 @@ export default function HotelBooking() {
               Please read these terms carefully before booking
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="h-[400px] pr-4">
-            <div className="space-y-4 text-sm text-muted-foreground">
+          <ScrollArea className="h-[450px] pr-4">
+            <div className="space-y-6 text-sm leading-7 text-muted-foreground">
+              <p>
+                Welcome to{" "}
+                <strong className="text-foreground">Hang Out Tourist</strong>.
+                By making a hotel reservation through our platform, you
+                acknowledge that you have read, understood, and agree to be
+                bound by the following Terms & Conditions.
+              </p>
+
               <section>
                 <h3 className="font-bold text-foreground mb-2">
-                  1. Booking & Reservation
+                  1. Booking Information
                 </h3>
                 <p>
-                  By making a reservation through our platform, you agree to
-                  these terms and conditions. All bookings are subject to
-                  availability and confirmation by the hotel.
+                  All reservations are made based on the information provided by
+                  the guest. The guest is solely responsible for ensuring that
+                  all booking details are accurate, complete, and up to date.
+                  Hang Out Tourist shall not be liable for any loss,
+                  inconvenience, or additional costs arising from incorrect or
+                  incomplete information submitted during the booking process.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="font-bold text-foreground mb-2">2. Payment</h3>
+                <p>
+                  A booking shall be considered confirmed only after the
+                  required advance payment or full payment, as specified at the
+                  time of reservation, has been successfully received. Failure
+                  to complete the required payment within the stipulated
+                  timeframe may result in automatic cancellation of the
+                  reservation.
                 </p>
               </section>
 
               <section>
                 <h3 className="font-bold text-foreground mb-2">
-                  2. Payment Terms
+                  3. Check-In and Check-Out
                 </h3>
                 <p>
-                  Full payment is required to confirm your reservation. We
-                  accept online payments via SSLCommerz, manual payments through
-                  Bkash/Nagad, and Hangcoin payments.
+                  Check-in and check-out times are determined exclusively by the
+                  policies of the respective hotel. Guests are responsible for
+                  complying with the hotel's operational procedures and timing
+                  requirements.
                 </p>
               </section>
 
               <section>
                 <h3 className="font-bold text-foreground mb-2">
-                  3. Check-In & Check-Out
+                  4. Booking Modifications and Cancellations
                 </h3>
                 <p>
-                  Standard check-in time is 2:00 PM and check-out time is 12:00
-                  PM. Early check-in and late check-out may be available subject
-                  to availability and additional charges.
+                  Any request to modify or cancel a reservation shall be subject
+                  to the cancellation and amendment policy of the respective
+                  hotel. Applicable cancellation fees, amendment charges, or
+                  non-refundable conditions may apply in accordance with the
+                  hotel's terms.
                 </p>
               </section>
 
               <section>
                 <h3 className="font-bold text-foreground mb-2">
-                  4. Cancellation Policy
+                  5. No-Show Policy
                 </h3>
                 <p>
-                  Cancellations must be made at least 48 hours before check-in
-                  for a full refund. Cancellations made within 48 hours may
-                  incur charges.
+                  If a guest fails to check in on the scheduled arrival date
+                  without prior notice ("No-Show"), the reservation may be
+                  treated as non-refundable unless otherwise stated in the
+                  hotel's cancellation policy.
                 </p>
               </section>
 
               <section>
                 <h3 className="font-bold text-foreground mb-2">
-                  5. Guest Conduct
+                  6. Identification Requirements
                 </h3>
                 <p>
-                  Guests must conduct themselves in a manner that respects other
-                  guests and hotel staff. The hotel reserves the right to refuse
-                  service or terminate stays for unacceptable behavior.
+                  Guests must present a valid government-issued photo
+                  identification, including but not limited to a National ID
+                  Card (NID), Passport, or Driving License, at the time of
+                  check-in. The hotel reserves the right to request additional
+                  documentation whenever deemed necessary.
                 </p>
               </section>
 
               <section>
                 <h3 className="font-bold text-foreground mb-2">
-                  6. Room Facilities
+                  7. Guest Responsibility for Property Damage
                 </h3>
                 <p>
-                  Guests are responsible for any damage to room facilities
-                  beyond normal wear and tear. Additional charges may apply for
-                  damages.
-                </p>
-              </section>
-
-              <section>
-                <h3 className="font-bold text-foreground mb-2">7. Liability</h3>
-                <p>
-                  The hotel is not responsible for loss, theft, or damage to
-                  personal belongings. Please use the hotel safe for valuables.
+                  Guests shall be fully responsible for any damage, destruction,
+                  or loss caused to the hotel's property during their stay. The
+                  hotel reserves the right to recover the full cost of repair,
+                  replacement, or restoration from the guest.
                 </p>
               </section>
 
               <section>
                 <h3 className="font-bold text-foreground mb-2">
-                  8. Modifications
+                  8. Additional Guests and Special Requests
                 </h3>
                 <p>
-                  We reserve the right to modify these terms at any time. Your
-                  continued use of our booking platform constitutes acceptance
-                  of any changes.
+                  Requests for additional guests, extra beds, room upgrades, or
+                  other special accommodations are subject to availability and
+                  the policies of the respective hotel. Additional charges may
+                  apply where applicable.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="font-bold text-foreground mb-2">
+                  9. Force Majeure
+                </h3>
+                <p>
+                  Hang Out Tourist shall not be liable for any delay,
+                  interruption, modification, or cancellation of services
+                  resulting from events beyond its reasonable control, including
+                  but not limited to natural disasters, severe weather
+                  conditions, government actions, public health emergencies,
+                  civil unrest, transportation disruptions, or any other force
+                  majeure event. In such circumstances, Hang Out Tourist will
+                  make reasonable efforts to assist guests in accordance with
+                  the policies of the respective hotel.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="font-bold text-foreground mb-2">
+                  10. Role of Hang Out Tourist
+                </h3>
+                <p>
+                  Hang Out Tourist acts solely as an intermediary booking
+                  platform connecting guests with hotel service providers. We do
+                  not own, operate, or manage the hotels listed on our platform.
+                  Accordingly, the quality, availability, safety, facilities,
+                  pricing, and delivery of hotel services remain the sole
+                  responsibility of the respective hotel.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="font-bold text-foreground mb-2">
+                  11. Limitation of Liability
+                </h3>
+                <p>
+                  To the fullest extent permitted by applicable law, Hang Out
+                  Tourist shall not be liable for any direct, indirect,
+                  incidental, consequential, or special damages arising out of
+                  or relating to the guest's stay, hotel services, cancellation,
+                  delays, service deficiencies, or any acts or omissions of the
+                  hotel or third-party service providers.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="font-bold text-foreground mb-2">
+                  12. Acceptance of Terms
+                </h3>
+                <p>
+                  By confirming a reservation through Hang Out Tourist, the
+                  guest acknowledges that they have carefully read, understood,
+                  and accepted these Terms & Conditions. The guest further
+                  agrees to comply with the policies and regulations of the
+                  respective hotel throughout their stay.
                 </p>
               </section>
             </div>
@@ -1076,101 +1220,137 @@ export default function HotelBooking() {
 
       {/* Policy Dialog */}
       <Dialog open={showPolicyDialog} onOpenChange={setShowPolicyDialog}>
-        <DialogContent className="max-w-2xl max-h-[80vh]">
+        <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold">
-              Privacy & Cancellation Policy
+              Cancellation & Refund Policy
             </DialogTitle>
             <DialogDescription>
-              Your data and booking protection
+              Please review our cancellation and refund policies before
+              confirming your booking.
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="h-[400px] pr-4">
-            <div className="space-y-4 text-sm text-muted-foreground">
+          <ScrollArea className="h-[500px] pr-4">
+            <div className="space-y-6 text-sm leading-7 text-muted-foreground">
+              <p>
+                At <strong className="text-foreground">Hang Out Tourist</strong>
+                , we understand that travel plans may change. This policy
+                explains the conditions governing reservation cancellations,
+                booking modifications, and refunds for hotel bookings made
+                through our platform.
+              </p>
+
               <section>
                 <h3 className="font-bold text-foreground mb-2">
-                  1. Privacy & Data Protection
+                  1. Cancellation Requests
                 </h3>
                 <p>
-                  We collect your personal information solely to process your
-                  booking and provide hotel services. Your data is encrypted and
-                  protected according to international standards.
+                  All cancellation requests must be submitted before the
+                  scheduled check-in time through our official communication
+                  channels, including email, WhatsApp, or other approved contact
+                  methods. A cancellation request becomes valid only after
+                  confirmation from our Customer Support team.
                 </p>
               </section>
 
               <section>
                 <h3 className="font-bold text-foreground mb-2">
-                  2. Information Usage
+                  2. Cancellation & Refund Eligibility
                 </h3>
-                <p>
-                  Your personal information will not be shared with third
-                  parties without your consent, except where necessary to
-                  complete your booking (hotel staff, payment processors).
-                </p>
-              </section>
 
-              <section>
-                <h3 className="font-bold text-foreground mb-2">
-                  3. Refund Policy
-                </h3>
-                <ul className="list-disc list-inside space-y-2">
-                  <li>Cancellations 48+ hours before check-in: Full refund</li>
-                  <li>Cancellations 24-48 hours before check-in: 50% refund</li>
-                  <li>Cancellations less than 24 hours: No refund</li>
+                <ul className="list-disc pl-5 space-y-3">
+                  <li>
+                    <strong>48 Hours or More Before Check-In:</strong> Guests
+                    are eligible for a refund after deducting applicable payment
+                    gateway fees, bank charges, or other non-refundable
+                    transaction costs.
+                  </li>
+
+                  <li>
+                    <strong>Within 48 Hours of Check-In:</strong> Reservations
+                    are treated as <strong>Non-Refundable</strong>. No refund,
+                    credit, or compensation will be provided unless required by
+                    law or approved by the respective hotel.
+                  </li>
+
+                  <li>
+                    <strong>No-Show:</strong> Failure to arrive on the scheduled
+                    check-in date without prior cancellation will result in
+                    automatic cancellation, and no refund or credit will be
+                    issued.
+                  </li>
                 </ul>
               </section>
 
               <section>
                 <h3 className="font-bold text-foreground mb-2">
-                  4. Payment Security
+                  3. Booking Modifications
                 </h3>
+
                 <p>
-                  All online payments are processed through secure payment
-                  gateways (SSLCommerz). We do not store credit card
-                  information.
+                  Requests to modify or reschedule confirmed reservations are
+                  subject to the availability, policies, and approval of the
+                  respective hotel. Additional charges, rate differences, or
+                  administrative fees may apply. Hang Out Tourist cannot
+                  guarantee that modification requests will be accepted.
                 </p>
               </section>
 
               <section>
                 <h3 className="font-bold text-foreground mb-2">
-                  5. Cookies & Tracking
+                  4. Refund Processing
                 </h3>
+
                 <p>
-                  Our platform uses cookies to enhance user experience and track
-                  booking patterns. You can disable cookies in your browser
-                  settings.
+                  Approved refunds will generally be processed within
+                  <strong> 7–10 business days</strong> using the original
+                  payment method whenever possible. Processing times may vary
+                  depending on the bank, payment gateway, or mobile financial
+                  service provider.
                 </p>
               </section>
 
               <section>
                 <h3 className="font-bold text-foreground mb-2">
-                  6. Data Retention
+                  5. Non-Refundable Bookings
                 </h3>
+
                 <p>
-                  We retain your booking information for 7 years for record
-                  keeping and dispute resolution. You can request data deletion
-                  after 1 year.
+                  Reservations made under promotional offers, discounted rates,
+                  holiday packages, festival campaigns, or those specifically
+                  marked
+                  <strong> "Non-Refundable"</strong> are not eligible for
+                  cancellation, modification, or refund unless otherwise stated
+                  at the time of booking.
                 </p>
               </section>
 
               <section>
                 <h3 className="font-bold text-foreground mb-2">
-                  7. Special Requests
+                  6. Force Majeure
                 </h3>
+
                 <p>
-                  Special requests (early check-in, high floor, etc.) are noted
-                  but not guaranteed. The hotel will accommodate based on
-                  availability.
+                  In the event of circumstances beyond reasonable control,
+                  including natural disasters, government restrictions, public
+                  emergencies, civil unrest, transportation disruptions, or
+                  similar events, cancellation and refund decisions will follow
+                  the policies of the respective hotel. Hang Out Tourist will
+                  make reasonable efforts to assist guests but cannot guarantee
+                  refunds unless approved by the hotel or required by law.
                 </p>
               </section>
 
               <section>
                 <h3 className="font-bold text-foreground mb-2">
-                  8. Contact & Disputes
+                  7. Contact Us
                 </h3>
+
                 <p>
-                  For cancellations or disputes, please contact our support team
-                  at support@hangcoin.com within 30 days of your booking.
+                  If you have any questions regarding cancellations, booking
+                  modifications, or refunds, please contact our Customer Support
+                  team through the official communication channels available on
+                  the Hang Out Tourist website.
                 </p>
               </section>
             </div>

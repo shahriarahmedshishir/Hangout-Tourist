@@ -52,7 +52,7 @@ export default function HotelsSection() {
           </div>
         </div>
 
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
           {hotels.map((hotel, i) => (
             <Link
               key={hotel._id}
@@ -74,8 +74,6 @@ export default function HotelsSection() {
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                 <div className="absolute bottom-3 left-3 flex items-center gap-1 text-white text-xs font-medium">
-                  <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                  {hotel.avgRating?.toFixed(1) || "New"}
                 </div>
               </div>
 
@@ -141,7 +139,7 @@ export default function HotelsSection() {
       <div className="container flex justify-center mt-6">
         <Link to="/hotels">
           <Button variant="outline" size="sm" className="gap-1 rounded-xl">
-            View All <ChevronRight className="h-4 w-4" />
+            View All Hotels <ChevronRight className="h-4 w-4" />
           </Button>
         </Link>
       </div>

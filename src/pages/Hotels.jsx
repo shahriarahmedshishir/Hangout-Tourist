@@ -7,6 +7,7 @@ import Footer from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, imgUrl } from "@/lib/api";
+import {Helmet} from "react-helmet";
 import {
   MapPin,
   Search,
@@ -109,6 +110,10 @@ const Hotels = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Helmet>
+                <meta charSet="utf-8" />
+                <title>Hang Out Tourist | Hotels</title>
+            </Helmet>
       <Navbar />
 
       {/* Hero Section */}
@@ -499,23 +504,6 @@ function CompactHotelCard({ hotel, isFavorite, onToggleFavorite, index }) {
           </div>
         )}
 
-        {/* Favorite Button */}
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            onToggleFavorite(hotel._id);
-          }}
-          className="absolute top-2 right-2 md:top-3 md:right-3 p-1.5 md:p-2 rounded-full bg-white/90 hover:bg-white transition-all shadow-md hover:shadow-lg z-10"
-        >
-          <Heart
-            className={`h-3.5 w-3.5 md:h-4 md:w-4 ${
-              isFavorite
-                ? "fill-red-500 text-red-500"
-                : "text-muted-foreground hover:text-red-500"
-            }`}
-          />
-        </button>
-
         {/* Price Badge */}
         <div className="absolute bottom-2 left-2 md:bottom-3 md:left-3 bg-black/70 text-white px-2.5 md:px-3 py-1 md:py-1.5 rounded-lg">
           <p className="text-xs text-white/80">From</p>
@@ -541,12 +529,6 @@ function CompactHotelCard({ hotel, isFavorite, onToggleFavorite, index }) {
             <h3 className="font-heading text-xs md:text-base font-bold text-foreground line-clamp-2 flex-1">
               {hotel.name}
             </h3>
-            <div className="flex items-center gap-0.5 bg-amber-50 px-1.5 md:px-2 py-0.5 md:py-1 rounded-lg flex-shrink-0">
-              <Star className="h-2.5 w-2.5 md:h-3.5 md:w-3.5 fill-amber-400 text-amber-400" />
-              <span className="text-xs md:text-sm font-bold text-amber-700">
-                4.5
-              </span>
-            </div>
           </div>
 
           {hotel.area && (
@@ -608,22 +590,7 @@ function MirroredHotelCard({
             </div>
           )}
 
-          {/* Favorite Button */}
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              onToggleFavorite(hotel._id);
-            }}
-            className="absolute top-2 right-2 p-1.5 md:p-2 rounded-full bg-white/90 hover:bg-white transition-all shadow-md"
-          >
-            <Heart
-              className={`h-3.5 w-3.5 md:h-4 md:w-4 ${
-                isFavorite
-                  ? "fill-red-500 text-red-500"
-                  : "text-muted-foreground hover:text-red-500"
-              }`}
-            />
-          </button>
+
 
           {/* Popular Badge */}
           {hotel.roomCount > 15 && (
@@ -659,12 +626,6 @@ function MirroredHotelCard({
               <div className="inline-flex items-center gap-1 text-xs px-2 md:px-3 py-1 md:py-1.5 rounded-lg bg-muted text-foreground font-medium">
                 <Users className="h-3 w-3" />
                 {hotel.roomCount || 0} rooms
-              </div>
-              <div className="inline-flex items-center gap-1 bg-amber-50 px-2 md:px-3 py-1 md:py-1.5 rounded-lg">
-                <Star className="h-3 w-3 md:h-3.5 md:w-3.5 fill-amber-400 text-amber-400" />
-                <span className="text-xs md:text-sm font-bold text-amber-700">
-                  4.5
-                </span>
               </div>
             </div>
           </div>

@@ -20,6 +20,7 @@ import {
   Upload,
   Coins,
 } from "lucide-react";
+import AppBreadcrumb from "../components/common/AppBreadcrumb";
 
 const CoxsBazarBooking = () => {
   const location = useLocation();
@@ -288,13 +289,7 @@ const CoxsBazarBooking = () => {
       <Navbar />
 
       <div className="flex-1 container py-8">
-        <Link
-          to="/cars"
-          className="mb-6 inline-flex items-center gap-2 text-primary hover:underline"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Back to Cox's Bazar Services
-        </Link>
+        <AppBreadcrumb/>
 
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Left: Service Details */}
@@ -456,7 +451,7 @@ const CoxsBazarBooking = () => {
                 </label>
                 <Input
                   type="tel"
-                  placeholder="01xxxxxxxxx"
+                  placeholder="Enter your contact number"
                   value={contactNumber}
                   onChange={(e) => setContactNumber(e.target.value)}
                   className="bg-muted border-0 focus:ring-2 focus:ring-primary"
@@ -510,12 +505,54 @@ const CoxsBazarBooking = () => {
                     onChange={(e) => setManualMethod(e.target.value)}
                     className="w-full bg-muted border-0 focus:ring-2 focus:ring-primary rounded-md px-3 py-2"
                   >
-                    <option value="bkash">bKash</option>
-                    <option value="nagad">Nagad</option>
-                    <option value="rocket">Rocket</option>
-                    <option value="bank">Bank Transfer</option>
+                    <option value="bkash">Bkash </option>
+                    <option value="nagad">Nagad </option>
                   </select>
                 </div>
+                                  {/* Selected Payment Number */}
+
+                  <div
+                    className={`rounded-2xl border p-4 ${
+                      manualMethod === "bkash"
+                        ? "border-pink-200 bg-pink-50"
+                        : "border-orange-200 bg-orange-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p
+                          className={`text-sm font-semibold ${
+                            manualMethod === "bkash"
+                              ? "text-pink-700"
+                              : "text-orange-700"
+                          }`}
+                        >
+                          {manualMethod === "bkash"
+                            ? "bKash Personal Number"
+                            : "Nagad Personal Number"}
+                        </p>
+
+                        <p className="mt-1 text-xl font-bold text-slate-900">
+                          01743-917153
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          Send the payment to this number and enter the
+                          Transaction ID below.
+                        </p>
+                      </div>
+
+                      <div
+                        className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                          manualMethod === "bkash"
+                            ? "bg-pink-100 text-pink-700"
+                            : "bg-orange-100 text-orange-700"
+                        }`}
+                      >
+                        {manualMethod === "bkash" ? "bKash" : "Nagad"}
+                      </div>
+                    </div>
+                  </div>
                 <div>
                   <label className="mb-2 block text-sm font-medium text-foreground">
                     Transaction ID
@@ -528,37 +565,65 @@ const CoxsBazarBooking = () => {
                     className="bg-muted border-0 focus:ring-2 focus:ring-primary"
                   />
                 </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">
-                    Payment Screenshot
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-foreground">
+                    Payment Screenshot{" "}
+                    <span className="text-destructive">*</span>
                   </label>
-                  <div className="relative">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) =>
-                        setManualScreenshot(
-                          e.target.files?.[0]
-                            ? `file://${URL.createObjectURL(e.target.files[0])}`
-                            : "",
-                        )
-                      }
-                      className="hidden"
-                      id="screenshot-upload"
-                    />
-                    <label
-                      htmlFor="screenshot-upload"
-                      className="flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted p-6 cursor-pointer hover:bg-muted/80 transition"
-                    >
-                      <Upload className="h-5 w-5 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">
-                        {manualScreenshot
-                          ? "Screenshot uploaded"
-                          : "Click to upload"}
+
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) =>
+                      setManualScreenshot(
+                        e.target.files?.[0]
+                          ? `file://${URL.createObjectURL(e.target.files[0])}`
+                          : "",
+                      )
+                    }
+                    className="hidden"
+                    id="screenshot-upload"
+                  />
+
+                  <label
+                    htmlFor="screenshot-upload"
+                    className="group flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-border bg-muted/30 p-4 transition-all duration-200 hover:border-primary hover:bg-primary/5"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 transition-colors group-hover:bg-primary/20">
+                        <Upload className="h-5 w-5 text-primary" />
+                      </div>
+
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          {manualScreenshot
+                            ? "Replace Screenshot"
+                            : "Upload Screenshot"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          PNG, JPG or WEBP
+                        </p>
+                      </div>
+                    </div>
+
+                    {manualScreenshot && (
+                      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700 dark:bg-green-500/10 dark:text-green-400">
+                        ✓ Uploaded
                       </span>
-                    </label>
-                  </div>
+                    )}
+                  </label>
                 </div>
+                <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
+                        <p className="font-semibold text-foreground mb-1">
+                          How to submit manual payment:
+                        </p>
+                        <ul className="list-disc list-inside space-y-1">
+                          <li>Make payment via Bkash or Nagad</li>
+                          <li>Note the transaction ID</li>
+                          <li>Upload screenshot of payment confirmation</li>
+                          <li>Wait for admin approval (check dashboard)</li>
+                        </ul>
+                      </div>
                 <Button
                   onClick={handleManualPayment}
                   disabled={loading || !pickupDate || dateAvailableCars <= 0}

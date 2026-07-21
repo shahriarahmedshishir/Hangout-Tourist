@@ -710,20 +710,19 @@ const Invoice = ({ invoice, onClose }) => {
             <div>
               <span className="font-semibold">Email:</span>{" "}
               <a
-                href="mailto:support@hangouttourist.com"
+                href="mailto:hangouttourist@gmail.com"
                 className="text-blue-600 underline"
               >
-                support@hangouttourist.com
+                hangouttourist@gmail.com
               </a>
               <span className="mx-2">|</span>
               <span className="font-semibold">Phone:</span>{" "}
-              <a href="tel:+880123456789" className="text-blue-600 underline">
-                +880123456789
+              <a href="tel:+8801795606900" className="text-blue-600 underline">
+                +8801795-606900
               </a>
             </div>
             <div className="mt-1">
-              <span className="font-semibold">Address:</span> 3rd Floor, Grand
-              Plaza, Uttara, Dhaka, Bangladesh
+              <span className="font-semibold">Address:</span> Demra, Dhaka-1360, Bangladesh
             </div>
           </div>
           <div className="mt-3 text-left">

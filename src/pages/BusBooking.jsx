@@ -17,6 +17,7 @@ import {
   Users,
   Clock,
 } from "lucide-react";
+import AppBreadcrumb from "../components/common/AppBreadcrumb";
 
 const BusBooking = () => {
   const location = useLocation();
@@ -123,13 +124,7 @@ const BusBooking = () => {
       <Navbar />
 
       <div className="flex-1 container py-8">
-        <Link
-          to="/cars"
-          className="mb-6 inline-flex items-center gap-2 text-primary hover:underline"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Back to Buses
-        </Link>
+       <AppBreadcrumb/>
 
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Left: Bus Details */}
@@ -241,7 +236,7 @@ const BusBooking = () => {
             <div className="space-y-4 mb-6">
               <div>
                 <label className="mb-2 block text-sm font-medium text-foreground">
-                  Travel Date
+                  Travel Date <span className="text-destructive">*</span>
                 </label>
                 <Input
                   type="date"
@@ -254,7 +249,7 @@ const BusBooking = () => {
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-foreground">
-                  Number of Seats
+                  Number of Seats <span className="text-destructive">*</span>
                 </label>
                 <Input
                   type="number"
@@ -268,7 +263,7 @@ const BusBooking = () => {
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-foreground">
-                  Pickup Location
+                  Pickup Location <span className="text-destructive">*</span>
                 </label>
                 <Input
                   placeholder="e.g., Dhaka Station"
@@ -280,7 +275,7 @@ const BusBooking = () => {
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-foreground">
-                  Contact Number
+                  Contact Number <span className="text-destructive">*</span>
                 </label>
                 <Input
                   type="tel"
@@ -329,16 +324,17 @@ const BusBooking = () => {
                   Call the following number to confirm your ticket booking:
                 </p>
                 <div className="space-y-3 text-sm">
-                  <div className="rounded bg-blue-100 p-3 border-l-4 border-blue-500">
-                    <p className="font-semibold text-blue-900">bKash</p>
-                    <p className="text-lg font-bold text-blue-900 mt-1">
-                      01XXXXXXXXX
+                  <div className="rounded-lg border border-pink-200 bg-pink-50 p-4">
+                    <p className="font-medium text-pink-700">bKash</p>
+                    <p className="mt-1 text-lg font-bold text-pink-900">
+                      01743-917153
                     </p>
                   </div>
-                  <div className="rounded bg-blue-100 p-3 border-l-4 border-blue-500">
-                    <p className="font-semibold text-blue-900">Nagad</p>
-                    <p className="text-lg font-bold text-blue-900 mt-1">
-                      01XXXXXXXXX
+
+                  <div className="rounded-lg border border-orange-200 bg-orange-50 p-4">
+                    <p className="font-medium text-orange-700">Nagad</p>
+                    <p className="mt-1 text-lg font-bold text-orange-900">
+                      01743-917153
                     </p>
                   </div>
                 </div>
