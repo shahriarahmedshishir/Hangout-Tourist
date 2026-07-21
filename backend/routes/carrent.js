@@ -100,10 +100,18 @@ router.get("/booking/:id", auth, async (req, res) => {
       .collection("carrent")
       .findOne({ _id: new ObjectId(booking.carId) });
 
+    const manualPayment = await db
+      .collection("manual_payments")
+      .findOne(
+        { bookingId: booking._id.toString() },
+        { sort: { submittedAt: -1 } },
+      );
+
     res.json({
       ...booking,
       user,
       car,
+      manualPayment,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });

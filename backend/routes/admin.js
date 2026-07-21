@@ -896,6 +896,34 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
       },
     });
 
+    bookingsPipeline.push({
+      $lookup: {
+        from: "manual_payments",
+        let: { bookingId: { $toString: "$_id" } },
+        pipeline: [
+          { $match: { $expr: { $eq: ["$bookingId", "$$bookingId"] } } },
+          { $sort: { submittedAt: -1 } },
+          { $limit: 1 },
+        ],
+        as: "manualPayment",
+      },
+    });
+
+    bookingsPipeline.push({
+      $addFields: {
+        manualPayment: { $arrayElemAt: ["$manualPayment", 0] },
+        transactionId: {
+          $ifNull: ["$transactionId", "$manualPayment.transactionId"],
+        },
+        paymentMethod: {
+          $ifNull: ["$paymentMethod", "$manualPayment.paymentMethod"],
+        },
+        screenshot: {
+          $ifNull: ["$screenshot", "$manualPayment.screenshot"],
+        },
+      },
+    });
+
     // Search by user name or item name for bookings
     const searchFilters = [];
     if (search) {
@@ -971,6 +999,30 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
           },
         },
       });
+      carPipeline.push({
+        $lookup: {
+          from: "manual_payments",
+          let: { bookingId: { $toString: "$_id" } },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$bookingId", "$$bookingId"] } } },
+            { $sort: { submittedAt: -1 } },
+            { $limit: 1 },
+          ],
+          as: "manualPayment",
+        },
+      });
+      carPipeline.push({
+        $addFields: {
+          manualPayment: { $arrayElemAt: ["$manualPayment", 0] },
+          transactionId: {
+            $ifNull: ["$transactionId", "$manualPayment.transactionId"],
+          },
+          paymentMethod: {
+            $ifNull: ["$paymentMethod", "$manualPayment.paymentMethod"],
+          },
+          screenshot: { $ifNull: ["$screenshot", "$manualPayment.screenshot"] },
+        },
+      });
       carPipeline.push({ $project: { userInfo: 0, userObjectId: 0 } });
 
       carRentals = await db
@@ -1032,6 +1084,23 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
           userEmail: {
             $ifNull: [{ $arrayElemAt: ["$userInfo.email", 0] }, ""],
           },
+        },
+      });
+      busPipeline.push({
+        $lookup: {
+          from: "manual_payments",
+          let: { bookingId: { $toString: "$_id" } },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$bookingId", "$$bookingId"] } } },
+            { $sort: { submittedAt: -1 } },
+            { $limit: 1 },
+          ],
+          as: "manualPayment",
+        },
+      });
+      busPipeline.push({
+        $addFields: {
+          manualPayment: { $arrayElemAt: ["$manualPayment", 0] },
         },
       });
       busPipeline.push({ $project: { userInfo: 0, userObjectId: 0 } });

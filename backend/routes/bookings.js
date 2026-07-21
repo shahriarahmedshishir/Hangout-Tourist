@@ -337,24 +337,70 @@ router.get("/my", auth, async (req, res) => {
       packageMap = new Map(packages.map((pkg) => [pkg._id.toString(), pkg]));
     }
 
+    const allBookingIds = [
+      ...bookings.map((b) => b._id.toString()),
+      ...carRentBookings.map((b) => b._id.toString()),
+      ...busBookings.map((b) => b._id.toString()),
+    ];
+
+    const manualPayments = allBookingIds.length
+      ? await db
+          .collection("manual_payments")
+          .find({ bookingId: { $in: allBookingIds } })
+          .sort({ submittedAt: -1 })
+          .toArray()
+      : [];
+
+    const manualPaymentLatest = new Map();
+    manualPayments.forEach((payment) => {
+      if (!manualPaymentLatest.has(payment.bookingId)) {
+        manualPaymentLatest.set(payment.bookingId, payment);
+      }
+    });
+
+    const enrichBooking = (booking) => {
+      const payment = manualPaymentLatest.get(booking._id.toString());
+      return {
+        ...booking,
+        manualPayment: payment
+          ? {
+              _id: payment._id,
+              status: payment.status,
+              transactionId: payment.transactionId,
+              screenshot: payment.screenshot,
+              message: payment.message,
+              submittedAt: payment.submittedAt,
+            }
+          : undefined,
+      };
+    };
+
     const enrichedBookings = bookings.map((booking) => {
+      const base = enrichBooking(booking);
+
       if (
         (booking.type === "package" || booking.type === "holiday") &&
         booking.packageId &&
         packageMap.has(booking.packageId)
       ) {
         return {
-          ...booking,
+          ...base,
           packageDetails: packageMap.get(booking.packageId),
         };
       }
-      return booking;
+
+      return base;
     });
 
+    const enrichedCarRentBookings = carRentBookings.map(enrichBooking);
+    const enrichedBusBookings = busBookings.map(enrichBooking);
+
     res.json(
-      [...enrichedBookings, ...carRentBookings, ...busBookings].sort(
-        (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
-      ),
+      [
+        ...enrichedBookings,
+        ...enrichedCarRentBookings,
+        ...enrichedBusBookings,
+      ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
     );
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -566,12 +612,18 @@ router.get("/:id", auth, async (req, res) => {
       .collection("cancel_requests")
       .findOne({ bookingId: req.params.id });
 
+    // Get latest manual payment submission for this booking if any
+    const manualPayment = await db
+      .collection("manual_payments")
+      .findOne({ bookingId: req.params.id }, { sort: { submittedAt: -1 } });
+
     res.json({
       ...booking,
       user,
       property,
       packageDetails,
       cancelRequest,
+      manualPayment,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
