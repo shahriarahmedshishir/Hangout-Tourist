@@ -27,8 +27,8 @@ const Flights = () => {
   const [expandedFaq, setExpandedFaq] = useState(null);
   const [hoveredAirline, setHoveredAirline] = useState(null);
 
-  const BOOKING_PHONE = "+8801700123456";
-  const WHATSAPP_PHONE = "8801700123456";
+  const BOOKING_PHONE = "+8801795-606900";
+  const WHATSAPP_PHONE = "+8801795-606900";
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(BOOKING_PHONE);

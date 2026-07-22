@@ -187,7 +187,7 @@ const Footer = () => {
           {/* Dhaka Office */}
           <div className="space-y-2">
             <h4 className="font-bold text-slate-900 text-base mb-1">
-              Hangout Tourist (Dhaka)
+              Hang Out Tourist (Dhaka)
             </h4>
             <p className="text-slate-500 leading-relaxed">
               3/96, Ahmed Bawany Textile Mills,
@@ -237,10 +237,10 @@ const Footer = () => {
           <p>
             Copyright © 2026.{" "}
             <a
-              href="#"
+              href=""
               className="font-semibold text-amber-500 transition hover:underline"
             >
-              Hangout Tourist
+              Hang Out Tourist
             </a>
             . All rights reserved.
           </p>

@@ -124,7 +124,6 @@ const BusBooking = () => {
       <Navbar />
 
       <div className="flex-1 container py-8">
-       <AppBreadcrumb/>
 
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Left: Bus Details */}

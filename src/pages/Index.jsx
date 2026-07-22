@@ -7,7 +7,6 @@ import HeroSection from "@/components/home/HeroSection";
 import HotelsSection from "@/components/home/HotelsSection";
 import PopularCars from "@/components/home/PopularCars";
 import PopularPackages from "@/components/home/PopularPackages";
-import ExclusiveOffers from "@/components/home/ExclusiveOffers";
 import WhyChooseUs from "@/components/home/WhyChooseUs";
 import { Helmet } from "react-helmet";
 const Index = () => {
@@ -30,7 +29,6 @@ const Index = () => {
       <HotelsSection />
       <PopularCars />
       <PopularPackages />
-      <ExclusiveOffers />
       <WhyChooseUs />
       <Footer />
     </div>

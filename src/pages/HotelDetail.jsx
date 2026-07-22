@@ -413,31 +413,6 @@ export default function HotelDetail() {
                             "Welcome to our premium hotel destination. Experience luxury and comfort with world-class amenities and exceptional service. Located in the heart of the city, we offer the perfect blend of convenience and elegance."}
                         </p>
                       </div>
-
-                      {/* <div className="grid grid-cols-2 gap-4 mt-4">
-                        <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                          <Award className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-xs font-semibold text-foreground">
-                              Premium Quality
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Top-rated accommodation
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                          <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-xs font-semibold text-foreground">
-                              Free Cancellation
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Cancel anytime
-                            </p>
-                          </div>
-                        </div>
-                      </div> */}
                     </TabsContent>
 
                     {/* Amenities Tab */}
@@ -532,7 +507,7 @@ export default function HotelDetail() {
                       <PolicyItem
                         icon={<Users className="h-5 w-5" />}
                         title="House Rules"
-                        content="No smoking inside rooms. Guests must be 18+. Quiet hours: 10 PM - 8 AM. Pets not allowed."
+                        content="No smoking inside all guest rooms. All registered guests and occupants must be 18 years of age or older. Quiet hours: 10 PM - 8 AM. For health and safety reasons, pets are not allowed on the premises."
                       />
                       <PolicyItem
                         icon={<Info className="h-5 w-5" />}

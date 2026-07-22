@@ -21,6 +21,7 @@ import {
   Wallet,
   CreditCard,
   AlertCircle,
+  Upload,
 } from "lucide-react";
 import {
   Dialog,
@@ -281,7 +282,7 @@ export default function PackageBooking() {
 
         <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
           <div className="space-y-6 rounded-3xl border border-slate-200/10 bg-white/80 p-8 shadow-xl shadow-slate-900/10">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 grid-cols-2 ">
               <div className="rounded-3xl border border-slate-200/80 bg-white p-5">
                 <p className="text-sm text-slate-500">Package</p>
                 <p className="mt-2 text-lg font-semibold text-slate-900">
@@ -664,21 +665,40 @@ export default function PackageBooking() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700">
-                      Payment Screenshot
-                    </label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleScreenshotUpload}
-                      className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none"
-                    />
-                    {manualScreenshot && (
-                      <div className="mt-2 text-xs text-emerald-600 font-medium">
-                        ✓ Screenshot attached successfully
-                      </div>
-                    )}
-                  </div>
+  <label className="text-sm font-medium text-slate-700">
+    Payment Screenshot
+  </label>
+
+  <label className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-5 transition-all duration-300 hover:border-sky-500 hover:bg-sky-50">
+    <input
+      type="file"
+      accept="image/*"
+      onChange={handleScreenshotUpload}
+      className="hidden"
+    />
+
+    <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-sky-100 text-sky-600 transition-all group-hover:bg-sky-600 group-hover:text-white">
+      <Upload className="h-5 w-5" />
+    </div>
+
+    <h4 className="text-sm font-semibold text-slate-800">
+      {manualScreenshot
+        ? "Screenshot Uploaded"
+        : "Upload Payment Screenshot"}
+    </h4>
+
+    <p className="mt-1 text-center text-xs text-slate-500">
+      PNG, JPG or JPEG (Max 5MB)
+    </p>
+
+    {manualScreenshot && (
+      <div className="mt-3 flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
+        <Check className="h-3.5 w-3.5" />
+        Uploaded Successfully
+      </div>
+    )}
+  </label>
+</div>
 
                   <Button
                     onClick={handleManualPayment}
