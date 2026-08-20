@@ -90,13 +90,6 @@ router.post("/staff", auth, role("admin"), async (req, res) => {
       .findOne({ _id: new ObjectId(hotelId) });
     if (!hotel) return res.status(404).json({ message: "Hotel not found" });
 
-    const verificationToken = crypto.randomBytes(32).toString("hex");
-    const tokenHash = crypto
-      .createHash("sha256")
-      .update(verificationToken)
-      .digest("hex");
-    const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
     const hashed = await bcrypt.hash(password, 10);
     const staffResult = await db.collection("users").insertOne({
       name: staffName.trim(),
@@ -105,22 +98,14 @@ router.post("/staff", auth, role("admin"), async (req, res) => {
       role: "hotel_staff",
       hotelId: hotel._id.toString(),
       hotelName: hotel.name,
-      emailVerified: false,
-      verificationToken: tokenHash,
-      verificationTokenExpiry: tokenExpiry,
+      emailVerified: true,
       createdAt: new Date(),
     });
 
-    const emailResult = await sendVerificationEmail(
-      email,
-      staffName,
-      verificationToken,
-    );
-
     res.status(201).json({
-      message: "Staff account created and verification email sent",
-      emailSent: emailResult.success,
+      message: "Staff account created successfully",
       id: staffResult.insertedId,
+      emailVerified: true,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
