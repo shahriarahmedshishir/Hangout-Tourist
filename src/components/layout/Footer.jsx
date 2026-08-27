@@ -147,19 +147,19 @@ const Footer = () => {
 
             {/* Social Media Row */}
             <div className="flex gap-4 pt-2 text-slate-400">
-              <a href="#" className="hover:text-sky-600 transition-colors">
+              <a href="https://www.facebook.com/share/g/1J3wnuNpkH" target="_blank" rel="noopener noreferrer" className="hover:text-sky-600 transition-colors">
                 <Facebook className="w-4 h-4" />
               </a>
-              <a href="#" className="hover:text-sky-400 transition-colors">
+              <a href="https://twitter.com/HangOutTourist" target="_blank" rel="noopener noreferrer" className="hover:text-sky-400 transition-colors">
                 <Twitter className="w-4 h-4" />
               </a>
-              <a href="#" className="hover:text-pink-600 transition-colors">
+              <a href="https://www.instagram.com/hangouttourist/" target="_blank" rel="noopener noreferrer" className="hover:text-pink-600 transition-colors">
                 <Instagram className="w-4 h-4" />
               </a>
-              <a href="#" className="hover:text-red-600 transition-colors">
+              <a href="https://www.youtube.com/@HangOutTourist" target="_blank" rel="noopener noreferrer" className="hover:text-red-600 transition-colors">
                 <Youtube className="w-4 h-4" />
               </a>
-              <a href="#" className="hover:text-sky-700 transition-colors">
+              <a href="https://www.linkedin.com/company/hangout-tourist" target="_blank" rel="noopener noreferrer" className="hover:text-sky-700 transition-colors">
                 <Linkedin className="w-4 h-4" />
               </a>
             </div>
