@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
+import { Turnstile } from "react-turnstile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,10 +28,12 @@ const Login = () => {
   const [resendEmail, setResendEmail] = useState("");
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
+  const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY;
 
   // Password validation checks
   const passwordChecks = {
@@ -54,20 +57,30 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!turnstileToken) {
+      setError("Please complete the security check");
+      return;
+    }
     setLoading(true);
     setError("");
     setSuccess("");
     try {
       const endpoint = isSignUp ? "/api/auth/register" : "/api/auth/login";
       const body = isSignUp
-        ? { name: form.name, email: form.email, password: form.password }
-        : { email: form.email, password: form.password };
+        ? {
+            name: form.name,
+            email: form.email,
+            password: form.password,
+            turnstileToken,
+          }
+        : { email: form.email, password: form.password, turnstileToken };
       const data = await api.post(endpoint, body);
       if (isSignUp) {
         setSuccess(
           "Account created! Please check your email to verify your account.",
         );
         setForm({ name: "", email: "", password: "" });
+        setTurnstileToken("");
         // Don't switch to sign in - keep showing the message
       } else {
         login(data.token, data.user);
@@ -366,9 +379,27 @@ const Login = () => {
               </div>
             )}
 
+            {turnstileSiteKey ? (
+              <Turnstile
+                sitekey={turnstileSiteKey}
+                onVerify={setTurnstileToken}
+                onExpire={() => setTurnstileToken("")}
+                onError={() => {
+                  setTurnstileToken("");
+                  setError("Security check failed. Please try again.");
+                }}
+              />
+            ) : (
+              <p className="text-sm text-destructive">
+                Turnstile site key is not configured.
+              </p>
+            )}
+
             <Button
               type="submit"
-              disabled={loading || (isSignUp && !isPasswordValid)}
+              disabled={
+                loading || !turnstileToken || (isSignUp && !isPasswordValid)
+              }
               className="w-full bg-gradient-primary text-primary-foreground hover:opacity-90 transition-opacity"
             >
               {loading
@@ -390,6 +421,7 @@ const Login = () => {
                 setShowResendEmail(false);
                 setShowForgotPassword(false);
                 setForgotPasswordEmail("");
+                setTurnstileToken("");
               }}
               className="text-primary hover:underline font-medium transition-colors"
             >

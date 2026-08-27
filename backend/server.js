@@ -79,11 +79,19 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
+        scriptSrc: ["'self'", "https://challenges.cloudflare.com"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "https:", "http://localhost:*"],
-        connectSrc: ["'self'", "https://sslcommerz.com", "http://localhost:*"],
-        frameSrc: ["https://sslcommerz.com"],
+        connectSrc: [
+          "'self'",
+          "https://sslcommerz.com",
+          "https://challenges.cloudflare.com",
+          "http://localhost:*",
+        ],
+        frameSrc: [
+          "https://sslcommerz.com",
+          "https://challenges.cloudflare.com",
+        ],
       },
     },
     hsts: {

@@ -91,6 +91,26 @@ setInterval(
 
 const SECRET = process.env.JWT_SECRET;
 
+const verifyTurnstile = async (token, remoteip) => {
+  const secret = process.env.TURNSTILE_SECRET_KEY?.trim();
+  if (!secret) {
+    throw new Error("Turnstile secret key is not configured");
+  }
+  if (!token) return false;
+
+  const response = await fetch(
+    "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret, response: token, remoteip }),
+    },
+  );
+  if (!response.ok) return false;
+  const result = await response.json();
+  return result.success === true;
+};
+
 // Helper to run app-level rate limiters stored via app.set()
 const runLimiter = (req, res, name) =>
   new Promise((resolve, reject) => {
@@ -105,7 +125,11 @@ router.post("/register", async (req, res) => {
   try {
     // Apply signup limiter if configured
     await runLimiter(req, res, "signupLimiter");
-    const { name, email, password } = req.body;
+    const { name, email, password, turnstileToken } = req.body;
+
+    if (!(await verifyTurnstile(turnstileToken, getClientIp(req)))) {
+      return res.status(400).json({ message: "Security check failed" });
+    }
 
     // ✅ SECURITY: Validate input
     if (!name || !email || !password) {
@@ -182,7 +206,11 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    const { email, password } = req.body;
+    const { email, password, turnstileToken } = req.body;
+
+    if (!(await verifyTurnstile(turnstileToken, ip))) {
+      return res.status(400).json({ message: "Security check failed" });
+    }
 
     // ✅ SECURITY: Input validation
     if (!email || !password)
