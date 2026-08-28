@@ -29,12 +29,14 @@ const Login = () => {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
   const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileTokenMode, setTurnstileTokenMode] = useState("");
   const [turnstileWidgetKey, setTurnstileWidgetKey] = useState(0);
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
-  const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY;
+  const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim();
+  const authMode = isSignUp ? "signup" : "login";
 
   // Password validation checks
   const passwordChecks = {
@@ -58,7 +60,7 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!turnstileToken) {
+    if (!turnstileToken || turnstileTokenMode !== authMode) {
       setError("Please complete the security check");
       return;
     }
@@ -82,6 +84,7 @@ const Login = () => {
         );
         setForm({ name: "", email: "", password: "" });
         setTurnstileToken("");
+        setTurnstileTokenMode("");
         setTurnstileWidgetKey((key) => key + 1);
         // Don't switch to sign in - keep showing the message
       } else {
@@ -101,6 +104,7 @@ const Login = () => {
       }
     } catch (err) {
       setTurnstileToken("");
+      setTurnstileTokenMode("");
       setTurnstileWidgetKey((key) => key + 1);
       // Check if error is about email verification
       if (
@@ -387,18 +391,23 @@ const Login = () => {
               <Turnstile
                 key={`${isSignUp ? "signup" : "login"}-${turnstileWidgetKey}`}
                 sitekey={turnstileSiteKey}
+                action={authMode}
+                refreshExpired="auto"
                 onVerify={(token, boundTurnstile) => {
                   setTurnstileToken(token);
+                  setTurnstileTokenMode(authMode);
                   setError("");
                 }}
                 onExpire={(_, boundTurnstile) => {
                   setTurnstileToken("");
-                  boundTurnstile.reset();
+                  setTurnstileTokenMode("");
+                  boundTurnstile?.reset();
                   setError("Security check expired. Please complete it again.");
                 }}
                 onError={(_, boundTurnstile) => {
                   setTurnstileToken("");
-                  boundTurnstile.reset();
+                  setTurnstileTokenMode("");
+                  boundTurnstile?.reset();
                   setError("Security check failed. Please try again.");
                 }}
               />
@@ -411,7 +420,10 @@ const Login = () => {
             <Button
               type="submit"
               disabled={
-                loading || !turnstileToken || (isSignUp && !isPasswordValid)
+                loading ||
+                !turnstileToken ||
+                turnstileTokenMode !== authMode ||
+                (isSignUp && !isPasswordValid)
               }
               className="w-full bg-gradient-primary text-primary-foreground hover:opacity-90 transition-opacity"
             >
@@ -435,6 +447,7 @@ const Login = () => {
                 setShowForgotPassword(false);
                 setForgotPasswordEmail("");
                 setTurnstileToken("");
+                setTurnstileTokenMode("");
                 setTurnstileWidgetKey((key) => key + 1);
               }}
               className="text-primary hover:underline font-medium transition-colors"
