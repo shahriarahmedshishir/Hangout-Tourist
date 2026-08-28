@@ -29,6 +29,7 @@ const Login = () => {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
   const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileWidgetKey, setTurnstileWidgetKey] = useState(0);
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const navigate = useNavigate();
   const location = useLocation();
@@ -81,6 +82,7 @@ const Login = () => {
         );
         setForm({ name: "", email: "", password: "" });
         setTurnstileToken("");
+        setTurnstileWidgetKey((key) => key + 1);
         // Don't switch to sign in - keep showing the message
       } else {
         login(data.token, data.user);
@@ -98,6 +100,8 @@ const Login = () => {
         else navigate("/");
       }
     } catch (err) {
+      setTurnstileToken("");
+      setTurnstileWidgetKey((key) => key + 1);
       // Check if error is about email verification
       if (
         err.response?.status === 403 &&
@@ -381,11 +385,20 @@ const Login = () => {
 
             {turnstileSiteKey ? (
               <Turnstile
+                key={`${isSignUp ? "signup" : "login"}-${turnstileWidgetKey}`}
                 sitekey={turnstileSiteKey}
-                onVerify={setTurnstileToken}
-                onExpire={() => setTurnstileToken("")}
-                onError={() => {
+                onVerify={(token, boundTurnstile) => {
+                  setTurnstileToken(token);
+                  setError("");
+                }}
+                onExpire={(_, boundTurnstile) => {
                   setTurnstileToken("");
+                  boundTurnstile.reset();
+                  setError("Security check expired. Please complete it again.");
+                }}
+                onError={(_, boundTurnstile) => {
+                  setTurnstileToken("");
+                  boundTurnstile.reset();
                   setError("Security check failed. Please try again.");
                 }}
               />
@@ -422,6 +435,7 @@ const Login = () => {
                 setShowForgotPassword(false);
                 setForgotPasswordEmail("");
                 setTurnstileToken("");
+                setTurnstileWidgetKey((key) => key + 1);
               }}
               className="text-primary hover:underline font-medium transition-colors"
             >

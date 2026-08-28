@@ -10,6 +10,13 @@
       content="Book flights, hotels, holiday packages, visa assistance and car rentals at the best prices with Hangout Tourist."
     />
     <meta name="author" content="Hangout Tourist" />
+    <meta property="og:title" content="Hangout Tourist" />
+    <meta
+      property="og:description"
+      content="Explore the best hangout and tourist places."
+    />
+    <meta property="og:url" content="https://hangouttourist.com" />
+    <meta property="og:type" content="website" />
 
     <meta
       property="og:title"
@@ -25,5 +32,17 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "TravelAgency",
+        "name": "Hangout Tourist",
+        "alternateName": ["HangoutTourist", "Hang Out Tourist"],
+        "url": "https://hangouttourist.com",
+        "areaServed": "Bangladesh",
+        "description": "Offering general tours, car rentals, and dedicated Cox's Bazar travel packages.",
+        "priceRange": "৳৳"
+      }
+    </script>
   </body>
 </html>
