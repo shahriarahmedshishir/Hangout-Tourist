@@ -23,6 +23,7 @@ import {
   Clock,
 } from "lucide-react";
 import { api, imgUrl } from "@/lib/api";
+import { formatBDTPrice, getPriceDisplay } from "@/lib/utils";
 import { Helmet } from "react-helmet";
 
 const COXS_BAZAR_TRANSPORTS = [
@@ -415,14 +416,35 @@ const Cars = () => {
                         </span>
                       </div>
                       <div className="flex items-end justify-between border-t border-border pt-3">
-                        <div>
-                          <span className="font-heading text-xl font-bold text-primary">
-                            ৳{car.price?.toLocaleString()}
-                          </span>
-                          <span className="text-sm text-muted-foreground">
-                            {" "}
-                            /day
-                          </span>
+                        <div className="flex flex-col items-start">
+                          {getPriceDisplay(car, car.price ?? 0).hasDiscount && (
+                            <div className="mb-1 flex items-center gap-2">
+                              <span className="text-[10px] font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                                {
+                                  getPriceDisplay(car, car.price ?? 0)
+                                    .discountPercentage
+                                }
+                                % OFF
+                              </span>
+                              <span className="text-xs text-muted-foreground line-through">
+                                {formatBDTPrice(
+                                  getPriceDisplay(car, car.price ?? 0).original,
+                                )}
+                              </span>
+                            </div>
+                          )}
+                          <div>
+                            <span className="font-heading text-xl font-bold text-primary">
+                              {formatBDTPrice(
+                                Number(car.effectivePrice ?? car.price ?? 0) ||
+                                  0,
+                              )}
+                            </span>
+                            <span className="text-sm text-muted-foreground">
+                              {" "}
+                              /day
+                            </span>
+                          </div>
                         </div>
                         <Button
                           size="sm"
@@ -720,14 +742,34 @@ const Cars = () => {
                         </span>
                       </div>
                       <div className="flex items-end justify-between border-t border-border pt-3">
-                        <div>
-                          <span className="font-heading text-xl font-bold text-primary">
-                            ৳{service.price?.toLocaleString()}
-                          </span>
-                          <span className="text-sm text-muted-foreground">
-                            {" "}
-                            /seat
-                          </span>
+                        <div className="flex flex-col items-start">
+                          {Number(service.discountPercentage || 0) > 0 && (
+                            <div className="mb-1 flex items-center gap-2">
+                              <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">
+                                {Number(service.discountPercentage || 0)}% OFF
+                              </span>
+                              <span className="text-xs text-muted-foreground line-through">
+                                {formatBDTPrice(
+                                  Number(
+                                    service.basePrice ?? service.price ?? 0,
+                                  ) || 0,
+                                )}
+                              </span>
+                            </div>
+                          )}
+                          <div>
+                            <span className="font-heading text-xl font-bold text-primary">
+                              {formatBDTPrice(
+                                Number(
+                                  service.effectivePrice ?? service.price ?? 0,
+                                ) || 0,
+                              )}
+                            </span>
+                            <span className="text-sm text-muted-foreground">
+                              {" "}
+                              /seat
+                            </span>
+                          </div>
                         </div>
                         <Button
                           size="sm"

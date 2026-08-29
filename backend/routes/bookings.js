@@ -729,7 +729,7 @@ router.get("/:id/invoice", auth, async (req, res) => {
           booking.type === "hotel"
             ? booking.hotelName
             : booking.type === "car"
-              ? booking.carName
+              ? booking.carName || property?.name || "Car Rental"
               : booking.type === "bus"
                 ? booking.busName
                 : booking.packageName || "Holiday Package",
@@ -745,13 +745,17 @@ router.get("/:id/invoice", auth, async (req, res) => {
           booking.type === "hotel"
             ? `Room ${booking.roomNumber}, ${property?.location || ""}`
             : booking.type === "car"
-              ? booking.carName || booking.carType || "Car Rental"
+              ? booking.pickupLocation ||
+                property?.location ||
+                booking.carName ||
+                booking.carType ||
+                "Car Rental"
               : booking.type === "bus"
                 ? `${booking.busName}, Route: ${booking.pickupLocation}`
                 : property?.location ||
                   property?.description ||
                   "Package booking",
-        address: property?.location || "",
+        address: property?.location || booking.pickupLocation || "",
       },
 
       // Booking dates

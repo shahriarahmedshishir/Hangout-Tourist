@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { api, imgUrl } from "@/lib/api";
+import { formatBDTPrice, getPriceDisplay } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 const Holidays = () => {
@@ -148,8 +149,35 @@ const Holidays = () => {
                         <div>
                           <p className="text-xs text-white/60">From</p>
 
+                          <div className="flex items-center gap-2">
+                            {getPriceDisplay(pkg, pkg.pricePerPerson ?? 0)
+                              .hasDiscount && (
+                              <span className="text-[10px] font-semibold text-red-200 bg-red-500/20 px-2 py-0.5 rounded-full">
+                                {
+                                  getPriceDisplay(pkg, pkg.pricePerPerson ?? 0)
+                                    .discountPercentage
+                                }
+                                % OFF
+                              </span>
+                            )}
+                          </div>
+
+                          {getPriceDisplay(pkg, pkg.pricePerPerson ?? 0)
+                            .hasDiscount && (
+                            <p className="mt-1 text-xs text-white/60 line-through">
+                              {formatBDTPrice(
+                                getPriceDisplay(pkg, pkg.pricePerPerson ?? 0)
+                                  .original,
+                              )}
+                            </p>
+                          )}
+
                           <h3 className="text-2xl font-bold">
-                            ৳{Number(pkg.pricePerPerson || 0).toLocaleString()}
+                            {formatBDTPrice(
+                              Number(
+                                pkg.effectivePrice ?? pkg.pricePerPerson ?? 0,
+                              ) || 0,
+                            )}
                           </h3>
 
                           <p className="text-xs text-white/70">

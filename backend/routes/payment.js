@@ -254,12 +254,13 @@ router.post("/initiate/hotel", auth, async (req, res) => {
         });
       }
 
-      totalAmount += room.price * days;
+      const effectiveRoomPrice = Number(room.effectivePrice ?? room.price ?? 0);
+      totalAmount += effectiveRoomPrice * days;
       roomsToBook.push({
         roomId: room._id.toString(),
         roomNumber: room.roomNumber,
-        pricePerNight: room.price,
-        roomTotal: room.price * days,
+        pricePerNight: effectiveRoomPrice,
+        roomTotal: effectiveRoomPrice * days,
       });
     }
 
@@ -291,6 +292,7 @@ router.post("/initiate/hotel", auth, async (req, res) => {
       days,
       totalAmount,
       contactNumber: contactNumber || "",
+      nidNumber: guestDetails?.nidNumber || "",
       guestDetails: guestDetails || {},
       occupancy: occupancy || {},
       createdAt: new Date(),
@@ -360,8 +362,14 @@ router.post("/initiate/car", auth, async (req, res) => {
         .json({ message: "Staff and admin accounts cannot book cars" });
     }
 
-    const { carId, pickupDate, returnDate, pickupLocation, contactNumber } =
-      req.body;
+    const {
+      carId,
+      pickupDate,
+      returnDate,
+      pickupLocation,
+      contactNumber,
+      nidNumber,
+    } = req.body;
 
     if (!carId || !pickupDate || !returnDate) {
       return res
@@ -408,7 +416,8 @@ router.post("/initiate/car", auth, async (req, res) => {
     const days = Math.ceil(
       (returnDateObj - pickupDateObj) / (1000 * 60 * 60 * 24),
     );
-    const totalAmount = car.price * days;
+    const effectiveCarPrice = Number(car.effectivePrice ?? car.price ?? 0);
+    const totalAmount = effectiveCarPrice * days;
 
     // ✅ SECURITY: Validate total amount hasn't been tampered with
     const clientTotalAmount = parseFloat(req.body.totalAmount) || 0;
@@ -435,8 +444,9 @@ router.post("/initiate/car", auth, async (req, res) => {
       returnDate: returnDateObj,
       pickupLocation: pickupLocation || "",
       contactNumber: contactNumber || "",
+      nidNumber: nidNumber || "",
       days,
-      pricePerDay: car.price,
+      pricePerDay: effectiveCarPrice,
       totalAmount,
       createdAt: new Date(),
     });
@@ -536,7 +546,10 @@ router.post("/initiate/package", auth, async (req, res) => {
       });
     }
 
-    const computedTotal = Number(pkg.pricePerPerson || 0) * count;
+    const effectivePricePerPerson = Number(
+      pkg.effectivePrice ?? pkg.pricePerPerson ?? 0,
+    );
+    const computedTotal = effectivePricePerPerson * count;
     const clientTotalAmount = parseFloat(totalAmount) || 0;
     if (!validatePrice(clientTotalAmount, computedTotal, 1)) {
       return res.status(400).json({
@@ -563,8 +576,9 @@ router.post("/initiate/package", auth, async (req, res) => {
       packageName: pkg.name,
       travelDate: travelDateObj,
       peopleCount: count,
-      pricePerPerson: Number(pkg.pricePerPerson || 0),
+      pricePerPerson: effectivePricePerPerson,
       guestDetails: finalGuestDetails,
+      nidNumber: finalGuestDetails?.nidNumber || "",
       totalAmount: computedTotal,
       createdAt: new Date(),
     });
@@ -1162,7 +1176,12 @@ async function _confirmBooking(tran_id, validation = null) {
         "bookings for tran_id:",
         tran_id,
       );
-      await db.collection("bookings").insertMany(bookings);
+      await db.collection("bookings").insertMany(
+        bookings.map((booking) => ({
+          ...booking,
+          nidNumber: booking.guestDetails?.nidNumber || booking.nidNumber || "",
+        })),
+      );
       console.log(
         "✅ [HOTEL] Bookings inserted successfully for tran_id:",
         tran_id,
@@ -1200,6 +1219,7 @@ async function _confirmBooking(tran_id, validation = null) {
         returnDate: session.returnDate,
         pickupLocation: session.pickupLocation,
         contactNumber: session.contactNumber,
+        nidNumber: session.nidNumber || "",
         days: session.days,
         pricePerDay: session.pricePerDay,
         totalAmount: session.totalAmount,
@@ -1226,6 +1246,7 @@ async function _confirmBooking(tran_id, validation = null) {
         pricePerPerson: session.pricePerPerson,
         totalAmount: session.totalAmount,
         guestDetails: session.guestDetails || {},
+        nidNumber: session.guestDetails?.nidNumber || session.nidNumber || "",
         status: "confirmed",
         transactionId: tran_id,
         paymentMethod: "SSLCommerz",
@@ -1274,6 +1295,7 @@ async function _confirmBooking(tran_id, validation = null) {
         seats: session.seats,
         pickupLocation: session.pickupLocation,
         contactNumber: session.contactNumber,
+        nidNumber: session.nidNumber || "",
         pricePerSeat: session.pricePerSeat,
         totalAmount: session.totalAmount,
         status: "confirmed",
@@ -1342,6 +1364,7 @@ async function _confirmBooking(tran_id, validation = null) {
         seatsBooked: session.seatsBooked,
         pickupLocation: session.pickupLocation,
         contactNumber: session.contactNumber,
+        nidNumber: session.nidNumber || "",
         pricePerSeat: session.pricePerSeat,
         totalAmount: session.totalAmount,
         status: "confirmed",
@@ -1940,7 +1963,9 @@ router.post("/initiate/carrent", auth, async (req, res) => {
       });
     }
 
-    const totalAmount = service.price * seatsCount;
+    const servicePrice =
+      Number(service.effectivePrice ?? service.price ?? 0) || 0;
+    const totalAmount = servicePrice * seatsCount;
 
     // ✅ SECURITY: Validate total amount hasn't been tampered with
     const clientTotalAmount = parseFloat(req.body.totalAmount) || 0;
@@ -1968,7 +1993,7 @@ router.post("/initiate/carrent", auth, async (req, res) => {
       seatsBooked: seatsCount,
       pickupLocation: pickupLocation || "",
       contactNumber: contactNumber || "",
-      pricePerSeat: service.price,
+      pricePerSeat: servicePrice,
       totalAmount,
       createdAt: new Date(),
     });

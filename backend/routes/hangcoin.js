@@ -181,12 +181,13 @@ router.post("/initiate-booking/hotel", auth, async (req, res) => {
         });
       }
 
-      totalAmount += room.price * days;
+      const effectiveRoomPrice = Number(room.effectivePrice ?? room.price ?? 0);
+      totalAmount += effectiveRoomPrice * days;
       bookingRooms.push({
         roomId: room._id.toString(),
         roomNumber: room.roomNumber,
-        pricePerNight: room.price,
-        roomTotal: room.price * days,
+        pricePerNight: effectiveRoomPrice,
+        roomTotal: effectiveRoomPrice * days,
       });
     }
 
@@ -232,8 +233,14 @@ router.post("/initiate-booking/car", auth, async (req, res) => {
         .json({ message: "Staff and admin accounts cannot book cars" });
     }
 
-    const { carId, pickupDate, returnDate, pickupLocation, contactNumber } =
-      req.body;
+    const {
+      carId,
+      pickupDate,
+      returnDate,
+      pickupLocation,
+      contactNumber,
+      nidNumber,
+    } = req.body;
 
     if (!carId || !pickupDate || !returnDate) {
       return res.status(400).json({
@@ -280,7 +287,8 @@ router.post("/initiate-booking/car", auth, async (req, res) => {
     const days = Math.ceil(
       (returnDateObj - pickupDateObj) / (1000 * 60 * 60 * 24),
     );
-    const totalAmount = car.price * days;
+    const effectiveCarPrice = Number(car.effectivePrice ?? car.price ?? 0);
+    const totalAmount = effectiveCarPrice * days;
 
     // Create pending booking for hangcoin payment
     const booking = {
@@ -292,6 +300,7 @@ router.post("/initiate-booking/car", auth, async (req, res) => {
       returnDate: returnDateObj,
       pickupLocation: pickupLocation || "",
       contactNumber: contactNumber || "",
+      nidNumber: nidNumber || "",
       days,
       pricePerDay: car.price,
       totalAmount,
@@ -358,7 +367,10 @@ router.post("/initiate-booking/package", auth, async (req, res) => {
     const guestEmail =
       userDoc?.email || req.user.email || guestDetails?.email || "";
     const finalGuestDetails = { ...(guestDetails || {}), email: guestEmail };
-    const totalAmount = Number(pkg.pricePerPerson || 0) * count;
+    const effectivePricePerPerson = Number(
+      pkg.effectivePrice ?? pkg.pricePerPerson ?? 0,
+    );
+    const totalAmount = effectivePricePerPerson * count;
 
     const booking = {
       userId: req.user.id,
@@ -367,8 +379,9 @@ router.post("/initiate-booking/package", auth, async (req, res) => {
       packageName: pkg.name,
       travelDate: travelDateObj,
       peopleCount: count,
-      pricePerPerson: Number(pkg.pricePerPerson || 0),
+      pricePerPerson: effectivePricePerPerson,
       guestDetails: finalGuestDetails,
+      nidNumber: finalGuestDetails?.nidNumber || "",
       totalAmount,
       status: "pending",
       paymentMethod: "hangcoin",
@@ -665,7 +678,9 @@ router.post("/initiate-booking/carrent", auth, async (req, res) => {
       });
     }
 
-    const totalAmount = service.price * seatsCount;
+    const servicePrice =
+      Number(service.effectivePrice ?? service.price ?? 0) || 0;
+    const totalAmount = servicePrice * seatsCount;
 
     // Create pending booking for hangcoin payment
     const booking = {
@@ -681,7 +696,7 @@ router.post("/initiate-booking/carrent", auth, async (req, res) => {
       seatsBooked: seatsCount,
       pickupLocation: pickupLocation || "",
       contactNumber: contactNumber || "",
-      pricePerSeat: service.price,
+      pricePerSeat: servicePrice,
       totalAmount,
       status: "pending", // Pending hangcoin payment
       paymentMethod: "hangcoin",

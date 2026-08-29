@@ -5,6 +5,7 @@ import Footer from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, imgUrl } from "@/lib/api";
+import { formatBDTPrice, getPriceDisplay } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -180,7 +181,7 @@ export default function HotelDetail() {
       : 0;
 
   const totalPrice = selectedRooms.reduce(
-    (sum, r) => sum + (r.price || 0) * days,
+    (sum, r) => sum + (Number(r.effectivePrice ?? r.price ?? 0) || 0) * days,
     0,
   );
 
@@ -279,7 +280,6 @@ export default function HotelDetail() {
                       <MapPin className="h-4 w-4" /> {hotel.area}
                     </p>
                   )}
-
                 </div>
 
                 {/* Price Display */}
@@ -750,12 +750,30 @@ function RoomCard({
           <h4 className="font-heading font-bold text-foreground">
             Room {room.roomNumber}
           </h4>
-          <span className="text-lg font-bold text-primary">
-            ৳{(room.price || 0).toLocaleString()}
-            <span className="text-xs font-normal text-muted-foreground">
-              /night
-            </span>
-          </span>
+          <div className="flex flex-col items-end">
+            {getPriceDisplay(room, room.price ?? 0).hasDiscount && (
+              <span className="mb-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">
+                {getPriceDisplay(room, room.price ?? 0).discountPercentage}% OFF
+              </span>
+            )}
+            <div className="flex items-center gap-2">
+              {getPriceDisplay(room, room.price ?? 0).hasDiscount && (
+                <span className="text-xs text-muted-foreground line-through">
+                  {formatBDTPrice(
+                    getPriceDisplay(room, room.price ?? 0).original,
+                  )}
+                </span>
+              )}
+              <span className="text-lg font-bold text-primary">
+                {formatBDTPrice(
+                  Number(room.effectivePrice ?? room.price ?? 0) || 0,
+                )}
+                <span className="text-xs font-normal text-muted-foreground">
+                  /night
+                </span>
+              </span>
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 mb-3 text-xs text-muted-foreground">
@@ -790,7 +808,10 @@ function RoomCard({
           <p className="text-xs text-muted-foreground mb-3 pb-3 border-b border-border">
             Total:{" "}
             <span className="font-semibold text-foreground">
-              ৳{((room.price || 0) * days).toLocaleString()}
+              ৳
+              {(
+                (Number(room.effectivePrice ?? room.price ?? 0) || 0) * days
+              ).toLocaleString()}
             </span>
           </p>
         )}

@@ -5,6 +5,7 @@ import Footer from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, imgUrl } from "@/lib/api";
+import { formatBDTPrice, getPriceDisplay } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -324,7 +325,7 @@ const CarBooking = () => {
           .toISOString()
           .split("T")[0]
       : "";
-  const total = (car.price || 0) * days;
+  const total = (Number(car.effectivePrice ?? car.price ?? 0) || 0) * days;
 
   return (
     <div className="min-h-screen bg-background">
@@ -422,22 +423,37 @@ const CarBooking = () => {
             <div className="mt-4 rounded-xl bg-primary/5 p-4">
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-muted-foreground">Price per day</span>
-                <span className="font-medium">
-                  ৳{(car.price || 0).toLocaleString()}
-                </span>
+                <div className="flex items-center gap-2">
+                  {getPriceDisplay(car, car.price ?? 0).hasDiscount && (
+                    <span className="text-[10px] font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                      {getPriceDisplay(car, car.price ?? 0).discountPercentage}%
+                      OFF
+                    </span>
+                  )}
+                  {getPriceDisplay(car, car.price ?? 0).hasDiscount && (
+                    <span className="line-through text-xs text-muted-foreground">
+                      {formatBDTPrice(
+                        getPriceDisplay(car, car.price ?? 0).original,
+                      )}
+                    </span>
+                  )}
+                  <span className="font-medium">
+                    {formatBDTPrice(
+                      Number(car.effectivePrice ?? car.price ?? 0) || 0,
+                    )}
+                  </span>
+                </div>
               </div>
               {days > 0 && (
                 <>
                   <div className="flex justify-between text-sm mb-1">
                     <span className="text-muted-foreground">Days × {days}</span>
-                    <span className="font-medium">
-                      ৳{total.toLocaleString()}
-                    </span>
+                    <span className="font-medium">{formatBDTPrice(total)}</span>
                   </div>
                   <div className="border-t border-border pt-2 flex justify-between font-heading font-bold">
                     <span>Total (BDT)</span>
                     <span className="text-primary text-lg">
-                      ৳{total.toLocaleString()}
+                      {formatBDTPrice(total)}
                     </span>
                   </div>
                 </>
@@ -559,35 +575,35 @@ const CarBooking = () => {
                 </div>
               )}
 
-            <div  className="grid lg:grid-cols-2 sm:grid-cols-1 gap-4">
+              <div className="grid lg:grid-cols-2 sm:grid-cols-1 gap-4">
                 <div>
-                <label className="mb-1 block text-sm font-medium text-foreground">
-                  Contact Number <span className="text-destructive">*</span>
-                </label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <label className="mb-1 block text-sm font-medium text-foreground">
+                    Contact Number <span className="text-destructive">*</span>
+                  </label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="tel"
+                      placeholder="Enter your contact number"
+                      value={contactNumber}
+                      onChange={(e) => setContactNumber(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-foreground">
+                    NID Number <span className="text-destructive">*</span>
+                  </label>
                   <Input
-                    type="tel"
-                    placeholder="Enter your contact number"
-                    value={contactNumber}
-                    onChange={(e) => setContactNumber(e.target.value)}
-                    className="pl-9"
+                    type="text"
+                    placeholder="Enter your National ID number"
+                    value={nidNumber}
+                    onChange={(e) => setNidNumber(e.target.value)}
                   />
                 </div>
               </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-foreground">
-                  NID Number <span className="text-destructive">*</span>
-                </label>
-                <Input
-                  type="text"
-                  placeholder="Enter your National ID number"
-                  value={nidNumber}
-                  onChange={(e) => setNidNumber(e.target.value)}
-                />
-              </div>
-            </div>
 
               {error && (
                 <div className="rounded-xl bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
@@ -603,9 +619,24 @@ const CarBooking = () => {
                   className="w-full "
                 >
                   <TabsList className="grid w-full grid-cols-3 mb-4 content-center ">
-                    <TabsTrigger value="online" className="text-xs sm:text-sm py-2">Online Payment</TabsTrigger>
-                    <TabsTrigger value="manual" className="text-xs sm:text-sm py-2">Manual Payment</TabsTrigger>
-                    <TabsTrigger value="coin" className="text-xs sm:text-sm py-2">Hangcoin</TabsTrigger>
+                    <TabsTrigger
+                      value="online"
+                      className="text-xs sm:text-sm py-2"
+                    >
+                      Online Payment
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="manual"
+                      className="text-xs sm:text-sm py-2"
+                    >
+                      Manual Payment
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="coin"
+                      className="text-xs sm:text-sm py-2"
+                    >
+                      Hangcoin
+                    </TabsTrigger>
                   </TabsList>
 
                   {/* Online Payment Tab */}
@@ -640,65 +671,67 @@ const CarBooking = () => {
                     <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-1">
-                          Payment Method <span className="text-destructive">*</span>
+                          Payment Method{" "}
+                          <span className="text-destructive">*</span>
                         </label>
                         <select
                           value={manualMethod}
                           onChange={(e) => setManualMethod(e.target.value)}
                           className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground"
                         >
-                          <option value="bkash" >Bkash </option>
+                          <option value="bkash">Bkash </option>
                           <option value="nagad">Nagad </option>
                         </select>
                       </div>
-                                        {/* Selected Payment Number */}
-
-                  <div
-                    className={`rounded-2xl border p-4 ${
-                      manualMethod === "bkash"
-                        ? "border-pink-200 bg-pink-50"
-                        : "border-orange-200 bg-orange-50"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p
-                          className={`text-sm font-semibold ${
-                            manualMethod === "bkash"
-                              ? "text-pink-700"
-                              : "text-orange-700"
-                          }`}
-                        >
-                          {manualMethod === "bkash"
-                            ? "bKash Personal Number"
-                            : "Nagad Personal Number"}
-                        </p>
-
-                        <p className="mt-1 text-xl font-bold text-slate-900">
-                          01743-917153
-                        </p>
-
-                        <p className="mt-1 text-xs text-slate-500">
-                          Send the payment to this number and enter the
-                          Transaction ID below.
-                        </p>
-                      </div>
+                      {/* Selected Payment Number */}
 
                       <div
-                        className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                        className={`rounded-2xl border p-4 ${
                           manualMethod === "bkash"
-                            ? "bg-pink-100 text-pink-700"
-                            : "bg-orange-100 text-orange-700"
+                            ? "border-pink-200 bg-pink-50"
+                            : "border-orange-200 bg-orange-50"
                         }`}
                       >
-                        {manualMethod === "bkash" ? "bKash" : "Nagad"}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p
+                              className={`text-sm font-semibold ${
+                                manualMethod === "bkash"
+                                  ? "text-pink-700"
+                                  : "text-orange-700"
+                              }`}
+                            >
+                              {manualMethod === "bkash"
+                                ? "bKash Personal Number"
+                                : "Nagad Personal Number"}
+                            </p>
+
+                            <p className="mt-1 text-xl font-bold text-slate-900">
+                              01743-917153
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-500">
+                              Send the payment to this number and enter the
+                              Transaction ID below.
+                            </p>
+                          </div>
+
+                          <div
+                            className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                              manualMethod === "bkash"
+                                ? "bg-pink-100 text-pink-700"
+                                : "bg-orange-100 text-orange-700"
+                            }`}
+                          >
+                            {manualMethod === "bkash" ? "bKash" : "Nagad"}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
 
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-1">
-                          Transaction ID <span className="text-destructive">*</span>
+                          Transaction ID{" "}
+                          <span className="text-destructive">*</span>
                         </label>
                         <Input
                           type="text"

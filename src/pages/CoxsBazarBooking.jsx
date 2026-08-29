@@ -138,7 +138,7 @@ const CoxsBazarBooking = () => {
     return returnDateObj.toISOString().split("T")[0];
   };
 
-  const pricePerCar = service.price || 0;
+  const pricePerCar = Number(service.effectivePrice ?? service.price ?? 0) || 0;
   const total = pricePerCar;
 
   // Handle Online Payment (SSL Commerz)
@@ -289,7 +289,7 @@ const CoxsBazarBooking = () => {
       <Navbar />
 
       <div className="flex-1 container py-8">
-        <AppBreadcrumb/>
+        <AppBreadcrumb />
 
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Left: Service Details */}
@@ -509,50 +509,50 @@ const CoxsBazarBooking = () => {
                     <option value="nagad">Nagad </option>
                   </select>
                 </div>
-                                  {/* Selected Payment Number */}
+                {/* Selected Payment Number */}
 
-                  <div
-                    className={`rounded-2xl border p-4 ${
-                      manualMethod === "bkash"
-                        ? "border-pink-200 bg-pink-50"
-                        : "border-orange-200 bg-orange-50"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p
-                          className={`text-sm font-semibold ${
-                            manualMethod === "bkash"
-                              ? "text-pink-700"
-                              : "text-orange-700"
-                          }`}
-                        >
-                          {manualMethod === "bkash"
-                            ? "bKash Personal Number"
-                            : "Nagad Personal Number"}
-                        </p>
-
-                        <p className="mt-1 text-xl font-bold text-slate-900">
-                          01743-917153
-                        </p>
-
-                        <p className="mt-1 text-xs text-slate-500">
-                          Send the payment to this number and enter the
-                          Transaction ID below.
-                        </p>
-                      </div>
-
-                      <div
-                        className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                <div
+                  className={`rounded-2xl border p-4 ${
+                    manualMethod === "bkash"
+                      ? "border-pink-200 bg-pink-50"
+                      : "border-orange-200 bg-orange-50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p
+                        className={`text-sm font-semibold ${
                           manualMethod === "bkash"
-                            ? "bg-pink-100 text-pink-700"
-                            : "bg-orange-100 text-orange-700"
+                            ? "text-pink-700"
+                            : "text-orange-700"
                         }`}
                       >
-                        {manualMethod === "bkash" ? "bKash" : "Nagad"}
-                      </div>
+                        {manualMethod === "bkash"
+                          ? "bKash Personal Number"
+                          : "Nagad Personal Number"}
+                      </p>
+
+                      <p className="mt-1 text-xl font-bold text-slate-900">
+                        01743-917153
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-500">
+                        Send the payment to this number and enter the
+                        Transaction ID below.
+                      </p>
+                    </div>
+
+                    <div
+                      className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                        manualMethod === "bkash"
+                          ? "bg-pink-100 text-pink-700"
+                          : "bg-orange-100 text-orange-700"
+                      }`}
+                    >
+                      {manualMethod === "bkash" ? "bKash" : "Nagad"}
                     </div>
                   </div>
+                </div>
                 <div>
                   <label className="mb-2 block text-sm font-medium text-foreground">
                     Transaction ID
@@ -614,16 +614,16 @@ const CoxsBazarBooking = () => {
                   </label>
                 </div>
                 <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-                        <p className="font-semibold text-foreground mb-1">
-                          How to submit manual payment:
-                        </p>
-                        <ul className="list-disc list-inside space-y-1">
-                          <li>Make payment via Bkash or Nagad</li>
-                          <li>Note the transaction ID</li>
-                          <li>Upload screenshot of payment confirmation</li>
-                          <li>Wait for admin approval (check dashboard)</li>
-                        </ul>
-                      </div>
+                  <p className="font-semibold text-foreground mb-1">
+                    How to submit manual payment:
+                  </p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>Make payment via Bkash or Nagad</li>
+                    <li>Note the transaction ID</li>
+                    <li>Upload screenshot of payment confirmation</li>
+                    <li>Wait for admin approval (check dashboard)</li>
+                  </ul>
+                </div>
                 <Button
                   onClick={handleManualPayment}
                   disabled={loading || !pickupDate || dateAvailableCars <= 0}

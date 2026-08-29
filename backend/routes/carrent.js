@@ -166,10 +166,11 @@ router.get("/booking/:id/invoice", auth, async (req, res) => {
 
       // Property info
       property: {
-        name: car?.name || "Car Rental",
+        name: booking.carName || car?.name || "Car Rental",
         type: "Car",
-        details: car?.name || "Car Rental",
-        address: "",
+        details:
+          booking.pickupLocation || car?.location || car?.name || "Car Rental",
+        address: booking.pickupLocation || car?.location || "",
       },
 
       // Booking dates

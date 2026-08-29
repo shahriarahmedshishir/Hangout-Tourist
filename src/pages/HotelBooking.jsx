@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { api, imgUrl } from "@/lib/api";
+import { formatBDTPrice, getPriceDisplay } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -108,7 +109,10 @@ export default function HotelBooking() {
   const days = Math.ceil(
     (new Date(checkOut) - new Date(checkIn)) / (1000 * 60 * 60 * 24),
   );
-  const total = rooms.reduce((sum, r) => sum + (r.price || 0) * days, 0);
+  const total = rooms.reduce(
+    (sum, r) => sum + (Number(r.effectivePrice ?? r.price ?? 0) || 0) * days,
+    0,
+  );
 
   // Validate guest details
   const validateGuestDetails = () => {
@@ -591,26 +595,50 @@ export default function HotelBooking() {
                   Price Breakdown
                 </h2>
                 <div className="space-y-3">
-                  {rooms.map((r) => (
-                    <div
-                      key={r._id}
-                      className="flex justify-between items-center p-3 rounded-lg bg-muted/50"
-                    >
-                      <span className="text-sm text-muted-foreground">
-                        Room {r.roomNumber} — ৳{(r.price || 0).toLocaleString()}{" "}
-                        × {days} {days === 1 ? "night" : "nights"}
-                      </span>
-                      <span className="font-semibold text-foreground">
-                        ৳{((r.price || 0) * days).toLocaleString()}
-                      </span>
-                    </div>
-                  ))}
+                  {rooms.map((r) => {
+                    const priceInfo = getPriceDisplay(r, r.price ?? 0);
+                    const finalPerNight =
+                      Number(r.effectivePrice ?? r.price ?? 0) || 0;
+                    const totalForRoom = finalPerNight * days;
+
+                    return (
+                      <div
+                        key={r._id}
+                        className="flex justify-between items-center gap-3 p-3 rounded-lg bg-muted/50"
+                      >
+                        <div className="text-sm text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <span>Room {r.roomNumber} —</span>
+                            {priceInfo.hasDiscount && (
+                              <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">
+                                {priceInfo.discountPercentage}% OFF
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1 flex items-center gap-2">
+                            {priceInfo.hasDiscount && (
+                              <span className="line-through text-xs text-muted-foreground">
+                                {formatBDTPrice(priceInfo.original)}
+                              </span>
+                            )}
+                            <span>
+                              {formatBDTPrice(finalPerNight)} × {days}{" "}
+                              {days === 1 ? "night" : "nights"}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="font-semibold text-foreground">
+                          {formatBDTPrice(totalForRoom)}
+                        </span>
+                      </div>
+                    );
+                  })}
                   <div className="mt-4 pt-4 border-t border-border flex justify-between items-center">
                     <span className="font-bold text-foreground text-lg">
                       Total Amount
                     </span>
                     <span className="text-3xl font-bold text-primary">
-                      ৳{total.toLocaleString()}
+                      {formatBDTPrice(total)}
                     </span>
                   </div>
                 </div>

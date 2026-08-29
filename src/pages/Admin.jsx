@@ -39,6 +39,14 @@ import { api, imgUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import Invoice from "@/components/booking/Invoice";
 import logo from "@/assets/logo.png";
 
 const sidebarItems = [
@@ -827,6 +835,20 @@ const HotelsView = () => {
             </div>
             <div>
               <label className="mb-1 block text-xs text-muted-foreground">
+                Discount %
+              </label>
+              <Input
+                name="discountPercentage"
+                type="number"
+                min="0"
+                max="100"
+                defaultValue={form?.discountPercentage ?? ""}
+                placeholder="0"
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
                 Services (comma separated)
               </label>
               <Input
@@ -1154,6 +1176,20 @@ const RoomsView = ({ hotel, onBack }) => {
                 type="number"
                 defaultValue={form?.price || ""}
                 required
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Discount %
+              </label>
+              <Input
+                name="discountPercentage"
+                type="number"
+                min="0"
+                max="100"
+                defaultValue={form?.discountPercentage ?? ""}
+                placeholder="0"
                 className="bg-muted"
               />
             </div>
@@ -1707,6 +1743,20 @@ const CarsView = () => {
                 type="number"
                 defaultValue={form?.totalSeats || form?.quantity || 1}
                 required
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Discount %
+              </label>
+              <Input
+                name="discountPercentage"
+                type="number"
+                min="0"
+                max="100"
+                defaultValue={form?.discountPercentage ?? ""}
+                placeholder="0"
                 className="bg-muted"
               />
             </div>
@@ -2288,6 +2338,20 @@ const CarsRentView = () => {
                 />
               </div>
             </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Discount %
+              </label>
+              <Input
+                name="discountPercentage"
+                type="number"
+                min="0"
+                max="100"
+                defaultValue={form?.discountPercentage ?? ""}
+                placeholder="10"
+                className="bg-muted border-0 focus:ring-2 focus:ring-primary"
+              />
+            </div>
             {/* Quantity ✅ New Field */}
             <div>
               <label className="mb-2 block text-sm font-medium text-foreground">
@@ -2679,6 +2743,7 @@ const BookingsView = () => {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refundForm, setRefundForm] = useState(null);
+  const [invoiceModal, setInvoiceModal] = useState(null);
   const [rescheduleModal, setRescheduleModal] = useState(null);
   const [newCheckIn, setNewCheckIn] = useState("");
   const [newCheckOut, setNewCheckOut] = useState("");
@@ -2688,9 +2753,14 @@ const BookingsView = () => {
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [serviceFilter, setServiceFilter] = useState("all");
+  const [hotelFilter, setHotelFilter] = useState("all");
   const [reportService, setReportService] = useState("all");
+  const [reportHotelId, setReportHotelId] = useState("all");
   const [reportFrom, setReportFrom] = useState("");
   const [reportTo, setReportTo] = useState("");
+  const [reportDateField, setReportDateField] = useState("checkin");
+  const [dateField, setDateField] = useState("checkin");
+  const [hotels, setHotels] = useState([]);
   const [reporting, setReporting] = useState(false);
   const [expanded, setExpanded] = useState(null);
   const [viewMode, setViewMode] = useState("upcoming"); // "upcoming" (default: today+future), "past", "all"
@@ -2698,11 +2768,26 @@ const BookingsView = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
+  useEffect(() => {
+    api
+      .get("/api/admin/hotels")
+      .then((data) => setHotels(Array.isArray(data) ? data : []))
+      .catch(() => setHotels([]));
+  }, []);
+
   const load = (page = 1) => {
     setLoading(true);
     setCurrentPage(page);
     // Build query params
-    const params = new URLSearchParams({ limit: 15, page, viewMode });
+    const params = new URLSearchParams({
+      limit: 15,
+      page,
+      viewMode,
+      dateField,
+    });
+    if (hotelFilter !== "all") {
+      params.set("hotelId", hotelFilter);
+    }
 
     api
       .get(`/api/admin/bookings?${params.toString()}`)
@@ -2716,7 +2801,7 @@ const BookingsView = () => {
   };
   useEffect(() => {
     load(1);
-  }, [viewMode]);
+  }, [viewMode, dateField, hotelFilter]);
 
   const handleCancel = async (id) => {
     if (!confirm("Cancel this booking and initiate refund?")) return;
@@ -2790,6 +2875,19 @@ const BookingsView = () => {
     }
   };
 
+  const handleDownloadInvoice = async (booking) => {
+    if (!booking?._id) return;
+    try {
+      const invoiceData =
+        booking.type === "car"
+          ? await api.get(`/api/carrent/booking/${booking._id}/invoice`)
+          : await api.get(`/api/bookings/${booking._id}/invoice`);
+      setInvoiceModal(invoiceData);
+    } catch (err) {
+      alert(err.message || "Unable to load invoice.");
+    }
+  };
+
   const handleRescheduleSubmit = async (e) => {
     e.preventDefault();
     if (!rescheduleModal) return;
@@ -2857,7 +2955,6 @@ const BookingsView = () => {
       let item = "Unknown";
       let unit = "";
       let quantity = 0;
-      let extra = "";
       const totalAmount = Number(booking.totalAmount || 0);
 
       if (booking.type === "hotel") {
@@ -2865,19 +2962,16 @@ const BookingsView = () => {
         item = `${booking.hotelName || "Hotel"} room ${booking.roomNumber || "—"}`;
         quantity = Number(booking.days || 0);
         unit = "nights";
-        extra = "";
       } else if (booking.type === "car") {
         service = "Car";
         item = booking.carName || "Car";
         quantity = Number(booking.days || 0) || 1;
         unit = "days";
-        extra = "";
       } else if (booking.type === "package" || booking.type === "holiday") {
         service = "Holidays";
         item = booking.packageName || "Holiday Package";
-        quantity = Number(booking.peopleCount || 0);
+        quantity = Number(booking.peopleCount || 0) || 1;
         unit = "persons";
-        extra = "";
       } else {
         return;
       }
@@ -2890,25 +2984,18 @@ const BookingsView = () => {
         totalAmount: 0,
         count: 0,
         quantity: 0,
-        extraNotes: new Set(),
       };
 
       existing.totalAmount += totalAmount;
       existing.count += 1;
       existing.quantity += quantity;
-      if (extra) existing.extraNotes.add(extra);
       groups.set(key, existing);
     });
 
     return Array.from(groups.values()).map((group) => ({
       service: group.service,
       item: group.item,
-      description:
-        group.service === "Hotel"
-          ? `${group.item} x ${group.quantity} ${group.unit} = ${group.totalAmount}`
-          : group.service === "Holidays"
-            ? `${group.item} x ${group.quantity} ${group.unit} = ${group.totalAmount}`
-            : `${group.item} x ${group.quantity} ${group.unit} = ${group.totalAmount}`,
+      description: `${group.item} x ${group.quantity} ${group.unit} = ${group.totalAmount}`,
       totalQuantity: group.quantity,
       times: group.count,
       unit: group.unit,
@@ -2916,13 +3003,114 @@ const BookingsView = () => {
     }));
   };
 
-  const handleExportReportCSV = async () => {
+  const handleExportCurrentQueryCSV = () => {
+    if (!filtered.length) {
+      return alert("No bookings match the current query to export.");
+    }
+
+    const rows = [];
+    rows.push(
+      [
+        "Name",
+        "Email",
+        "Phone",
+        "NID",
+        "Booking Type",
+        "Service",
+        "Item",
+        "Booked On",
+        "Check-in / Travel Date",
+        "Amount",
+        "Status",
+        "Transaction ID",
+      ].join(","),
+    );
+
+    filtered.forEach((booking) => {
+      const bookingType =
+        booking.type === "coin_topup"
+          ? "Coin Top-up"
+          : booking.type === "car"
+            ? "Car"
+            : booking.type === "package" || booking.type === "holiday"
+              ? "Holiday"
+              : "Hotel";
+      const name = booking.userName || "";
+      const email = booking.userEmail || "";
+      const phone = booking.userPhone || booking.contactNumber || "";
+      const nid = booking.userNid || "";
+      const item =
+        booking.type === "hotel"
+          ? `${booking.hotelName || "Hotel"}${booking.roomNumber ? ` / Room ${booking.roomNumber}` : ""}`
+          : booking.type === "car"
+            ? booking.carName || "Car"
+            : booking.type === "package" || booking.type === "holiday"
+              ? booking.packageName || "Holiday Package"
+              : "Coin Top-up";
+      const bookingDate = booking.createdAt
+        ? new Date(booking.createdAt).toISOString().slice(0, 10)
+        : "";
+      const eventDate =
+        booking.pickupDate || booking.checkIn || booking.travelDate || "";
+      const displayEventDate = eventDate
+        ? new Date(eventDate).toISOString().slice(0, 10)
+        : "";
+
+      rows.push(
+        [
+          formatCSVCell(name),
+          formatCSVCell(email),
+          formatCSVCell(phone),
+          formatCSVCell(nid),
+          formatCSVCell(bookingType),
+          formatCSVCell(bookingType),
+          formatCSVCell(item),
+          formatCSVCell(bookingDate),
+          formatCSVCell(displayEventDate),
+          formatCSVCell(booking.totalAmount || 0),
+          formatCSVCell(booking.status || ""),
+          formatCSVCell(booking.transactionId || ""),
+        ].join(","),
+      );
+    });
+
+    const hotelLabel =
+      hotelFilter !== "all"
+        ? hotels.find((hotel) => hotel._id === hotelFilter)?.name || "hotel"
+        : "all-hotels";
+    const serviceLabel =
+      serviceFilter === "all"
+        ? "all-services"
+        : serviceFilter === "holidays"
+          ? "holidays"
+          : serviceFilter;
+    const dateLabel = dateFilter || "all-dates";
+
+    const csv = rows.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `booking-query-${hotelLabel}-${serviceLabel}-${dateField}-${dateLabel}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportDateRangeCSV = async () => {
     if (!reportFrom || !reportTo) {
       return alert("Select both report start and end dates.");
     }
+
     setReporting(true);
     try {
-      const params = new URLSearchParams({ viewMode: "all", limit: 10000 });
+      const params = new URLSearchParams({
+        viewMode: "all",
+        limit: 10000,
+        dateField: reportDateField,
+      });
+
       if (reportService !== "all") {
         params.set(
           "type",
@@ -2943,30 +3131,65 @@ const BookingsView = () => {
       const rows = [];
       rows.push(
         [
+          "Name",
+          "Email",
+          "Phone",
+          "NID",
+          "Booking Type",
           "Service",
           "Item",
-          "Description",
-          "TotalQuantity",
-          "Times",
-          "Unit",
-          "TotalAmount",
-          "From",
-          "To",
+          "Booked On",
+          "Check-in / Travel Date",
+          "Amount",
+          "Status",
+          "Transaction ID",
         ].join(","),
       );
 
-      buildReportRows(bookingsForReport).forEach((row) => {
+      bookingsForReport.forEach((booking) => {
+        const bookingType =
+          booking.type === "coin_topup"
+            ? "Coin Top-up"
+            : booking.type === "car"
+              ? "Car"
+              : booking.type === "package" || booking.type === "holiday"
+                ? "Holiday"
+                : "Hotel";
+        const name = booking.userName || "";
+        const email = booking.userEmail || "";
+        const phone = booking.userPhone || booking.contactNumber || "";
+        const nid = booking.userNid || "";
+        const item =
+          booking.type === "hotel"
+            ? `${booking.hotelName || "Hotel"}${booking.roomNumber ? ` / Room ${booking.roomNumber}` : ""}`
+            : booking.type === "car"
+              ? booking.carName || "Car"
+              : booking.type === "package" || booking.type === "holiday"
+                ? booking.packageName || "Holiday Package"
+                : "Coin Top-up";
+        const bookingDate = booking.createdAt
+          ? new Date(booking.createdAt).toISOString().slice(0, 10)
+          : "";
+        const eventDate =
+          booking.pickupDate || booking.checkIn || booking.travelDate || "";
+        const displayEventDate = eventDate
+          ? new Date(eventDate).toISOString().slice(0, 10)
+          : "";
+
         rows.push(
           [
-            formatCSVCell(row.service),
-            formatCSVCell(row.item),
-            formatCSVCell(row.description),
-            formatCSVCell(row.totalQuantity),
-            formatCSVCell(row.times),
-            formatCSVCell(row.unit),
-            formatCSVCell(row.totalAmount),
-            formatCSVCell(reportFrom),
-            formatCSVCell(reportTo),
+            formatCSVCell(name),
+            formatCSVCell(email),
+            formatCSVCell(phone),
+            formatCSVCell(nid),
+            formatCSVCell(bookingType),
+            formatCSVCell(bookingType),
+            formatCSVCell(item),
+            formatCSVCell(bookingDate),
+            formatCSVCell(displayEventDate),
+            formatCSVCell(booking.totalAmount || 0),
+            formatCSVCell(booking.status || ""),
+            formatCSVCell(booking.transactionId || ""),
           ].join(","),
         );
       });
@@ -2976,7 +3199,7 @@ const BookingsView = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `booking-report-${reportFrom}-${reportTo}.csv`;
+      a.download = `booking-report-${reportDateField}-${reportFrom}-${reportTo}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -3024,8 +3247,15 @@ const BookingsView = () => {
       (serviceFilter === "car" && b.type === "car") ||
       (serviceFilter === "holidays" &&
         (b.type === "package" || b.type === "holiday"));
+    const matchesHotel =
+      hotelFilter === "all" ||
+      (b.hotelId && b.hotelId === hotelFilter) ||
+      (b.hotelName &&
+        hotels.some(
+          (hotel) => hotel._id === hotelFilter && hotel.name === b.hotelName,
+        ));
 
-    return matchesSearch && matchesDate && matchesService;
+    return matchesSearch && matchesDate && matchesService && matchesHotel;
   });
 
   return (
@@ -3068,60 +3298,71 @@ const BookingsView = () => {
         </button>
       </div>
 
-      {/* Report Export Controls */}
-      <div className="mb-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
-            <label className="block text-xs font-semibold text-muted-foreground">
-              Report From
-            </label>
-            <Input
-              type="date"
-              value={reportFrom}
-              onChange={(e) => setReportFrom(e.target.value)}
-              className="bg-muted mt-2"
-            />
-          </div>
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
-            <label className="block text-xs font-semibold text-muted-foreground">
-              Report To
-            </label>
-            <Input
-              type="date"
-              value={reportTo}
-              onChange={(e) => setReportTo(e.target.value)}
-              className="bg-muted mt-2"
-            />
-          </div>
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
-            <label className="block text-xs font-semibold text-muted-foreground">
-              Report Service
-            </label>
-            <select
-              value={reportService}
-              onChange={(e) => setReportService(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
-            >
-              <option value="all">All Services</option>
-              <option value="hotel">Hotel</option>
-              <option value="car">Car</option>
-              <option value="holidays">Holidays</option>
-            </select>
-          </div>
+      <div className="mb-5 grid gap-3 rounded-2xl border border-border bg-card p-4 shadow-card lg:grid-cols-5">
+        <div>
+          <label className="block text-xs font-semibold text-muted-foreground">
+            Report From
+          </label>
+          <Input
+            type="date"
+            value={reportFrom}
+            onChange={(e) => setReportFrom(e.target.value)}
+            className="bg-muted mt-2"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-muted-foreground">
+            Report To
+          </label>
+          <Input
+            type="date"
+            value={reportTo}
+            onChange={(e) => setReportTo(e.target.value)}
+            className="bg-muted mt-2"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-muted-foreground">
+            Date Type
+          </label>
+          <select
+            value={reportDateField}
+            onChange={(e) => setReportDateField(e.target.value)}
+            className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
+          >
+            <option value="checkin">Check-in / Travel Date</option>
+            <option value="booking">Booked On Date</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-muted-foreground">
+            Report Service
+          </label>
+          <select
+            value={reportService}
+            onChange={(e) => setReportService(e.target.value)}
+            className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
+          >
+            <option value="all">All Services</option>
+            <option value="hotel">Hotel</option>
+            <option value="car">Car</option>
+            <option value="holidays">Holidays</option>
+          </select>
         </div>
         <div className="flex items-end gap-2">
+          <Button onClick={handleExportDateRangeCSV} disabled={reporting}>
+            {reporting ? "Exporting..." : "Date Range CSV"}
+          </Button>
           <Button
+            variant="outline"
             onClick={() => {
               setReportFrom("");
               setReportTo("");
               setReportService("all");
+              setReportDateField("checkin");
             }}
-            variant="outline"
           >
-            Reset Report
-          </Button>
-          <Button onClick={handleExportReportCSV} disabled={reporting}>
-            {reporting ? "Exporting..." : "Export Booking Report CSV"}
+            Reset
           </Button>
         </div>
       </div>
@@ -3164,27 +3405,81 @@ const BookingsView = () => {
           onChange={(e) => setSearch(e.target.value)}
           className="bg-muted w-64"
         />
-        <Input
-          type="date"
-          value={dateFilter}
-          onChange={(e) => setDateFilter(e.target.value)}
-          className="bg-muted w-44"
-          title="Filter by date - shows all bookings that overlap with this date"
-        />
-        {(search || dateFilter || serviceFilter !== "all") && (
+        <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-2 py-1">
+          <select
+            value={hotelFilter}
+            onChange={(e) => setHotelFilter(e.target.value)}
+            className="rounded-lg border border-border bg-background px-2 py-2 text-xs font-medium"
+          >
+            <option value="all">All Hotels</option>
+            {hotels.map((hotel) => (
+              <option key={hotel._id} value={hotel._id}>
+                {hotel.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-2 py-1">
+          <select
+            value={dateField}
+            onChange={(e) => setDateField(e.target.value)}
+            className="rounded-lg border border-border bg-background px-2 py-2 text-xs font-medium"
+          >
+            <option value="checkin">Check-in</option>
+            <option value="booking">Booked On</option>
+          </select>
+          <Input
+            type="date"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="bg-muted w-44"
+            title="Filter by selected date type"
+          />
+        </div>
+        {(search ||
+          dateFilter ||
+          serviceFilter !== "all" ||
+          hotelFilter !== "all") && (
           <Button
             variant="outline"
             size="sm"
             onClick={() => {
               setSearch("");
               setDateFilter("");
+              setDateField("checkin");
               setServiceFilter("all");
+              setHotelFilter("all");
             }}
           >
             Clear
           </Button>
         )}
+        <Button size="sm" onClick={handleExportCurrentQueryCSV}>
+          Export Current Query CSV
+        </Button>
       </div>
+
+      {invoiceModal && (
+        <Dialog
+          open={!!invoiceModal}
+          onOpenChange={() => setInvoiceModal(null)}
+        >
+          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto p-0">
+            <DialogHeader className="px-6 pt-6">
+              <DialogTitle>Booking Invoice</DialogTitle>
+              <DialogDescription>
+                Download or print the invoice for this booking.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="px-0 pb-0">
+              <Invoice
+                invoice={invoiceModal}
+                onClose={() => setInvoiceModal(null)}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {rescheduleModal && (
         <div className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-card">
@@ -3340,6 +3635,9 @@ const BookingsView = () => {
                   User
                 </th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                  NID
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                   Booking
                 </th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">
@@ -3382,6 +3680,9 @@ const BookingsView = () => {
                         <div className="text-xs text-muted-foreground">
                           {b.userEmail || ""}
                         </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-foreground">
+                        <div className="font-medium">{b.userNid || "—"}</div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="capitalize text-foreground font-medium">
@@ -3542,12 +3843,22 @@ const BookingsView = () => {
                                 {b.status}
                               </span>
                             )}
+                          <button
+                            title="Download invoice"
+                            className="rounded-lg p-1.5 text-muted-foreground hover:bg-info/10 hover:text-info transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadInvoice(b);
+                            }}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
                     {expanded === b._id && (
                       <tr key={`${b._id}-detail`} className="bg-muted/20">
-                        <td colSpan={7} className="px-6 py-4">
+                        <td colSpan={8} className="px-6 py-4">
                           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-sm">
                             <div>
                               <span className="text-muted-foreground text-xs">
@@ -3563,6 +3874,14 @@ const BookingsView = () => {
                               </span>
                               <p className="font-medium text-foreground">
                                 {b.userName} {b.userEmail && `(${b.userEmail})`}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground text-xs">
+                                NID
+                              </span>
+                              <p className="text-foreground">
+                                {b.userNid || "—"}
                               </p>
                             </div>
                             <div>
@@ -6451,6 +6770,20 @@ const BusesView = () => {
                 />
               </div>
             </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Discount %
+              </label>
+              <Input
+                name="discountPercentage"
+                type="number"
+                min="0"
+                max="100"
+                defaultValue={form?.discountPercentage ?? ""}
+                placeholder="0"
+                className="bg-muted"
+              />
+            </div>
             <div className="sm:col-span-2">
               <label className="mb-2 block text-sm font-medium text-foreground">
                 Routes (comma separated){" "}
@@ -6806,6 +7139,10 @@ const PackagesView = () => {
     formData.append("duration", e.target.duration.value.trim());
     formData.append("pricePerPerson", e.target.pricePerPerson.value || "0");
     formData.append("minimumPerson", e.target.minimumPerson.value || "0");
+    formData.append(
+      "discountPercentage",
+      e.target.discountPercentage.value || "0",
+    );
     formData.append("localTransport", e.target.localTransport.value.trim());
     formData.append("additionalInfo", e.target.additionalInfo.value.trim());
     formData.append(
@@ -6967,6 +7304,20 @@ const PackagesView = () => {
                 required
                 defaultValue={form?.minimumPerson ?? ""}
                 placeholder="2"
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Discount %
+              </label>
+              <Input
+                name="discountPercentage"
+                type="number"
+                min="0"
+                max="100"
+                defaultValue={form?.discountPercentage ?? ""}
+                placeholder="0"
                 className="bg-muted"
               />
             </div>

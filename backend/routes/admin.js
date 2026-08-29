@@ -9,6 +9,7 @@ const { ObjectId } = require("mongodb");
 const { auth, role } = require("../middleware/auth");
 const upload = require("../middleware/upload");
 const { sendVerificationEmail } = require("../utils/emailService");
+const { applyDiscountToPrice } = require("../utils/pricing");
 
 // Utility to escape user input when building a RegExp for MongoDB queries
 function escapeRegex(input = "") {
@@ -145,7 +146,8 @@ router.post(
   upload.single("image"),
   async (req, res) => {
     try {
-      const { name, area, description, totalRooms } = req.body;
+      const { name, area, description, totalRooms, discountPercentage } =
+        req.body;
       let services = [];
       try {
         services = JSON.parse(req.body.services || "[]");
@@ -155,6 +157,7 @@ router.post(
 
       const db = await getDb();
       const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+      const normalizedDiscount = Number(discountPercentage || 0);
 
       const result = await db.collection("hotels").insertOne({
         name,
@@ -163,6 +166,9 @@ router.post(
         description: description || "",
         services,
         totalRooms: parseInt(totalRooms) || 0,
+        discountPercentage: Number.isFinite(normalizedDiscount)
+          ? Math.max(0, Math.min(100, normalizedDiscount))
+          : 0,
         isActive: true,
         createdAt: new Date(),
       });
@@ -184,7 +190,8 @@ router.put(
     try {
       if (!isValidObjectId(req.params.id))
         return res.status(400).json({ message: "Invalid id" });
-      const { name, area, description, totalRooms } = req.body;
+      const { name, area, description, totalRooms, discountPercentage } =
+        req.body;
       let services = [];
       try {
         services = JSON.parse(req.body.services || "[]");
@@ -197,6 +204,9 @@ router.put(
         description,
         services,
         totalRooms: parseInt(totalRooms) || 0,
+        discountPercentage: Number.isFinite(Number(discountPercentage || 0))
+          ? Math.max(0, Math.min(100, Number(discountPercentage || 0)))
+          : 0,
       };
       if (req.file) update.image = `/uploads/${req.file.filename}`;
 
@@ -272,7 +282,8 @@ router.post(
     try {
       if (!isValidObjectId(req.params.id))
         return res.status(400).json({ message: "Invalid id" });
-      const { roomNumber, price, maxGuests, mealPlan } = req.body;
+      const { roomNumber, price, maxGuests, mealPlan, discountPercentage } =
+        req.body;
       let services = [];
       try {
         services = JSON.parse(req.body.services || "[]");
@@ -301,10 +312,19 @@ router.post(
         ? req.files.map((f) => `/uploads/${f.filename}`)
         : [];
 
+      const basePrice = parseFloat(price) || 0;
+      const discount = Number(discountPercentage || 0);
+      const effectivePricing = applyDiscountToPrice(basePrice, discount);
+
       const result = await db.collection("rooms").insertOne({
         hotelId: req.params.id,
         roomNumber,
-        price: parseFloat(price),
+        price: basePrice,
+        basePrice,
+        discountPercentage: Number.isFinite(discount)
+          ? Math.max(0, Math.min(100, discount))
+          : 0,
+        effectivePrice: effectivePricing.price,
         maxGuests: maxGuests ? parseInt(maxGuests) : null,
         mealPlan: mealPlan || "Breakfast Included",
         services,
@@ -331,14 +351,27 @@ router.put(
     try {
       if (!isValidObjectId(req.params.id))
         return res.status(400).json({ message: "Invalid id" });
-      const { roomNumber, price, maxGuests, mealPlan } = req.body;
+      const { roomNumber, price, maxGuests, mealPlan, discountPercentage } =
+        req.body;
       let services = [];
       try {
         services = JSON.parse(req.body.services || "[]");
       } catch {}
 
       const db = await getDb();
-      const update = { roomNumber, price: parseFloat(price), services };
+      const basePrice = parseFloat(price) || 0;
+      const discount = Number(discountPercentage || 0);
+      const effectivePricing = applyDiscountToPrice(basePrice, discount);
+      const update = {
+        roomNumber,
+        price: basePrice,
+        basePrice,
+        discountPercentage: Number.isFinite(discount)
+          ? Math.max(0, Math.min(100, discount))
+          : 0,
+        effectivePrice: effectivePricing.price,
+        services,
+      };
       if (maxGuests) update.maxGuests = parseInt(maxGuests);
       if (mealPlan) update.mealPlan = mealPlan;
       if (req.files && req.files.length > 0) {
@@ -574,6 +607,7 @@ router.post(
         price,
         totalSeats,
         places,
+        discountPercentage,
       } = req.body;
       if (!name || !price || !totalSeats) {
         return res
@@ -589,6 +623,9 @@ router.post(
             .map((p) => p.trim())
             .filter(Boolean)
         : [];
+      const basePrice = parseFloat(price) || 0;
+      const discount = Number(discountPercentage || 0);
+      const effectivePricing = applyDiscountToPrice(basePrice, discount);
       const db = await getDb();
       const result = await db.collection("cars").insertOne({
         name,
@@ -596,7 +633,12 @@ router.post(
         seats: parseInt(seats) || 5,
         transmission: transmission || "Automatic",
         fuel: fuel || "Petrol",
-        price: parseFloat(price),
+        price: basePrice,
+        basePrice,
+        discountPercentage: Number.isFinite(discount)
+          ? Math.max(0, Math.min(100, discount))
+          : 0,
+        effectivePrice: effectivePricing.price,
         totalSeats: parseInt(totalSeats),
         places: placesArr,
         images,
@@ -630,6 +672,7 @@ router.put(
         price,
         totalSeats,
         places,
+        discountPercentage,
       } = req.body;
       const db = await getDb();
 
@@ -638,13 +681,21 @@ router.put(
         .collection("cars")
         .findOne({ _id: new ObjectId(req.params.id) });
 
+      const basePrice = parseFloat(price) || 0;
+      const discount = Number(discountPercentage || 0);
+      const effectivePricing = applyDiscountToPrice(basePrice, discount);
       const update = {
         name,
         type,
         seats: parseInt(seats),
         transmission,
         fuel,
-        price: parseFloat(price),
+        price: basePrice,
+        basePrice,
+        discountPercentage: Number.isFinite(discount)
+          ? Math.max(0, Math.min(100, discount))
+          : 0,
+        effectivePrice: effectivePricing.price,
         totalSeats: parseInt(totalSeats),
         places: places
           ? places
@@ -804,6 +855,7 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
       dateTo,
       hotelId,
       viewMode = "upcoming", // "upcoming" = today+future (default), "past" = before today, "all" = no filter
+      dateField = "checkin",
     } = req.query;
 
     const today = new Date();
@@ -832,11 +884,17 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
 
     // Date filtering based on viewMode
     if (viewMode === "upcoming") {
-      // Default: show today and future bookings
-      bookingsMatch.startDate = { $gte: today };
+      if (dateField === "booking") {
+        bookingsMatch.createdAt = { $gte: today };
+      } else {
+        bookingsMatch.startDate = { $gte: today };
+      }
     } else if (viewMode === "past") {
-      // Show past bookings (before today)
-      bookingsMatch.startDate = { $lt: today };
+      if (dateField === "booking") {
+        bookingsMatch.createdAt = { $lt: today };
+      } else {
+        bookingsMatch.startDate = { $lt: today };
+      }
     }
     // Filter by hotelId when provided
     if (hotelId && isValidObjectId(hotelId)) {
@@ -853,7 +911,11 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
         end.setUTCHours(23, 59, 59, 999);
         dateFilter.$lte = end;
       }
-      bookingsMatch.startDate = dateFilter;
+      if (dateField === "booking") {
+        bookingsMatch.createdAt = dateFilter;
+      } else {
+        bookingsMatch.startDate = dateFilter;
+      }
     }
 
     bookingsPipeline.push({ $match: bookingsMatch });
@@ -877,6 +939,22 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
         },
         userEmail: {
           $ifNull: [{ $arrayElemAt: ["$userInfo.email", 0] }, ""],
+        },
+        userPhone: {
+          $ifNull: [
+            "$contactNumber",
+            "$guestDetails.contactNumber",
+            { $arrayElemAt: ["$userInfo.phone", 0] },
+            "",
+          ],
+        },
+        userNid: {
+          $ifNull: [
+            "$guestDetails.nidNumber",
+            "$nidNumber",
+            { $arrayElemAt: ["$userInfo.nidNumber", 0] },
+            "",
+          ],
         },
       },
     });
@@ -914,6 +992,9 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
     if (search) {
       const esc = escapeRegex(search);
       searchFilters.push({ userName: { $regex: esc, $options: "i" } });
+      searchFilters.push({ userEmail: { $regex: esc, $options: "i" } });
+      searchFilters.push({ userNid: { $regex: esc, $options: "i" } });
+      searchFilters.push({ userPhone: { $regex: esc, $options: "i" } });
       searchFilters.push({ carName: { $regex: esc, $options: "i" } });
       searchFilters.push({ hotelName: { $regex: esc, $options: "i" } });
       searchFilters.push({ packageName: { $regex: esc, $options: "i" } });
@@ -944,9 +1025,17 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
       ];
 
       if (viewMode === "upcoming") {
-        carMatch.pickupDate = { $gte: today };
+        if (dateField === "booking") {
+          carMatch.createdAt = { $gte: today };
+        } else {
+          carMatch.pickupDate = { $gte: today };
+        }
       } else if (viewMode === "past") {
-        carMatch.pickupDate = { $lt: today };
+        if (dateField === "booking") {
+          carMatch.createdAt = { $lt: today };
+        } else {
+          carMatch.pickupDate = { $lt: today };
+        }
       }
 
       if (dateFrom || dateTo) {
@@ -957,7 +1046,11 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
           end.setUTCHours(23, 59, 59, 999);
           dateFilter.$lte = end;
         }
-        carMatch.pickupDate = dateFilter;
+        if (dateField === "booking") {
+          carMatch.createdAt = dateFilter;
+        } else {
+          carMatch.pickupDate = dateFilter;
+        }
       }
 
       carPipeline.push({ $match: carMatch });
@@ -981,6 +1074,20 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
           },
           userEmail: {
             $ifNull: [{ $arrayElemAt: ["$userInfo.email", 0] }, ""],
+          },
+          userPhone: {
+            $ifNull: [
+              "$contactNumber",
+              { $arrayElemAt: ["$userInfo.phone", 0] },
+              "",
+            ],
+          },
+          userNid: {
+            $ifNull: [
+              "$nidNumber",
+              { $arrayElemAt: ["$userInfo.nidNumber", 0] },
+              "",
+            ],
           },
         },
       });
@@ -1031,9 +1138,17 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
       ];
 
       if (viewMode === "upcoming") {
-        busMatch.travelDate = { $gte: today };
+        if (dateField === "booking") {
+          busMatch.createdAt = { $gte: today };
+        } else {
+          busMatch.travelDate = { $gte: today };
+        }
       } else if (viewMode === "past") {
-        busMatch.travelDate = { $lt: today };
+        if (dateField === "booking") {
+          busMatch.createdAt = { $lt: today };
+        } else {
+          busMatch.travelDate = { $lt: today };
+        }
       }
 
       if (dateFrom || dateTo) {
@@ -1044,7 +1159,11 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
           end.setUTCHours(23, 59, 59, 999);
           dateFilter.$lte = end;
         }
-        busMatch.travelDate = dateFilter;
+        if (dateField === "booking") {
+          busMatch.createdAt = dateFilter;
+        } else {
+          busMatch.travelDate = dateFilter;
+        }
       }
 
       busPipeline.push({ $match: busMatch });
@@ -1068,6 +1187,20 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
           },
           userEmail: {
             $ifNull: [{ $arrayElemAt: ["$userInfo.email", 0] }, ""],
+          },
+          userPhone: {
+            $ifNull: [
+              "$contactNumber",
+              { $arrayElemAt: ["$userInfo.phone", 0] },
+              "",
+            ],
+          },
+          userNid: {
+            $ifNull: [
+              "$nidNumber",
+              { $arrayElemAt: ["$userInfo.nidNumber", 0] },
+              "",
+            ],
           },
         },
       });
@@ -1104,9 +1237,17 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
 
       // Apply viewMode filter to coin topups
       if (viewMode === "upcoming") {
-        coinMatch.submittedAt = { $gte: today };
+        if (dateField === "booking") {
+          coinMatch.submittedAt = { $gte: today };
+        } else {
+          coinMatch.submittedAt = { $gte: today };
+        }
       } else if (viewMode === "past") {
-        coinMatch.submittedAt = { $lt: today };
+        if (dateField === "booking") {
+          coinMatch.submittedAt = { $lt: today };
+        } else {
+          coinMatch.submittedAt = { $lt: today };
+        }
       }
 
       // Date range filter overrides viewMode
@@ -1138,6 +1279,8 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
             userId: cr.userId,
             userName: user?.name || "Unknown",
             userEmail: user?.email || "",
+            userPhone: user?.phone || "",
+            userNid: user?.nidNumber || "",
             amount: cr.amount,
             totalAmount: cr.amount,
             status: cr.status,
@@ -1155,6 +1298,8 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
           (ct) =>
             ct.userName?.toLowerCase().includes(q) ||
             ct.userEmail?.toLowerCase().includes(q) ||
+            ct.userNid?.toLowerCase().includes(q) ||
+            ct.userPhone?.toLowerCase().includes(q) ||
             "coin topup".includes(q),
         );
       }
@@ -1169,6 +1314,9 @@ router.get("/bookings", auth, role("admin"), async (req, res) => {
       allItems = allItems.filter(
         (item) =>
           item.userName?.toLowerCase().includes(q) ||
+          item.userEmail?.toLowerCase().includes(q) ||
+          item.userNid?.toLowerCase().includes(q) ||
+          item.userPhone?.toLowerCase().includes(q) ||
           item.carName?.toLowerCase().includes(q) ||
           item.hotelName?.toLowerCase().includes(q) ||
           item.busName?.toLowerCase().includes(q) ||
@@ -3165,22 +3313,36 @@ router.post(
   upload.array("images", 5),
   async (req, res) => {
     try {
-      const { name, fuel, price, quantity, places, type, transmission } =
-        req.body;
+      const {
+        name,
+        fuel,
+        price,
+        quantity,
+        places,
+        type,
+        transmission,
+        discountPercentage,
+      } = req.body;
 
-      // ✅ Removed quantity from required check
       if (!name || !price) {
         return res.status(400).json({ message: "Name and price are required" });
       }
 
       const db = await getDb();
       const images = req.files?.map((f) => `/uploads/${f.filename}`) || [];
+      const basePrice = Number(price) || 0;
+      const discount = Number(discountPercentage || 0);
+      const effectivePricing = applyDiscountToPrice(basePrice, discount);
 
       const car = {
         name,
         fuel,
-        price: parseInt(price),
-        // ✅ Default to 1 if not provided
+        price: basePrice,
+        basePrice,
+        discountPercentage: Number.isFinite(discount)
+          ? Math.max(0, Math.min(100, discount))
+          : 0,
+        effectivePrice: effectivePricing.price,
         quantity: quantity ? parseInt(quantity) : 1,
         places: places ? places.split(",").map((p) => p.trim()) : [],
         type,
@@ -3209,8 +3371,16 @@ router.put(
   upload.array("images", 5),
   async (req, res) => {
     try {
-      const { name, fuel, price, quantity, places, type, transmission } =
-        req.body;
+      const {
+        name,
+        fuel,
+        price,
+        quantity,
+        places,
+        type,
+        transmission,
+        discountPercentage,
+      } = req.body;
       const db = await getDb();
 
       const car = await db
@@ -3226,15 +3396,29 @@ router.put(
         images = req.files.map((f) => `/uploads/${f.filename}`);
       }
 
+      const basePrice =
+        price !== undefined ? Number(price) || 0 : Number(car.price) || 0;
+      const discount =
+        discountPercentage !== undefined
+          ? Number(discountPercentage || 0)
+          : Number(car.discountPercentage || 0);
+      const effectivePricing = applyDiscountToPrice(basePrice, discount);
+
       const updated = {
-        name,
-        fuel,
-        price: parseInt(price),
-        // ✅ Fall back to existing car quantity if not submitted
+        name: name || car.name,
+        fuel: fuel || car.fuel,
+        price: basePrice,
+        basePrice,
+        discountPercentage: Number.isFinite(discount)
+          ? Math.max(0, Math.min(100, discount))
+          : 0,
+        effectivePrice: effectivePricing.price,
         quantity: quantity ? parseInt(quantity) : (car.quantity ?? 1),
-        places: places ? places.split(",").map((p) => p.trim()) : [],
-        type,
-        transmission,
+        places: places
+          ? places.split(",").map((p) => p.trim())
+          : car.places || [],
+        type: type || car.type,
+        transmission: transmission || car.transmission,
         images,
         updatedAt: new Date(),
       };
@@ -3376,6 +3560,7 @@ router.post(
         totalSeats,
         routes,
         tripType,
+        discountPercentage,
       } = req.body;
 
       if (!name || !acType || !departureTime || !price || !routes) {
@@ -3405,13 +3590,21 @@ router.post(
           .json({ message: "At least one route is required" });
       }
 
+      const basePrice = Number(price) || 0;
+      const discount = Number(discountPercentage || 0);
+      const effectivePricing = applyDiscountToPrice(basePrice, discount);
       const bus = {
         name,
         busType: busType || "Standard Bus",
         seats: parseInt(seats) || 45,
         acType, // "AC" or "Non-AC"
         departureTime, // "10:30 AM", "2:00 PM", etc.
-        price: parseInt(price),
+        price: basePrice,
+        basePrice,
+        discountPercentage: Number.isFinite(discount)
+          ? Math.max(0, Math.min(100, discount))
+          : 0,
+        effectivePrice: effectivePricing.price,
         totalSeats: parseInt(totalSeats) || 45,
         routes: routeArray,
         tripType: tripType || "one-way", // "one-way" or "round-trip"
@@ -3449,6 +3642,7 @@ router.put(
         totalSeats,
         routes,
         tripType,
+        discountPercentage,
       } = req.body;
       const db = await getDb();
 
@@ -3475,13 +3669,25 @@ router.put(
             ? routes
             : bus.routes;
 
+      const basePrice =
+        price !== undefined ? Number(price) || 0 : Number(bus.price) || 0;
+      const discount =
+        discountPercentage !== undefined
+          ? Number(discountPercentage || 0)
+          : Number(bus.discountPercentage || 0);
+      const effectivePricing = applyDiscountToPrice(basePrice, discount);
       const updated = {
         name: name || bus.name,
         busType: busType || bus.busType,
         seats: parseInt(seats) || bus.seats,
         acType: acType || bus.acType,
         departureTime: departureTime || bus.departureTime,
-        price: parseInt(price) || bus.price,
+        price: basePrice,
+        basePrice,
+        discountPercentage: Number.isFinite(discount)
+          ? Math.max(0, Math.min(100, discount))
+          : 0,
+        effectivePrice: effectivePricing.price,
         totalSeats: parseInt(totalSeats) || bus.totalSeats || 45,
         routes: routeArray,
         tripType: tripType || bus.tripType || "one-way",
@@ -3587,6 +3793,7 @@ router.post(
         termsAndConditions,
         description,
         giftIncluded,
+        discountPercentage,
       } = req.body;
 
       const pricePerPersonValue = Number(pricePerPerson);
@@ -3608,6 +3815,11 @@ router.post(
 
       const imageUrl = req.file ? `/uploads/${req.file.filename}` : "";
       const db = await getDb();
+      const discount = Number(discountPercentage || 0);
+      const effectivePricing = applyDiscountToPrice(
+        pricePerPersonValue,
+        discount,
+      );
       const pkg = {
         name,
         transportation,
@@ -3615,6 +3827,11 @@ router.post(
         meal,
         duration: duration || "",
         pricePerPerson: pricePerPersonValue,
+        basePrice: pricePerPersonValue,
+        discountPercentage: Number.isFinite(discount)
+          ? Math.max(0, Math.min(100, discount))
+          : 0,
+        effectivePrice: effectivePricing.price,
         minimumPerson: minimumPersonValue,
         localTransport: localTransport || "",
         additionalInfo: additionalInfo || "",
@@ -3670,6 +3887,7 @@ router.put(
         termsAndConditions,
         description,
         giftIncluded,
+        discountPercentage,
       } = req.body;
 
       const pricePerPersonValue =
@@ -3681,6 +3899,15 @@ router.put(
           ? Number(minimumPerson)
           : existing.minimumPerson;
 
+      const discount =
+        discountPercentage !== undefined
+          ? Number(discountPercentage || 0)
+          : Number(existing.discountPercentage || 0);
+      const finalBasePrice =
+        !Number.isNaN(pricePerPersonValue) && pricePerPersonValue > 0
+          ? pricePerPersonValue
+          : Number(existing.basePrice || existing.pricePerPerson || 0);
+      const effectivePricing = applyDiscountToPrice(finalBasePrice, discount);
       const updated = {
         name: name || existing.name,
         transportation: transportation || existing.transportation,
@@ -3691,6 +3918,11 @@ router.put(
           !Number.isNaN(pricePerPersonValue) && pricePerPersonValue > 0
             ? pricePerPersonValue
             : existing.pricePerPerson,
+        basePrice: finalBasePrice,
+        discountPercentage: Number.isFinite(discount)
+          ? Math.max(0, Math.min(100, discount))
+          : 0,
+        effectivePrice: effectivePricing.price,
         minimumPerson:
           !Number.isNaN(minimumPersonValue) && minimumPersonValue > 0
             ? minimumPersonValue

@@ -109,12 +109,13 @@ router.post("/initiate/hotel", auth, async (req, res) => {
         });
       }
 
-      totalAmount += room.price * days;
+      const effectiveRoomPrice = Number(room.effectivePrice ?? room.price ?? 0);
+      totalAmount += effectiveRoomPrice * days;
       bookingRooms.push({
         roomId: room._id.toString(),
         roomNumber: room.roomNumber,
-        pricePerNight: room.price,
-        roomTotal: room.price * days,
+        pricePerNight: effectiveRoomPrice,
+        roomTotal: effectiveRoomPrice * days,
       });
     }
 
@@ -132,6 +133,7 @@ router.post("/initiate/hotel", auth, async (req, res) => {
       pricePerNight: r.pricePerNight,
       totalAmount: r.roomTotal,
       contactNumber: contactNumber || "",
+      nidNumber: guestDetails?.nidNumber || "",
       guestDetails: guestDetails || {},
       status: "pending", // Pending manual payment verification
       paymentMethod: "manual",
@@ -198,7 +200,10 @@ router.post("/initiate/package", auth, async (req, res) => {
     const guestEmail =
       userDoc?.email || req.user.email || guestDetails?.email || "";
     const finalGuestDetails = { ...(guestDetails || {}), email: guestEmail };
-    const totalAmount = Number(pkg.pricePerPerson || 0) * count;
+    const effectivePricePerPerson = Number(
+      pkg.effectivePrice ?? pkg.pricePerPerson ?? 0,
+    );
+    const totalAmount = effectivePricePerPerson * count;
 
     const booking = {
       userId: req.user.id,
@@ -207,8 +212,9 @@ router.post("/initiate/package", auth, async (req, res) => {
       packageName: pkg.name,
       travelDate: travelDateObj,
       peopleCount: count,
-      pricePerPerson: Number(pkg.pricePerPerson || 0),
+      pricePerPerson: effectivePricePerPerson,
       contactNumber: contactNumber || "",
+      nidNumber: finalGuestDetails?.nidNumber || "",
       totalAmount,
       status: "pending",
       paymentMethod: "manual",
@@ -237,8 +243,14 @@ router.post("/initiate/car", auth, async (req, res) => {
         .json({ message: "Staff and admin accounts cannot book cars" });
     }
 
-    const { carId, pickupDate, returnDate, pickupLocation, contactNumber } =
-      req.body;
+    const {
+      carId,
+      pickupDate,
+      returnDate,
+      pickupLocation,
+      contactNumber,
+      nidNumber,
+    } = req.body;
 
     if (!carId || !pickupDate || !returnDate) {
       return res.status(400).json({
@@ -298,6 +310,7 @@ router.post("/initiate/car", auth, async (req, res) => {
       returnDate: returnDateObj,
       pickupLocation: pickupLocation || "",
       contactNumber: contactNumber || "",
+      nidNumber: nidNumber || "",
       days,
       pricePerDay: car.price,
       totalAmount,
@@ -306,7 +319,7 @@ router.post("/initiate/car", auth, async (req, res) => {
       createdAt: now,
     };
 
-    const result = await db.collection("bookings").insertOne(booking);
+    const result = await db.collection("carrentBookings").insertOne(booking);
 
     res.json({
       message: "Booking initiated for manual payment",
@@ -607,6 +620,7 @@ router.post("/initiate/carrent", auth, async (req, res) => {
       seatsBooked,
       pickupLocation,
       contactNumber,
+      nidNumber,
     } = req.body;
 
     if (!serviceId || !pickupDate || !returnDate || !seatsBooked) {
@@ -676,7 +690,9 @@ router.post("/initiate/carrent", auth, async (req, res) => {
       });
     }
 
-    const totalAmount = service.price * seatsCount;
+    const servicePrice =
+      Number(service.effectivePrice ?? service.price ?? 0) || 0;
+    const totalAmount = servicePrice * seatsCount;
 
     // Create pending booking for manual payment
     const booking = {
@@ -692,7 +708,8 @@ router.post("/initiate/carrent", auth, async (req, res) => {
       seatsBooked: seatsCount,
       pickupLocation: pickupLocation || "",
       contactNumber: contactNumber || "",
-      pricePerSeat: service.price,
+      nidNumber: nidNumber || "",
+      pricePerSeat: servicePrice,
       totalAmount,
       status: "pending", // Pending manual payment verification
       paymentMethod: "manual",

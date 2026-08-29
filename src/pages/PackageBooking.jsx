@@ -5,6 +5,7 @@ import Footer from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { formatBDTPrice, getPriceDisplay } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -88,7 +89,8 @@ export default function PackageBooking() {
   const minPeople = Number(pkg.minimumPerson || 1);
   const belowMinimum = Number(peopleCount) < minPeople;
   const totalAmount =
-    Number(pkg.pricePerPerson || 0) * Number(peopleCount || 0);
+    Number(pkg.effectivePrice ?? pkg.pricePerPerson ?? 0) *
+    Number(peopleCount || 0);
 
   const validateBooking = () => {
     if (
@@ -291,8 +293,29 @@ export default function PackageBooking() {
               </div>
               <div className="rounded-3xl border border-slate-200/80 bg-white p-5">
                 <p className="text-sm text-slate-500">Price / Person</p>
-                <p className="mt-2 text-lg font-semibold text-slate-900">
-                  ৳{Number(pkg.pricePerPerson).toLocaleString()}
+                <div className="mt-2 flex items-center gap-2">
+                  {getPriceDisplay(pkg, pkg.pricePerPerson ?? 0)
+                    .hasDiscount && (
+                    <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">
+                      {
+                        getPriceDisplay(pkg, pkg.pricePerPerson ?? 0)
+                          .discountPercentage
+                      }
+                      % OFF
+                    </span>
+                  )}
+                </div>
+                {getPriceDisplay(pkg, pkg.pricePerPerson ?? 0).hasDiscount && (
+                  <p className="mt-1 text-xs text-slate-500 line-through">
+                    {formatBDTPrice(
+                      getPriceDisplay(pkg, pkg.pricePerPerson ?? 0).original,
+                    )}
+                  </p>
+                )}
+                <p className="mt-1 text-lg font-semibold text-slate-900">
+                  {formatBDTPrice(
+                    Number(pkg.effectivePrice ?? pkg.pricePerPerson ?? 0) || 0,
+                  )}
                 </p>
               </div>
               <div className="rounded-3xl border border-slate-200/80 bg-white p-5">
@@ -665,40 +688,40 @@ export default function PackageBooking() {
                   </div>
 
                   <div className="space-y-2">
-  <label className="text-sm font-medium text-slate-700">
-    Payment Screenshot
-  </label>
+                    <label className="text-sm font-medium text-slate-700">
+                      Payment Screenshot
+                    </label>
 
-  <label className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-5 transition-all duration-300 hover:border-sky-500 hover:bg-sky-50">
-    <input
-      type="file"
-      accept="image/*"
-      onChange={handleScreenshotUpload}
-      className="hidden"
-    />
+                    <label className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-5 transition-all duration-300 hover:border-sky-500 hover:bg-sky-50">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleScreenshotUpload}
+                        className="hidden"
+                      />
 
-    <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-sky-100 text-sky-600 transition-all group-hover:bg-sky-600 group-hover:text-white">
-      <Upload className="h-5 w-5" />
-    </div>
+                      <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-sky-100 text-sky-600 transition-all group-hover:bg-sky-600 group-hover:text-white">
+                        <Upload className="h-5 w-5" />
+                      </div>
 
-    <h4 className="text-sm font-semibold text-slate-800">
-      {manualScreenshot
-        ? "Screenshot Uploaded"
-        : "Upload Payment Screenshot"}
-    </h4>
+                      <h4 className="text-sm font-semibold text-slate-800">
+                        {manualScreenshot
+                          ? "Screenshot Uploaded"
+                          : "Upload Payment Screenshot"}
+                      </h4>
 
-    <p className="mt-1 text-center text-xs text-slate-500">
-      PNG, JPG or JPEG (Max 5MB)
-    </p>
+                      <p className="mt-1 text-center text-xs text-slate-500">
+                        PNG, JPG or JPEG (Max 5MB)
+                      </p>
 
-    {manualScreenshot && (
-      <div className="mt-3 flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
-        <Check className="h-3.5 w-3.5" />
-        Uploaded Successfully
-      </div>
-    )}
-  </label>
-</div>
+                      {manualScreenshot && (
+                        <div className="mt-3 flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
+                          <Check className="h-3.5 w-3.5" />
+                          Uploaded Successfully
+                        </div>
+                      )}
+                    </label>
+                  </div>
 
                   <Button
                     onClick={handleManualPayment}

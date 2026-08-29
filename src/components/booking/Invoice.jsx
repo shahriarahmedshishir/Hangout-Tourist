@@ -179,9 +179,9 @@ const Invoice = ({ invoice, onClose }) => {
             <h3 className="font-semibold mb-3">Booking Information:</h3>
             <div className="grid grid-cols-2 gap-0">
               <div className="col-span-2 text-sm pb-2">
-                <strong>Booking Reference:</strong>{" "}
+                <strong>Transaction ID:</strong>{" "}
                 <span className="font-mono select-all">
-                  {invoice.bookingNumber}
+                  {invoice.payment?.transactionId || invoice.bookingNumber}
                 </span>
               </div>
               <div>
