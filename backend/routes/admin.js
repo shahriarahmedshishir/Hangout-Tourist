@@ -5,11 +5,15 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { getDb } = require("../db");
+const { delCache } = require("../cache");
 const { ObjectId } = require("mongodb");
 const { auth, role } = require("../middleware/auth");
 const upload = require("../middleware/upload");
 const { sendVerificationEmail } = require("../utils/emailService");
-const { applyDiscountToPrice } = require("../utils/pricing");
+const {
+  applyDiscountToPrice,
+  normalizeDateDiscounts,
+} = require("../utils/pricing");
 
 // Utility to escape user input when building a RegExp for MongoDB queries
 function escapeRegex(input = "") {
@@ -18,6 +22,19 @@ function escapeRegex(input = "") {
 }
 
 const adminAuth = [auth, role("admin")];
+
+function getUploadedFiles(files) {
+  if (Array.isArray(files)) return files;
+  if (!files || typeof files !== "object") return [];
+  return Object.values(files).flat();
+}
+
+async function invalidateHotelCaches(hotelId = null) {
+  if (hotelId) await delCache(`hotel:${hotelId}`);
+  for (let page = 1; page <= 10; page += 1) {
+    await delCache(`hotels:list:${page}:20`);
+  }
+}
 
 // Helper function to delete image files from /uploads
 function deleteImageFiles(imageUrls) {
@@ -36,6 +53,155 @@ function deleteImageFiles(imageUrls) {
 
 function isValidObjectId(id) {
   return /^[0-9a-fA-F]{24}$/.test(id);
+}
+
+function parseArrayValue(value) {
+  if (Array.isArray(value)) {
+    return value.map((v) => String(v || "").trim()).filter(Boolean);
+  }
+
+  if (typeof value !== "string") return [];
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      return parsed.map((v) => String(v || "").trim()).filter(Boolean);
+    }
+  } catch {}
+
+  return trimmed
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+function parseNumberValue(value, fallback = 0) {
+  const num = Number(value ?? fallback);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function parseJsonObject(value, fallback = {}) {
+  if (!value) return fallback;
+  if (typeof value === "object") return value;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function parseRoomDiscounts(value) {
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  return normalizeDateDiscounts(value);
+}
+
+function normalizeHotelPayload(body, uploadedImages = []) {
+  const hotelImages = [
+    ...uploadedImages.map((file) => `/uploads/${file.filename}`),
+    ...parseArrayValue(body.images || body.image || []),
+  ].filter(Boolean);
+
+  const facilityDetails = parseJsonObject(body.facilitiesDetails, {});
+  const policy = parseJsonObject(body.policy, {});
+  const location = parseJsonObject(body.location, {});
+  const review = parseJsonObject(body.review, {});
+
+  return {
+    name: String(body.name || "").trim(),
+    propertyType: body.propertyType || "Hotel",
+    starRating: body.starRating || "3 Star",
+    review: {
+      rating: parseNumberValue(review.rating ?? body.reviewRating, 0),
+      totalReviews: parseNumberValue(
+        review.totalReviews ?? body.reviewTotalReviews,
+        0,
+      ),
+    },
+    area: body.area || "",
+    description: body.description || "",
+    totalRooms: parseNumberValue(body.totalRooms, 0),
+    numberOfFloors: parseNumberValue(body.numberOfFloors, 0),
+    checkIn: body.checkIn || "14:00",
+    checkOut: body.checkOut || "12:00",
+    image: hotelImages,
+    images: hotelImages,
+    location: {
+      name: location.name || body.locationName || body.area || "",
+      googleMapLink: location.googleMapLink || body.googleMapLink || "",
+    },
+    touristspot: body.touristspot || location.name || body.area || "",
+    whatsNearby: parseArrayValue(body.whatsNearby),
+    services: parseArrayValue(body.services),
+    facilitiesDetails: facilityDetails,
+    policy,
+    propertyAccepts: parseArrayValue(body.propertyAccepts),
+    discountPercentage: parseNumberValue(body.discountPercentage, 0),
+    isActive:
+      body.isActive !== undefined ? String(body.isActive) !== "false" : true,
+    updatedAt: new Date(),
+  };
+}
+
+function normalizeRoomPayload(body, hotelId, uploadedImages = []) {
+  const roomImages = [
+    ...uploadedImages.map((file) => `/uploads/${file.filename}`),
+    ...parseArrayValue(body.images || body.image || []),
+  ].filter(Boolean);
+
+  const basePrice = parseNumberValue(body.price ?? body.basePrice, 0);
+  const discountPercent = parseNumberValue(body.discountPercentage, 0);
+  const effectivePricing = applyDiscountToPrice(basePrice, discountPercent);
+  const roomFacilities = parseJsonObject(body.facilities, {});
+
+  return {
+    hotelId,
+    roomNumber: String(body.roomNumber || "").trim(),
+    roomCategory: body.roomCategory || body.name || "Standard Room",
+    numberOfRooms: parseNumberValue(body.numberOfRooms, 1),
+    roomType: body.roomType || "Standard",
+    bedType: body.bedType || "Queen Bed",
+    roomSize: body.roomSize || "",
+    roomView: body.roomView || "City View",
+    roomCharacteristics: parseArrayValue(body.roomCharacteristics),
+    smokingPolicy: body.smokingPolicy || "non",
+    adultOccupancy: parseNumberValue(body.adultOccupancy ?? body.maxGuests, 2),
+    complementaryChildOccupancy: parseNumberValue(
+      body.complementaryChildOccupancy,
+      1,
+    ),
+    maximumGuestsAllowed: parseNumberValue(
+      body.maximumGuestsAllowed ?? body.maxGuests,
+      3,
+    ),
+    onDemandExtraBed: parseNumberValue(body.onDemandExtraBed, 0),
+    price: basePrice,
+    basePrice,
+    taxesAndFees: parseNumberValue(body.taxesAndFees, 0),
+    mealPlan: body.mealPlan || "Breakfast Included",
+    discounts: parseRoomDiscounts(body.discounts),
+    discountPercentage: discountPercent,
+    effectivePrice: effectivePricing.price,
+    services: parseArrayValue(body.services),
+    facilities: roomFacilities,
+    images: roomImages,
+    isAvailable:
+      body.isAvailable !== undefined
+        ? String(body.isAvailable) !== "false"
+        : true,
+    isActive:
+      body.isActive !== undefined ? String(body.isActive) !== "false" : true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
 }
 
 async function findBookingAcrossCollections(db, bookingId) {
@@ -143,36 +309,29 @@ router.post(
   "/hotels",
   auth,
   role("admin"),
-  upload.single("image"),
+  upload.fields([
+    { name: "images", maxCount: 10 },
+    { name: "image", maxCount: 1 },
+  ]),
   async (req, res) => {
     try {
-      const { name, area, description, totalRooms, discountPercentage } =
-        req.body;
-      let services = [];
-      try {
-        services = JSON.parse(req.body.services || "[]");
-      } catch {}
-      if (!name)
+      const { name } = req.body;
+      if (!name) {
         return res.status(400).json({ message: "Hotel name is required" });
+      }
 
       const db = await getDb();
-      const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
-      const normalizedDiscount = Number(discountPercentage || 0);
+      const hotelData = normalizeHotelPayload(
+        req.body,
+        getUploadedFiles(req.files),
+      );
 
       const result = await db.collection("hotels").insertOne({
-        name,
-        image: imageUrl,
-        area: area || "",
-        description: description || "",
-        services,
-        totalRooms: parseInt(totalRooms) || 0,
-        discountPercentage: Number.isFinite(normalizedDiscount)
-          ? Math.max(0, Math.min(100, normalizedDiscount))
-          : 0,
-        isActive: true,
+        ...hotelData,
         createdAt: new Date(),
       });
 
+      await invalidateHotelCaches();
       res.status(201).json({ message: "Hotel created", id: result.insertedId });
     } catch (err) {
       res.status(500).json({ message: err.message });
@@ -185,34 +344,34 @@ router.put(
   "/hotels/:id",
   auth,
   role("admin"),
-  upload.single("image"),
+  upload.fields([
+    { name: "images", maxCount: 10 },
+    { name: "image", maxCount: 1 },
+  ]),
   async (req, res) => {
     try {
       if (!isValidObjectId(req.params.id))
         return res.status(400).json({ message: "Invalid id" });
-      const { name, area, description, totalRooms, discountPercentage } =
-        req.body;
-      let services = [];
-      try {
-        services = JSON.parse(req.body.services || "[]");
-      } catch {}
 
       const db = await getDb();
-      const update = {
-        name,
-        area,
-        description,
-        services,
-        totalRooms: parseInt(totalRooms) || 0,
-        discountPercentage: Number.isFinite(Number(discountPercentage || 0))
-          ? Math.max(0, Math.min(100, Number(discountPercentage || 0)))
-          : 0,
-      };
-      if (req.file) update.image = `/uploads/${req.file.filename}`;
+      const existingHotel = await db
+        .collection("hotels")
+        .findOne({ _id: new ObjectId(req.params.id) });
+      if (!existingHotel)
+        return res.status(404).json({ message: "Hotel not found" });
+      const uploadedImages = getUploadedFiles(req.files);
+      const update = normalizeHotelPayload(req.body, uploadedImages);
+      if (!uploadedImages.length && !req.body.images && !req.body.image) {
+        update.image = existingHotel.image || null;
+        update.images =
+          existingHotel.images ||
+          (existingHotel.image ? [existingHotel.image] : []);
+      }
 
       await db
         .collection("hotels")
         .updateOne({ _id: new ObjectId(req.params.id) }, { $set: update });
+      await invalidateHotelCaches(req.params.id);
       res.json({ message: "Hotel updated" });
     } catch (err) {
       res.status(500).json({ message: err.message });
@@ -247,6 +406,7 @@ router.delete("/hotels/:id", auth, role("admin"), async (req, res) => {
     await db
       .collection("hotels")
       .deleteOne({ _id: new ObjectId(req.params.id) });
+    await invalidateHotelCaches(req.params.id);
     res.json({ message: "Hotel deleted" });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -277,28 +437,27 @@ router.post(
   "/hotels/:id/rooms",
   auth,
   role("admin"),
-  upload.array("images", 10),
+  upload.fields([
+    { name: "images", maxCount: 10 },
+    { name: "image", maxCount: 1 },
+  ]),
   async (req, res) => {
     try {
       if (!isValidObjectId(req.params.id))
         return res.status(400).json({ message: "Invalid id" });
-      const { roomNumber, price, maxGuests, mealPlan, discountPercentage } =
-        req.body;
-      let services = [];
-      try {
-        services = JSON.parse(req.body.services || "[]");
-      } catch {}
-      if (!roomNumber || !price)
+
+      if (!req.body.roomNumber && !req.body.roomCategory) {
         return res
           .status(400)
-          .json({ message: "roomNumber and price are required" });
+          .json({ message: "roomNumber or roomCategory is required" });
+      }
 
-      // Check totalRooms limit
       const db = await getDb();
       const hotel = await db
         .collection("hotels")
         .findOne({ _id: new ObjectId(req.params.id) });
       if (!hotel) return res.status(404).json({ message: "Hotel not found" });
+
       const existing = await db
         .collection("rooms")
         .countDocuments({ hotelId: req.params.id });
@@ -308,32 +467,14 @@ router.post(
           .json({ message: `Room limit reached (${hotel.totalRooms})` });
       }
 
-      const images = req.files
-        ? req.files.map((f) => `/uploads/${f.filename}`)
-        : [];
+      const roomData = normalizeRoomPayload(
+        req.body,
+        req.params.id,
+        getUploadedFiles(req.files),
+      );
+      const result = await db.collection("rooms").insertOne(roomData);
 
-      const basePrice = parseFloat(price) || 0;
-      const discount = Number(discountPercentage || 0);
-      const effectivePricing = applyDiscountToPrice(basePrice, discount);
-
-      const result = await db.collection("rooms").insertOne({
-        hotelId: req.params.id,
-        roomNumber,
-        price: basePrice,
-        basePrice,
-        discountPercentage: Number.isFinite(discount)
-          ? Math.max(0, Math.min(100, discount))
-          : 0,
-        effectivePrice: effectivePricing.price,
-        maxGuests: maxGuests ? parseInt(maxGuests) : null,
-        mealPlan: mealPlan || "Breakfast Included",
-        services,
-        images,
-        isAvailable: true,
-        isActive: true,
-        createdAt: new Date(),
-      });
-
+      await invalidateHotelCaches(req.params.id);
       res.status(201).json({ message: "Room added", id: result.insertedId });
     } catch (err) {
       res.status(500).json({ message: err.message });
@@ -346,41 +487,38 @@ router.put(
   "/rooms/:id",
   auth,
   role("admin"),
-  upload.array("images", 10),
+  upload.fields([
+    { name: "images", maxCount: 10 },
+    { name: "image", maxCount: 1 },
+  ]),
   async (req, res) => {
     try {
       if (!isValidObjectId(req.params.id))
         return res.status(400).json({ message: "Invalid id" });
-      const { roomNumber, price, maxGuests, mealPlan, discountPercentage } =
-        req.body;
-      let services = [];
-      try {
-        services = JSON.parse(req.body.services || "[]");
-      } catch {}
 
       const db = await getDb();
-      const basePrice = parseFloat(price) || 0;
-      const discount = Number(discountPercentage || 0);
-      const effectivePricing = applyDiscountToPrice(basePrice, discount);
-      const update = {
-        roomNumber,
-        price: basePrice,
-        basePrice,
-        discountPercentage: Number.isFinite(discount)
-          ? Math.max(0, Math.min(100, discount))
-          : 0,
-        effectivePrice: effectivePricing.price,
-        services,
-      };
-      if (maxGuests) update.maxGuests = parseInt(maxGuests);
-      if (mealPlan) update.mealPlan = mealPlan;
-      if (req.files && req.files.length > 0) {
-        update.images = req.files.map((f) => `/uploads/${f.filename}`);
+      const existingRoom = await db
+        .collection("rooms")
+        .findOne({ _id: new ObjectId(req.params.id) });
+      if (!existingRoom)
+        return res.status(404).json({ message: "Room not found" });
+      const uploadedImages = getUploadedFiles(req.files);
+
+      const update = normalizeRoomPayload(
+        req.body,
+        existingRoom?.hotelId || req.body.hotelId,
+        uploadedImages,
+      );
+      if (!uploadedImages.length && !req.body.images && !req.body.image) {
+        update.images =
+          existingRoom.images ||
+          (existingRoom.image ? [existingRoom.image] : []);
       }
 
       await db
         .collection("rooms")
         .updateOne({ _id: new ObjectId(req.params.id) }, { $set: update });
+      await invalidateHotelCaches(existingRoom?.hotelId || req.body.hotelId);
       res.json({ message: "Room updated" });
     } catch (err) {
       res.status(500).json({ message: err.message });
@@ -394,6 +532,10 @@ router.delete("/rooms/:id", auth, role("admin"), async (req, res) => {
     if (!isValidObjectId(req.params.id))
       return res.status(400).json({ message: "Invalid id" });
     const db = await getDb();
+    const room = await db
+      .collection("rooms")
+      .findOne({ _id: new ObjectId(req.params.id) });
+    if (!room) return res.status(404).json({ message: "Room not found" });
 
     await db
       .collection("bookings")
@@ -404,6 +546,7 @@ router.delete("/rooms/:id", auth, role("admin"), async (req, res) => {
     await db
       .collection("rooms")
       .deleteOne({ _id: new ObjectId(req.params.id) });
+    await invalidateHotelCaches(room?.hotelId);
     res.json({ message: "Room deleted" });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -427,6 +570,7 @@ router.patch("/rooms/:id/toggle", auth, role("admin"), async (req, res) => {
         { _id: new ObjectId(req.params.id) },
         { $set: { isAvailable: !room.isAvailable } },
       );
+    await invalidateHotelCaches(room.hotelId);
     res.json({
       message: "Room availability updated",
       isAvailable: !room.isAvailable,
@@ -451,6 +595,10 @@ router.patch("/rooms/:id/price", auth, role("admin"), async (req, res) => {
         { _id: new ObjectId(req.params.id) },
         { $set: { price: parseFloat(price) } },
       );
+    const room = await db
+      .collection("rooms")
+      .findOne({ _id: new ObjectId(req.params.id) });
+    await invalidateHotelCaches(room?.hotelId);
     res.json({ message: "Price updated" });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -509,6 +657,10 @@ router.post("/rooms/:id/blocks", auth, role("admin"), async (req, res) => {
         },
       },
     );
+    const room = await db
+      .collection("rooms")
+      .findOne({ _id: new ObjectId(req.params.id) });
+    await invalidateHotelCaches(room?.hotelId);
     res
       .status(201)
       .json({ message: "Block added", blockId: blockId.toString() });
@@ -533,6 +685,10 @@ router.delete(
           { _id: new ObjectId(req.params.id) },
           { $pull: { blockedDates: { _id: req.params.blockId } } },
         );
+      const room = await db
+        .collection("rooms")
+        .findOne({ _id: new ObjectId(req.params.id) });
+      await invalidateHotelCaches(room?.hotelId);
       res.json({ message: "Block removed" });
     } catch (err) {
       res.status(500).json({ message: err.message });

@@ -3,6 +3,7 @@ const router = express.Router();
 const { getDb } = require("../db");
 const { getCache, setCache, delCache } = require("../cache");
 const { ObjectId } = require("mongodb");
+const { getPriceForDates } = require("../utils/pricing");
 
 function isValidObjectId(id) {
   return /^[0-9a-fA-F]{24}$/.test(id);
@@ -137,13 +138,6 @@ router.get("/:id/rooms", async (req, res) => {
       const rooms = await db
         .collection("rooms")
         .find({ hotelId: req.params.id, isActive: { $ne: false } })
-        .project({
-          blockedDates: 1,
-          price: 1,
-          name: 1,
-          capacity: 1,
-          amenities: 1,
-        })
         .toArray();
       return res.json(rooms);
     }
@@ -230,7 +224,17 @@ router.get("/:id/rooms", async (req, res) => {
       ])
       .toArray();
 
-    res.json(roomsWithStatus);
+    res.json(
+      roomsWithStatus.map((room) => {
+        const datePricing = getPriceForDates(room, checkIn, checkOut);
+        return {
+          ...room,
+          basePrice: datePricing.original,
+          effectivePrice: datePricing.price,
+          discountPercentage: datePricing.discountPercentage,
+        };
+      }),
+    );
   } catch (err) {
     console.error("Rooms availability error:", err);
     res.status(500).json({ message: err.message });

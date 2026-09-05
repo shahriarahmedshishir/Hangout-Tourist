@@ -3,6 +3,7 @@ const router = express.Router();
 const { getDb } = require("../db");
 const { ObjectId } = require("mongodb");
 const { auth } = require("../middleware/auth");
+const { getPriceForDates } = require("../utils/pricing");
 
 function isValidObjectId(id) {
   return /^[0-9a-fA-F]{24}$/.test(id);
@@ -153,7 +154,9 @@ router.post("/hotel", auth, async (req, res) => {
         });
       }
 
-      const totalAmount = room.price * days;
+      const datePricing = getPriceForDates(room, checkIn, checkOut);
+      const pricePerNight = datePricing.price || room.price || 0;
+      const totalAmount = pricePerNight * days;
       const booking = {
         userId: req.user.id,
         type: "hotel",
@@ -164,7 +167,8 @@ router.post("/hotel", auth, async (req, res) => {
         checkIn: checkInDate,
         checkOut: checkOutDate,
         days,
-        pricePerNight: room.price,
+        pricePerNight,
+        discountPercentage: datePricing.discountPercentage,
         totalAmount,
         contactNumber: contactNumber || "",
         status: "confirmed",

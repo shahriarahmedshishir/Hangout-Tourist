@@ -1,53 +1,53 @@
-import { useState, useEffect, useRef, Fragment } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import logo from "@/assets/logo.png";
+import Invoice from "@/components/booking/Invoice";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  LayoutDashboard,
-  Building2,
-  Car,
-  ShoppingCart,
-  Users,
-  UserPlus,
-  LogOut,
-  TrendingUp,
-  DollarSign,
-  ShoppingBag,
-  UserCheck,
-  Plus,
-  Edit,
-  Trash2,
-  Menu,
-  X,
-  ChevronRight,
-  ToggleLeft,
-  ToggleRight,
-  Check,
-  ImageIcon,
-  CalendarRange,
-  Calendar,
-  CreditCard,
-  Coins,
-  Eye,
-  CheckCircle,
-  XCircle,
-  RotateCcw,
-  BusFront,
-  Package,
-} from "lucide-react";
-import { api, imgUrl } from "@/lib/api";
-import { useAuth } from "@/context/AuthContext";
-import { useToast } from "@/hooks/use-toast";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
-import Invoice from "@/components/booking/Invoice";
-import logo from "@/assets/logo.png";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { api, imgUrl } from "@/lib/api";
+import {
+  Building2,
+  BusFront,
+  Calendar,
+  CalendarRange,
+  Car,
+  Check,
+  CheckCircle,
+  ChevronRight,
+  Coins,
+  CreditCard,
+  DollarSign,
+  Edit,
+  Eye,
+  ImageIcon,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Package,
+  Plus,
+  RotateCcw,
+  ShoppingBag,
+  ShoppingCart,
+  ToggleLeft,
+  ToggleRight,
+  Trash2,
+  TrendingUp,
+  UserCheck,
+  UserPlus,
+  Users,
+  X,
+  XCircle,
+} from "lucide-react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 const sidebarItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -148,11 +148,11 @@ const Admin = () => {
   }
 
   return (
-    <div className="flex min-h-screen bg-muted">
+    <div className="flex h-screen overflow-hidden bg-muted">
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform lg:relative lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed inset-y-0 left-0 z-50 flex h-screen w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
-        <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-sidebar-border px-4">
           <div className="flex items-center gap-2">
             <img src={logo} alt="" className="h-8 w-8" />
             <span className="font-heading text-sm font-bold">Admin Panel</span>
@@ -161,7 +161,7 @@ const Admin = () => {
             <X className="h-5 w-5" />
           </button>
         </div>
-        <nav className="flex-1 space-y-1 p-3">
+        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
           {sidebarItems.map((item) => (
             <button
               key={item.id}
@@ -176,7 +176,7 @@ const Admin = () => {
             </button>
           ))}
         </nav>
-        <div className="border-t border-sidebar-border p-3 space-y-2">
+        <div className="shrink-0 space-y-2 border-t border-sidebar-border bg-sidebar p-3">
           <Button
             onClick={handleLogout}
             variant="ghost"
@@ -202,7 +202,7 @@ const Admin = () => {
         />
       )}
 
-      <div className="flex-1 overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden lg:ml-64">
         <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-background px-6">
           <button className="lg:hidden" onClick={() => setSidebarOpen(true)}>
             <Menu className="h-5 w-5" />
@@ -211,7 +211,7 @@ const Admin = () => {
             {sidebarItems.find((i) => i.id === view)?.label || view}
           </h1>
         </header>
-        <main className="p-6 overflow-auto">
+        <main className="min-h-0 flex-1 overflow-y-auto p-6">
           {view === "dashboard" && <DashboardView />}
           {view === "hotels" && <HotelsView />}
           {view === "hotel-bookings" && <HotelBookingsView />}
@@ -713,6 +713,8 @@ const HotelsView = () => {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(null);
   const [roomsHotel, setRoomsHotel] = useState(null);
+  const [hotelImageFiles, setHotelImageFiles] = useState([]);
+  const [hotelImagePreviews, setHotelImagePreviews] = useState([]);
 
   const load = () => {
     setLoading(true);
@@ -725,6 +727,33 @@ const HotelsView = () => {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    return () =>
+      hotelImagePreviews.forEach((preview) => URL.revokeObjectURL(preview));
+  }, [hotelImagePreviews]);
+
+  const resetHotelImageSelection = () => {
+    setHotelImageFiles([]);
+    setHotelImagePreviews([]);
+  };
+
+  const handleHotelImageChange = (event) => {
+    const files = Array.from(event.target.files || []);
+    setHotelImageFiles(files);
+    setHotelImagePreviews(files.map((file) => URL.createObjectURL(file)));
+  };
+
+  const removeHotelImage = (index) => {
+    const nextFiles = hotelImageFiles.filter(
+      (_, fileIndex) => fileIndex !== index,
+    );
+    const nextPreviews = hotelImagePreviews.filter(
+      (_, previewIndex) => previewIndex !== index,
+    );
+    setHotelImageFiles(nextFiles);
+    setHotelImagePreviews(nextPreviews);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -739,11 +768,103 @@ const HotelsView = () => {
           .filter(Boolean),
       ),
     );
+
+    const locationName = String(fd.get("locationName") || "").trim();
+    const googleMapLink = String(fd.get("googleMapLink") || "").trim();
+    const reviewRating = Number(fd.get("reviewRating") || 0);
+    const reviewTotalReviews = Number(fd.get("reviewTotalReviews") || 0);
+    const facilitiesDetails = String(fd.get("facilitiesDetails") || "").trim();
+    const whatsNearbyRaw = String(fd.get("whatsNearby") || "").trim();
+    const policyArrayFields = [
+      "hygieneAndSafetyPolicies",
+      "generalHotelPolicies",
+    ];
+    const policyFields = [
+      "instructions",
+      "specialInstructions",
+      "childPolicy",
+      "petPolicy",
+      "cancellationPolicyForCorporateGroupBookings",
+      "blackoutCancellationPolicy",
+      "identificationRequirement",
+      "swimmingPoolAndGymUsagePolicy",
+      "extraBedAndBreakfastPolicy",
+      "driverAccommodationPolicy",
+    ];
+
+    if (locationName || googleMapLink) {
+      fd.set(
+        "location",
+        JSON.stringify({
+          name: locationName || fd.get("area") || "",
+          googleMapLink,
+        }),
+      );
+    }
+
+    if (reviewRating || reviewTotalReviews) {
+      fd.set(
+        "review",
+        JSON.stringify({
+          rating: reviewRating,
+          totalReviews: reviewTotalReviews,
+        }),
+      );
+    }
+
+    if (facilitiesDetails) {
+      try {
+        JSON.parse(facilitiesDetails);
+        fd.set("facilitiesDetails", facilitiesDetails);
+      } catch {
+        fd.set(
+          "facilitiesDetails",
+          JSON.stringify({
+            General: facilitiesDetails
+              .split(",")
+              .map((v) => v.trim())
+              .filter(Boolean),
+          }),
+        );
+      }
+    }
+
+    fd.set(
+      "whatsNearby",
+      JSON.stringify(
+        whatsNearbyRaw
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean),
+      ),
+    );
+
+    const policy = {
+      checkIn: String(fd.get("checkIn") || "").trim(),
+      checkOut: String(fd.get("checkOut") || "").trim(),
+    };
+    policyFields.forEach((field) => {
+      const value = String(fd.get(field) || "").trim();
+      if (value) policy[field] = value;
+    });
+    policyArrayFields.forEach((field) => {
+      const values = String(fd.get(field) || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+      if (values.length > 0) policy[field] = values;
+    });
+    fd.set("policy", JSON.stringify(policy));
+
+    fd.delete("images");
+    hotelImageFiles.forEach((file) => fd.append("images", file));
+
     try {
       form === "add"
         ? await api.postForm("/api/admin/hotels", fd)
         : await api.putForm(`/api/admin/hotels/${form._id}`, fd);
       setForm(null);
+      resetHotelImageSelection();
       load();
     } catch (err) {
       alert(err.message);
@@ -779,7 +900,10 @@ const HotelsView = () => {
         </h2>
         <Button
           className="gap-2 bg-gradient-primary text-primary-foreground"
-          onClick={() => setForm("add")}
+          onClick={() => {
+            resetHotelImageSelection();
+            setForm("add");
+          }}
         >
           <Plus className="h-4 w-4" /> Add Hotel
         </Button>
@@ -812,14 +936,239 @@ const HotelsView = () => {
                 className="bg-muted"
               />
             </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Property Type
+              </label>
+              <Input
+                name="propertyType"
+                defaultValue={form?.propertyType || "Hotel"}
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Star Rating
+              </label>
+              <Input
+                name="starRating"
+                defaultValue={form?.starRating || "3 Star"}
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Location Name
+              </label>
+              <Input
+                name="locationName"
+                defaultValue={form?.location?.name || form?.area || ""}
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Google Map Link
+              </label>
+              <Input
+                name="googleMapLink"
+                defaultValue={form?.location?.googleMapLink || ""}
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Number of Floors
+              </label>
+              <Input
+                name="numberOfFloors"
+                type="number"
+                defaultValue={form?.numberOfFloors || ""}
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Tourist Spot / Nearby Landmark
+              </label>
+              <Input
+                name="touristspot"
+                defaultValue={form?.touristspot || form?.location?.name || ""}
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Review Rating
+              </label>
+              <Input
+                name="reviewRating"
+                type="number"
+                min="0"
+                max="5"
+                step="0.1"
+                defaultValue={form?.review?.rating ?? ""}
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Total Reviews
+              </label>
+              <Input
+                name="reviewTotalReviews"
+                type="number"
+                defaultValue={form?.review?.totalReviews ?? ""}
+                className="bg-muted"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Facilities Details (JSON or comma-separated)
+              </label>
+              <Textarea
+                name="facilitiesDetails"
+                defaultValue={
+                  form?.facilitiesDetails
+                    ? JSON.stringify(form.facilitiesDetails)
+                    : ""
+                }
+                className="min-h-[90px] bg-muted"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs text-muted-foreground">
+                What&apos;s Nearby (comma separated)
+              </label>
+              <Textarea
+                name="whatsNearby"
+                defaultValue={form?.whatsNearby?.join(", ") || ""}
+                placeholder="Cox's Bazar Beach, Sugandha Beach, Burmese Market"
+                className="min-h-[70px] bg-muted"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Hotel Policies
+              </label>
+              <div className="grid gap-3 rounded-xl border border-border bg-muted/30 p-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">
+                    Check In
+                  </label>
+                  <Input
+                    name="checkIn"
+                    type="time"
+                    defaultValue={
+                      form?.checkIn || form?.policy?.checkIn || "14:00"
+                    }
+                    className="bg-muted"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">
+                    Check Out
+                  </label>
+                  <Input
+                    name="checkOut"
+                    type="time"
+                    defaultValue={
+                      form?.checkOut || form?.policy?.checkOut || "12:00"
+                    }
+                    className="bg-muted"
+                  />
+                </div>
+                {[
+                  ["instructions", "Instructions"],
+                  ["specialInstructions", "Special Instructions"],
+                  ["childPolicy", "Child Policy"],
+                  ["petPolicy", "Pet Policy"],
+                  [
+                    "cancellationPolicyForCorporateGroupBookings",
+                    "Cancellation Policy for Corporate / Group Bookings",
+                  ],
+                  [
+                    "blackoutCancellationPolicy",
+                    "Blackout Cancellation Policy",
+                  ],
+                  ["identificationRequirement", "Identification Requirement"],
+                  [
+                    "swimmingPoolAndGymUsagePolicy",
+                    "Swimming Pool & Gym Usage Policy",
+                  ],
+                  [
+                    "extraBedAndBreakfastPolicy",
+                    "Extra Bed & Breakfast Policy",
+                  ],
+                  ["driverAccommodationPolicy", "Driver Accommodation Policy"],
+                ].map(([name, label]) => (
+                  <div key={name} className="sm:col-span-2">
+                    <label className="mb-1 block text-xs text-muted-foreground">
+                      {label}
+                    </label>
+                    <Textarea
+                      name={name}
+                      defaultValue={form?.policy?.[name] || ""}
+                      className="min-h-[68px] bg-muted"
+                    />
+                  </div>
+                ))}
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs text-muted-foreground">
+                    Hygiene and Safety Policies (comma separated)
+                  </label>
+                  <Textarea
+                    name="hygieneAndSafetyPolicies"
+                    defaultValue={
+                      form?.policy?.hygieneAndSafetyPolicies?.join(", ") || ""
+                    }
+                    className="min-h-[68px] bg-muted"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs text-muted-foreground">
+                    General Hotel Policies (comma separated)
+                  </label>
+                  <Textarea
+                    name="generalHotelPolicies"
+                    defaultValue={
+                      form?.policy?.generalHotelPolicies?.join(", ") || ""
+                    }
+                    className="min-h-[68px] bg-muted"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Property Accepts (comma separated)
+              </label>
+              <Input
+                name="propertyAccepts"
+                defaultValue={form?.propertyAccepts?.join(", ") || ""}
+                className="bg-muted"
+              />
+            </div>
             <div className="sm:col-span-2">
               <label className="mb-1 block text-xs text-muted-foreground">
                 Description
               </label>
-              <Input
+              <Textarea
                 name="description"
                 defaultValue={form?.description || ""}
-                className="bg-muted"
+                className="min-h-[90px] bg-muted"
               />
             </div>
             <div>
@@ -835,20 +1184,6 @@ const HotelsView = () => {
             </div>
             <div>
               <label className="mb-1 block text-xs text-muted-foreground">
-                Discount %
-              </label>
-              <Input
-                name="discountPercentage"
-                type="number"
-                min="0"
-                max="100"
-                defaultValue={form?.discountPercentage ?? ""}
-                placeholder="0"
-                className="bg-muted"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-muted-foreground">
                 Services (comma separated)
               </label>
               <Input
@@ -857,16 +1192,89 @@ const HotelsView = () => {
                 className="bg-muted"
               />
             </div>
-            <div>
+            <div className="sm:col-span-2">
               <label className="mb-1 block text-xs text-muted-foreground">
-                Hotel Image
+                Hotel Images{" "}
+                <span className="text-muted-foreground/60">(up to 10)</span>
+              </label>
+              {form !== "add" &&
+                form?.image &&
+                hotelImagePreviews.length === 0 && (
+                  <div className="mb-3 rounded-xl border border-border bg-muted/30 p-3">
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">
+                      Current images
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {(Array.isArray(form.image)
+                        ? form.image
+                        : [form.image]
+                      ).map((image, index) => (
+                        <img
+                          key={`${image}-${index}`}
+                          src={imgUrl(image)}
+                          alt=""
+                          className="h-20 w-24 rounded-lg border border-border object-cover"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              <label
+                htmlFor="hotel-images-input"
+                className="flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed border-border bg-muted/40 px-4 py-4 transition-colors hover:border-primary/60 hover:bg-muted/60"
+              >
+                <ImageIcon className="h-7 w-7 text-primary" />
+                <span>
+                  <span className="block text-sm font-medium text-foreground">
+                    Select hotel images
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    Choose multiple JPG, PNG, WebP, or GIF files
+                  </span>
+                </span>
               </label>
               <input
+                id="hotel-images-input"
                 type="file"
-                name="image"
-                accept="image/*"
-                className="text-sm text-muted-foreground"
+                name="images"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                multiple
+                className="hidden"
+                onChange={handleHotelImageChange}
               />
+              {hotelImagePreviews.length > 0 && (
+                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {hotelImagePreviews.map((preview, index) => (
+                    <div
+                      key={preview}
+                      className="group relative overflow-hidden rounded-xl border border-border bg-muted"
+                    >
+                      <img
+                        src={preview}
+                        alt={`Hotel preview ${index + 1}`}
+                        className="h-24 w-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        title="Remove image"
+                        onClick={() => removeHotelImage(index)}
+                        className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-white opacity-0 transition-opacity group-hover:opacity-100"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                      <span className="absolute bottom-0 left-0 right-0 bg-black/55 px-2 py-1 text-[10px] text-white">
+                        Image {index + 1}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {hotelImageFiles.length > 0 && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {hotelImageFiles.length} image
+                  {hotelImageFiles.length !== 1 ? "s" : ""} selected
+                </p>
+              )}
             </div>
             <div className="sm:col-span-2 flex gap-2">
               <Button
@@ -950,7 +1358,10 @@ const HotelsView = () => {
                       <button
                         title="Edit"
                         className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-                        onClick={() => setForm(h)}
+                        onClick={() => {
+                          resetHotelImageSelection();
+                          setForm(h);
+                        }}
                       >
                         <Edit className="h-4 w-4" />
                       </button>
@@ -974,6 +1385,14 @@ const HotelsView = () => {
 };
 
 // ─── ROOMS ───────────────────────────────────────────────────────────────────
+const emptyRoomDiscount = () => ({
+  startDate: "",
+  endDate: "",
+  discountPercentage: "",
+});
+
+const emptyRoomFacility = () => ({ category: "", amenities: "" });
+
 const RoomsView = ({ hotel, onBack }) => {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -984,6 +1403,8 @@ const RoomsView = ({ hotel, onBack }) => {
   const [blockPanel, setBlockPanel] = useState(null); // roomId with open panel
   const [blockForm, setBlockForm] = useState({ checkIn: "", checkOut: "" });
   const [blockError, setBlockError] = useState("");
+  const [discountRows, setDiscountRows] = useState([emptyRoomDiscount()]);
+  const [facilityRows, setFacilityRows] = useState([emptyRoomFacility()]);
 
   const load = () => {
     setLoading(true);
@@ -1006,6 +1427,29 @@ const RoomsView = ({ hotel, onBack }) => {
     setForm(value);
     setSelectedFiles([]);
     setPreviews([]);
+    setDiscountRows(
+      value !== "add" &&
+        Array.isArray(value?.discounts) &&
+        value.discounts.length
+        ? value.discounts.map((discount) => ({
+            startDate: discount.startDate || "",
+            endDate: discount.endDate || "",
+            discountPercentage: discount.discountPercentage ?? "",
+          }))
+        : [emptyRoomDiscount()],
+    );
+    setFacilityRows(
+      value !== "add" &&
+        value?.facilities &&
+        typeof value.facilities === "object"
+        ? Object.entries(value.facilities).map(([category, amenities]) => ({
+            category,
+            amenities: Array.isArray(amenities)
+              ? amenities.join(", ")
+              : String(amenities || ""),
+          }))
+        : [emptyRoomFacility()],
+    );
   };
 
   const handleFilesChange = (e) => {
@@ -1034,6 +1478,8 @@ const RoomsView = ({ hotel, onBack }) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const servicesRaw = fd.get("services") || "";
+    const roomCharacteristicsRaw = fd.get("roomCharacteristics") || "";
+
     fd.set(
       "services",
       JSON.stringify(
@@ -1043,6 +1489,46 @@ const RoomsView = ({ hotel, onBack }) => {
           .filter(Boolean),
       ),
     );
+
+    fd.set(
+      "roomCharacteristics",
+      JSON.stringify(
+        roomCharacteristicsRaw
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      ),
+    );
+
+    fd.set(
+      "discounts",
+      JSON.stringify(
+        discountRows
+          .filter(
+            (discount) =>
+              discount.startDate &&
+              discount.endDate &&
+              discount.discountPercentage !== "",
+          )
+          .map((discount) => ({
+            startDate: discount.startDate,
+            endDate: discount.endDate,
+            discountPercentage: Number(discount.discountPercentage),
+          })),
+      ),
+    );
+
+    const facilities = {};
+    facilityRows.forEach((facility) => {
+      const category = facility.category.trim();
+      const amenities = facility.amenities
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      if (category && amenities.length > 0) facilities[category] = amenities;
+    });
+    fd.set("facilities", JSON.stringify(facilities));
+
     // Re-attach files from state so removals are reflected
     fd.delete("images");
     selectedFiles.forEach((f) => fd.append("images", f));
@@ -1152,21 +1638,11 @@ const RoomsView = ({ hotel, onBack }) => {
       {form && (
         <div className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-card">
           <h3 className="mb-4 font-heading font-bold text-foreground">
-            {form === "add" ? "Add Room" : `Edit Room ${form.roomNumber}`}
+            {form === "add"
+              ? "Add Room"
+              : `Edit Room ${form.roomCategory || form.roomNumber || "Room"}`}
           </h3>
           <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs text-muted-foreground">
-                Room Number *
-              </label>
-              <Input
-                name="roomNumber"
-                defaultValue={form?.roomNumber || ""}
-                placeholder="e.g. 101 or Room-101"
-                required
-                className="bg-muted"
-              />
-            </div>
             <div>
               <label className="mb-1 block text-xs text-muted-foreground">
                 Price per night (BDT) *
@@ -1176,20 +1652,6 @@ const RoomsView = ({ hotel, onBack }) => {
                 type="number"
                 defaultValue={form?.price || ""}
                 required
-                className="bg-muted"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-muted-foreground">
-                Discount %
-              </label>
-              <Input
-                name="discountPercentage"
-                type="number"
-                min="0"
-                max="100"
-                defaultValue={form?.discountPercentage ?? ""}
-                placeholder="0"
                 className="bg-muted"
               />
             </div>
@@ -1205,6 +1667,322 @@ const RoomsView = ({ hotel, onBack }) => {
                 className="bg-muted"
               />
             </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Room Category
+              </label>
+              <Input
+                name="roomCategory"
+                defaultValue={
+                  form?.roomCategory || form?.name || "Standard Room"
+                }
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Number of Rooms
+              </label>
+              <Input
+                name="numberOfRooms"
+                type="number"
+                min="1"
+                defaultValue={form?.numberOfRooms || "1"}
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Room Type
+              </label>
+              <Input
+                name="roomType"
+                defaultValue={form?.roomType || "Standard"}
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Room View
+              </label>
+              <Input
+                name="roomView"
+                defaultValue={form?.roomView || "City View"}
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Bed Type
+              </label>
+              <Input
+                name="bedType"
+                defaultValue={form?.bedType || "Queen Bed"}
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Room Size
+              </label>
+              <Input
+                name="roomSize"
+                defaultValue={form?.roomSize || ""}
+                placeholder="e.g. 350 sq ft"
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Smoking Policy
+              </label>
+              <Input
+                name="smokingPolicy"
+                defaultValue={form?.smokingPolicy || "non"}
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Adult Occupancy
+              </label>
+              <Input
+                name="adultOccupancy"
+                type="number"
+                defaultValue={form?.adultOccupancy || "2"}
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Max Guests Allowed
+              </label>
+              <Input
+                name="maximumGuestsAllowed"
+                type="number"
+                defaultValue={
+                  form?.maximumGuestsAllowed || form?.maxGuests || "3"
+                }
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Complementary Child Occupancy
+              </label>
+              <Input
+                name="complementaryChildOccupancy"
+                type="number"
+                min="0"
+                defaultValue={form?.complementaryChildOccupancy || "1"}
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                On-demand Extra Bed
+              </label>
+              <Input
+                name="onDemandExtraBed"
+                type="number"
+                min="0"
+                defaultValue={form?.onDemandExtraBed || "0"}
+                className="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Taxes & Fees per night (BDT)
+              </label>
+              <Input
+                name="taxesAndFees"
+                type="number"
+                defaultValue={form?.taxesAndFees || "0"}
+                className="bg-muted"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Room Characteristics (comma separated)
+              </label>
+              <Input
+                name="roomCharacteristics"
+                defaultValue={form?.roomCharacteristics?.join(", ") || ""}
+                className="bg-muted"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Date-wise Discounts
+              </label>
+              <div className="space-y-2 rounded-xl border border-border bg-muted/30 p-3">
+                {discountRows.map((discount, index) => (
+                  <div
+                    key={index}
+                    className="grid gap-2 sm:grid-cols-[1fr_1fr_120px_auto]"
+                  >
+                    <Input
+                      type="date"
+                      value={discount.startDate}
+                      onChange={(event) =>
+                        setDiscountRows((rows) =>
+                          rows.map((row, rowIndex) =>
+                            rowIndex === index
+                              ? { ...row, startDate: event.target.value }
+                              : row,
+                          ),
+                        )
+                      }
+                      className="bg-muted"
+                      aria-label={`Discount ${index + 1} start date`}
+                    />
+                    <Input
+                      type="date"
+                      value={discount.endDate}
+                      onChange={(event) =>
+                        setDiscountRows((rows) =>
+                          rows.map((row, rowIndex) =>
+                            rowIndex === index
+                              ? { ...row, endDate: event.target.value }
+                              : row,
+                          ),
+                        )
+                      }
+                      className="bg-muted"
+                      aria-label={`Discount ${index + 1} end date`}
+                    />
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={discount.discountPercentage}
+                      onChange={(event) =>
+                        setDiscountRows((rows) =>
+                          rows.map((row, rowIndex) =>
+                            rowIndex === index
+                              ? {
+                                  ...row,
+                                  discountPercentage: event.target.value,
+                                }
+                              : row,
+                          ),
+                        )
+                      }
+                      placeholder="Discount %"
+                      className="bg-muted"
+                      aria-label={`Discount ${index + 1} percentage`}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      title="Remove discount"
+                      onClick={() =>
+                        setDiscountRows((rows) =>
+                          rows.length === 1
+                            ? [emptyRoomDiscount()]
+                            : rows.filter((_, rowIndex) => rowIndex !== index),
+                        )
+                      }
+                      className="px-3"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    setDiscountRows((rows) => [...rows, emptyRoomDiscount()])
+                  }
+                  className="gap-2"
+                >
+                  <Plus className="h-4 w-4" /> Add date discount
+                </Button>
+              </div>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs text-muted-foreground">
+                Room Facilities & Amenities
+              </label>
+              <div className="space-y-2 rounded-xl border border-border bg-muted/30 p-3">
+                {facilityRows.map((facility, index) => (
+                  <div
+                    key={index}
+                    className="grid gap-2 sm:grid-cols-[minmax(150px,0.8fr)_minmax(220px,1.5fr)_auto]"
+                  >
+                    <Input
+                      value={facility.category}
+                      onChange={(event) =>
+                        setFacilityRows((rows) =>
+                          rows.map((row, rowIndex) =>
+                            rowIndex === index
+                              ? { ...row, category: event.target.value }
+                              : row,
+                          ),
+                        )
+                      }
+                      placeholder="Category (e.g. bathroomFacilities)"
+                      className="bg-muted"
+                    />
+                    <Input
+                      value={facility.amenities}
+                      onChange={(event) =>
+                        setFacilityRows((rows) =>
+                          rows.map((row, rowIndex) =>
+                            rowIndex === index
+                              ? { ...row, amenities: event.target.value }
+                              : row,
+                          ),
+                        )
+                      }
+                      placeholder="Amenities separated by commas"
+                      className="bg-muted"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      title="Remove facility category"
+                      onClick={() =>
+                        setFacilityRows((rows) =>
+                          rows.length === 1
+                            ? [emptyRoomFacility()]
+                            : rows.filter((_, rowIndex) => rowIndex !== index),
+                        )
+                      }
+                      className="px-3"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    setFacilityRows((rows) => [...rows, emptyRoomFacility()])
+                  }
+                  className="gap-2"
+                >
+                  <Plus className="h-4 w-4" /> Add facility category
+                </Button>
+              </div>
+            </div>
             <div className="sm:col-span-2">
               <label className="mb-1 block text-xs text-muted-foreground">
                 Meal Plan *
@@ -1219,7 +1997,7 @@ const RoomsView = ({ hotel, onBack }) => {
             </div>
             <div className="sm:col-span-2">
               <label className="mb-1 block text-xs text-muted-foreground">
-                Services (comma separated)
+                Services (comma separated) maximum 5
               </label>
               <Input
                 name="services"
@@ -1793,7 +2571,10 @@ const CarsView = () => {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setForm(null)}
+                onClick={() => {
+                  resetHotelImageSelection();
+                  setForm(null);
+                }}
               >
                 Cancel
               </Button>

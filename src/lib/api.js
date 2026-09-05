@@ -44,6 +44,15 @@ export const api = {
 };
 
 export function imgUrl(path) {
+  if (Array.isArray(path)) {
+    path = path[0];
+  }
+
+  if (path && typeof path === "object") {
+    path = path.url || path.path || path.src || path.image || path.imgUrl;
+  }
+
+  if (typeof path !== "string") return null;
   if (!path) return null;
   if (path.startsWith("http://") || path.startsWith("https://")) return path;
   if (path.startsWith("data:")) return path;

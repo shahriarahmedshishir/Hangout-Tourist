@@ -45,9 +45,67 @@ function applyDiscountToPrice(basePrice, discountPercentage) {
   };
 }
 
+function normalizeDateDiscounts(value) {
+  let entries = value;
+  if (typeof value === "string") {
+    try {
+      entries = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(entries)) return [];
+
+  return entries
+    .map((entry) => ({
+      startDate: String(entry?.startDate || "").trim(),
+      endDate: String(entry?.endDate || "").trim(),
+      discountPercentage: normalizeDiscountPercentage(
+        entry?.discountPercentage,
+      ),
+    }))
+    .filter(
+      (entry) =>
+        entry.startDate &&
+        entry.endDate &&
+        entry.discountPercentage > 0 &&
+        entry.startDate <= entry.endDate,
+    );
+}
+
+function getDateDiscount(item, checkIn, checkOut) {
+  const discounts = normalizeDateDiscounts(item?.discounts);
+  if (!checkIn) return 0;
+  const stayStart = String(checkIn).slice(0, 10);
+  const stayEnd = String(checkOut || checkIn).slice(0, 10);
+  const matches = discounts.filter(
+    (discount) =>
+      stayStart >= discount.startDate &&
+      stayStart <= discount.endDate &&
+      stayEnd >= discount.startDate &&
+      stayEnd <= discount.endDate,
+  );
+  return matches.length
+    ? Math.max(...matches.map((discount) => discount.discountPercentage))
+    : 0;
+}
+
+function getPriceForDates(item, checkIn, checkOut) {
+  const basePrice = getOriginalPrice(item);
+  const discount = getDateDiscount(item, checkIn, checkOut);
+  return {
+    original: basePrice,
+    discountPercentage: discount,
+    price: applyDiscountToPrice(basePrice, discount).price,
+  };
+}
+
 module.exports = {
   normalizeDiscountPercentage,
   getOriginalPrice,
   getDiscountedPrice,
   applyDiscountToPrice,
+  normalizeDateDiscounts,
+  getDateDiscount,
+  getPriceForDates,
 };
