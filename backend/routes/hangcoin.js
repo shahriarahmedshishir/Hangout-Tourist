@@ -3,6 +3,8 @@ const router = express.Router();
 const { getDb } = require("../db");
 const { ObjectId } = require("mongodb");
 const { auth } = require("../middleware/auth");
+const { getPriceForDates } = require("../utils/pricing");
+const { notifyBookingConfirmed } = require("../utils/emailService");
 
 function isValidObjectId(id) {
   return /^[0-9a-fA-F]{24}$/.test(id);
@@ -181,13 +183,15 @@ router.post("/initiate-booking/hotel", auth, async (req, res) => {
         });
       }
 
-      const effectiveRoomPrice = Number(room.effectivePrice ?? room.price ?? 0);
-      totalAmount += effectiveRoomPrice * days;
+      const datePricing = getPriceForDates(room, checkIn, checkOut);
+      const effectiveRoomPrice = datePricing.price;
+      totalAmount += datePricing.totalPrice;
       bookingRooms.push({
         roomId: room._id.toString(),
         roomNumber: room.roomNumber,
         pricePerNight: effectiveRoomPrice,
-        roomTotal: effectiveRoomPrice * days,
+        nightlyPrices: datePricing.nightlyPrices,
+        roomTotal: datePricing.totalPrice,
       });
     }
 
@@ -203,6 +207,7 @@ router.post("/initiate-booking/hotel", auth, async (req, res) => {
       checkOut: checkOutDate,
       days,
       pricePerNight: r.pricePerNight,
+      nightlyPrices: r.nightlyPrices,
       totalAmount: r.roomTotal,
       contactNumber: contactNumber || "",
       guestDetails: guestDetails || {},
@@ -476,6 +481,7 @@ router.post("/pay-booking/:bookingId", auth, async (req, res) => {
 
     // Update booking to confirmed
     const now = new Date();
+    const transactionId = `HC-${Date.now()}`;
     await bookingCollection.updateOne(
       { _id: booking._id },
       {
@@ -483,10 +489,18 @@ router.post("/pay-booking/:bookingId", auth, async (req, res) => {
           status: "confirmed",
           paymentMethod: "hangcoin",
           paidAt: now,
-          transactionId: `HC-${Date.now()}`,
+          transactionId,
         },
       },
     );
+
+    await notifyBookingConfirmed(db, {
+      ...booking,
+      status: "confirmed",
+      paymentMethod: "hangcoin",
+      paidAt: now,
+      transactionId,
+    });
 
     res.json({
       message: "Booking confirmed with hangcoins",

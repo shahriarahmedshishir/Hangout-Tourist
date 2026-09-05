@@ -7,7 +7,9 @@ const { auth } = require("../middleware/auth");
 const fs = require("fs");
 const path = require("path");
 const { isValidObjectId, validatePrice } = require("../utils/validation");
+const { getPriceForDates } = require("../utils/pricing");
 const crypto = require("crypto");
+const { notifyBookingConfirmed } = require("../utils/emailService");
 
 // Callback verification config: prefer HMAC secret, fallback to allowed IPs list
 const CALLBACK_SECRET = process.env.SSLCOMMERZ_CALLBACK_SECRET || null;
@@ -254,13 +256,16 @@ router.post("/initiate/hotel", auth, async (req, res) => {
         });
       }
 
-      const effectiveRoomPrice = Number(room.effectivePrice ?? room.price ?? 0);
-      totalAmount += effectiveRoomPrice * days;
+      const datePricing = getPriceForDates(room, checkIn, checkOut);
+      const effectiveRoomPrice = datePricing.price;
+      const roomTotal = datePricing.totalPrice;
+      totalAmount += roomTotal;
       roomsToBook.push({
         roomId: room._id.toString(),
         roomNumber: room.roomNumber,
         pricePerNight: effectiveRoomPrice,
-        roomTotal: effectiveRoomPrice * days,
+        nightlyPrices: datePricing.nightlyPrices,
+        roomTotal,
       });
     }
 
@@ -1425,6 +1430,23 @@ async function _confirmBooking(tran_id, validation = null) {
         createdAt: now,
       });
     }
+
+    const confirmedBookings = [];
+    for (const collectionName of [
+      "bookings",
+      "carrentBookings",
+      "busBookings",
+    ]) {
+      confirmedBookings.push(
+        ...(await db
+          .collection(collectionName)
+          .find({ transactionId: tran_id, status: "confirmed" })
+          .toArray()),
+      );
+    }
+    await Promise.all(
+      confirmedBookings.map((booking) => notifyBookingConfirmed(db, booking)),
+    );
 
     console.log(
       "🔧 [_confirmBooking] Deleting payment session for tran_id:",

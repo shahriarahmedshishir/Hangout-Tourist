@@ -69,21 +69,23 @@ function normalizeDateDiscounts(value) {
         entry.startDate &&
         entry.endDate &&
         entry.discountPercentage > 0 &&
-        entry.startDate <= entry.endDate,
+        entry.startDate < entry.endDate,
     );
 }
 
-function getDateDiscount(item, checkIn, checkOut) {
+function toDateKey(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
+}
+
+function getDateDiscount(item, date) {
   const discounts = normalizeDateDiscounts(item?.discounts);
-  if (!checkIn) return 0;
-  const stayStart = String(checkIn).slice(0, 10);
-  const stayEnd = String(checkOut || checkIn).slice(0, 10);
+  const dateKey = toDateKey(date);
+  if (!dateKey) return 0;
   const matches = discounts.filter(
-    (discount) =>
-      stayStart >= discount.startDate &&
-      stayStart <= discount.endDate &&
-      stayEnd >= discount.startDate &&
-      stayEnd <= discount.endDate,
+    (discount) => dateKey >= discount.startDate && dateKey < discount.endDate,
   );
   return matches.length
     ? Math.max(...matches.map((discount) => discount.discountPercentage))
@@ -92,11 +94,37 @@ function getDateDiscount(item, checkIn, checkOut) {
 
 function getPriceForDates(item, checkIn, checkOut) {
   const basePrice = getOriginalPrice(item);
-  const discount = getDateDiscount(item, checkIn, checkOut);
+  const start = new Date(checkIn);
+  const end = new Date(checkOut || checkIn);
+  const nightlyPrices = [];
+
+  for (
+    let night = new Date(start);
+    night < end;
+    night.setUTCDate(night.getUTCDate() + 1)
+  ) {
+    const discount = getDateDiscount(item, night);
+    nightlyPrices.push(applyDiscountToPrice(basePrice, discount).price);
+  }
+
+  const totalPrice = Number(
+    nightlyPrices.reduce((total, price) => total + price, 0).toFixed(2),
+  );
+  const averagePrice = nightlyPrices.length
+    ? Number((totalPrice / nightlyPrices.length).toFixed(2))
+    : basePrice;
+  const discountPercentages = nightlyPrices.map((price) =>
+    basePrice
+      ? Number((((basePrice - price) / basePrice) * 100).toFixed(2))
+      : 0,
+  );
+
   return {
     original: basePrice,
-    discountPercentage: discount,
-    price: applyDiscountToPrice(basePrice, discount).price,
+    discountPercentage: Math.max(...discountPercentages, 0),
+    price: averagePrice,
+    totalPrice,
+    nightlyPrices,
   };
 }
 

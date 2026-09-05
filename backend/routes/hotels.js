@@ -231,6 +231,7 @@ router.get("/:id/rooms", async (req, res) => {
           ...room,
           basePrice: datePricing.original,
           effectivePrice: datePricing.price,
+          totalPrice: datePricing.totalPrice,
           discountPercentage: datePricing.discountPercentage,
         };
       }),

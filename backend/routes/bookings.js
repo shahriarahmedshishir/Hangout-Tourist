@@ -4,6 +4,7 @@ const { getDb } = require("../db");
 const { ObjectId } = require("mongodb");
 const { auth } = require("../middleware/auth");
 const { getPriceForDates } = require("../utils/pricing");
+const { notifyBookingConfirmed } = require("../utils/emailService");
 
 function isValidObjectId(id) {
   return /^[0-9a-fA-F]{24}$/.test(id);
@@ -156,7 +157,7 @@ router.post("/hotel", auth, async (req, res) => {
 
       const datePricing = getPriceForDates(room, checkIn, checkOut);
       const pricePerNight = datePricing.price || room.price || 0;
-      const totalAmount = pricePerNight * days;
+      const totalAmount = datePricing.totalPrice;
       const booking = {
         userId: req.user.id,
         type: "hotel",
@@ -168,6 +169,7 @@ router.post("/hotel", auth, async (req, res) => {
         checkOut: checkOutDate,
         days,
         pricePerNight,
+        nightlyPrices: datePricing.nightlyPrices,
         discountPercentage: datePricing.discountPercentage,
         totalAmount,
         contactNumber: contactNumber || "",
@@ -193,6 +195,10 @@ router.post("/hotel", auth, async (req, res) => {
     io.to(`user-${req.user.id}`).emit("booking-confirmed", {
       count: createdBookings.length,
     });
+
+    await Promise.all(
+      createdBookings.map((booking) => notifyBookingConfirmed(db, booking)),
+    );
 
     res.status(201).json({ bookings: createdBookings });
   } catch (err) {
@@ -290,6 +296,8 @@ router.post("/car", auth, async (req, res) => {
     io.to(`user-${req.user.id}`).emit("booking-confirmed", {
       bookingId: result.insertedId,
     });
+
+    await notifyBookingConfirmed(db, { ...booking, _id: result.insertedId });
 
     res.status(201).json({ ...booking, _id: result.insertedId });
   } catch (err) {

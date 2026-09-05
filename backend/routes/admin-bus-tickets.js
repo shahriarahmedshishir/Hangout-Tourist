@@ -3,6 +3,7 @@ const router = express.Router();
 const { getDb } = require("../db");
 const { ObjectId } = require("mongodb");
 const { auth } = require("../middleware/auth");
+const { notifyBookingConfirmed } = require("../utils/emailService");
 
 function isValidObjectId(id) {
   return /^[0-9a-fA-F]{24}$/.test(id);
@@ -74,6 +75,7 @@ router.post("/:ticketId/approve", auth, adminOnly, async (req, res) => {
 
     const db = await getDb();
     const session = db.client.startSession();
+    let confirmedBooking = null;
 
     try {
       await session.withTransaction(async () => {
@@ -117,7 +119,10 @@ router.post("/:ticketId/approve", auth, adminOnly, async (req, res) => {
           updatedAt: new Date(),
         };
 
-        await db.collection("busBookings").insertOne(busBooking);
+        const bookingResult = await db
+          .collection("busBookings")
+          .insertOne(busBooking);
+        confirmedBooking = { ...busBooking, _id: bookingResult.insertedId };
 
         // Update ticket status
         await db.collection("busTicketRequests").updateOne(
@@ -130,6 +135,8 @@ router.post("/:ticketId/approve", auth, adminOnly, async (req, res) => {
           },
         );
       });
+
+      await notifyBookingConfirmed(db, confirmedBooking);
 
       res.json({ message: "Ticket approved and booking confirmed" });
     } finally {

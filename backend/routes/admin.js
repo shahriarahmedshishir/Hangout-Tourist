@@ -10,6 +10,7 @@ const { ObjectId } = require("mongodb");
 const { auth, role } = require("../middleware/auth");
 const upload = require("../middleware/upload");
 const { sendVerificationEmail } = require("../utils/emailService");
+const { notifyBookingConfirmed } = require("../utils/emailService");
 const {
   applyDiscountToPrice,
   normalizeDateDiscounts,
@@ -1990,7 +1991,25 @@ router.post(
 
       // Update booking to confirmed
       const now = new Date();
-      await db.collection("bookings").updateOne(
+      const bookingCollections = ["bookings", "carrentBookings", "busBookings"];
+      let bookingCollection = null;
+      let booking = null;
+      for (const collectionName of bookingCollections) {
+        const candidate = await db.collection(collectionName).findOne({
+          _id: new ObjectId(payment.bookingId),
+        });
+        if (candidate) {
+          bookingCollection = db.collection(collectionName);
+          booking = candidate;
+          break;
+        }
+      }
+
+      if (!bookingCollection || !booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+
+      await bookingCollection.updateOne(
         { _id: new ObjectId(payment.bookingId) },
         {
           $set: {
@@ -1999,6 +2018,13 @@ router.post(
           },
         },
       );
+
+      await notifyBookingConfirmed(db, {
+        ...booking,
+        status: "confirmed",
+        paidAt: now,
+        paymentMethod: booking.paymentMethod || payment.paymentMethod,
+      });
 
       res.json({ message: "Manual payment approved and booking confirmed" });
     } catch (err) {

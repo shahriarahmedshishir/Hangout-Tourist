@@ -1,4 +1,5 @@
 const { SESClient, SendEmailCommand } = require("@aws-sdk/client-ses");
+const { ObjectId } = require("mongodb");
 
 // Initialize AWS SES client
 const sesClient = new SESClient({
@@ -145,7 +146,121 @@ async function sendPasswordResetEmail(email, name, token) {
   }
 }
 
+function escapeHtml(value = "") {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function formatDate(value) {
+  if (!value) return "N/A";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "N/A"
+    : date.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+}
+
+function getBookingName(booking) {
+  return (
+    booking.hotelName ||
+    booking.carName ||
+    booking.busName ||
+    booking.serviceName ||
+    booking.packageName ||
+    booking.type ||
+    "Hangout Tourist booking"
+  );
+}
+
+/** Send a confirmation email containing an invoice for a confirmed booking. */
+async function sendBookingConfirmationEmail(booking, user) {
+  if (!user?.email) {
+    console.warn("Booking confirmation email skipped: user email not found", {
+      bookingId: booking?._id,
+    });
+    return { success: false, error: "User email not found" };
+  }
+
+  const bookingId = booking._id?.toString() || "N/A";
+  const customerName = user.name || "Customer";
+  const itemName = getBookingName(booking);
+  const quantity = booking.seats || booking.seatsBooked || 1;
+  const date = booking.checkIn || booking.pickupDate || booking.travelDate;
+  const endDate = booking.checkOut || booking.returnDate;
+  const dateLabel = endDate
+    ? `${formatDate(date)} - ${formatDate(endDate)}`
+    : formatDate(date);
+  const total = Number(booking.totalAmount || 0).toFixed(2);
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: Arial, sans-serif; background:#f4f4f4; padding:24px; color:#222;">
+      <div style="max-width:620px; margin:auto; background:#fff; padding:28px; border-radius:8px;">
+        <h1 style="margin-top:0; color:#176b87;">Booking confirmed</h1>
+        <p>Hi ${escapeHtml(customerName)},</p>
+        <p>Your Hangout Tourist booking is confirmed. Here is your invoice:</p>
+        <table style="width:100%; border-collapse:collapse; margin:24px 0;">
+          <tr><td style="padding:10px 0; border-bottom:1px solid #ddd;"><strong>Invoice</strong></td><td style="padding:10px 0; border-bottom:1px solid #ddd;">${escapeHtml(bookingId)}</td></tr>
+          <tr><td style="padding:10px 0; border-bottom:1px solid #ddd;"><strong>Service</strong></td><td style="padding:10px 0; border-bottom:1px solid #ddd;">${escapeHtml(itemName)}</td></tr>
+          <tr><td style="padding:10px 0; border-bottom:1px solid #ddd;"><strong>Date</strong></td><td style="padding:10px 0; border-bottom:1px solid #ddd;">${escapeHtml(dateLabel)}</td></tr>
+          <tr><td style="padding:10px 0; border-bottom:1px solid #ddd;"><strong>Quantity</strong></td><td style="padding:10px 0; border-bottom:1px solid #ddd;">${escapeHtml(quantity)}</td></tr>
+          <tr><td style="padding:10px 0; border-bottom:1px solid #ddd;"><strong>Payment method</strong></td><td style="padding:10px 0; border-bottom:1px solid #ddd;">${escapeHtml(booking.paymentMethod || "N/A")}</td></tr>
+          <tr><td style="padding:14px 0 0;"><strong>Total</strong></td><td style="padding:14px 0 0;"><strong>BDT ${escapeHtml(total)}</strong></td></tr>
+        </table>
+        <p>Thank you for choosing Hangout Tourist.</p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const params = {
+    Source: process.env.AWS_SES_FROM_EMAIL,
+    Destination: { ToAddresses: [user.email] },
+    Message: {
+      Subject: {
+        Data: `Booking confirmed - Invoice ${bookingId}`,
+        Charset: "UTF-8",
+      },
+      Body: { Html: { Data: htmlContent, Charset: "UTF-8" } },
+    },
+  };
+
+  try {
+    await sesClient.send(new SendEmailCommand(params));
+    return { success: true };
+  } catch (error) {
+    console.error(
+      "Error sending booking confirmation email via AWS SES:",
+      error,
+    );
+    return { success: false, error: error.message };
+  }
+}
+
+async function notifyBookingConfirmed(db, booking) {
+  if (!booking?.userId)
+    return { success: false, error: "Booking user not found" };
+  const userId = booking.userId.toString();
+  const query = ObjectId.isValid(userId)
+    ? { _id: new ObjectId(userId) }
+    : { _id: booking.userId };
+  const user = await db.collection("users").findOne(query, {
+    projection: { name: 1, email: 1 },
+  });
+  return sendBookingConfirmationEmail(booking, user);
+}
+
 module.exports = {
   sendVerificationEmail,
   sendPasswordResetEmail,
+  sendBookingConfirmationEmail,
+  notifyBookingConfirmed,
 };

@@ -3,6 +3,7 @@ const router = express.Router();
 const { getDb } = require("../db");
 const { ObjectId } = require("mongodb");
 const { auth, role } = require("../middleware/auth");
+const { notifyBookingConfirmed } = require("../utils/emailService");
 
 function isValidObjectId(id) {
   return /^[0-9a-fA-F]{24}$/.test(id);
@@ -205,6 +206,8 @@ router.post("/bookings/hotel", auth, role("hotel_staff"), async (req, res) => {
     };
 
     const result = await db.collection("bookings").insertOne(booking);
+
+    await notifyBookingConfirmed(db, { ...booking, _id: result.insertedId });
 
     try {
       const io = req.app.get("io");

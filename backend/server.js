@@ -229,7 +229,7 @@ Promise.all([getDb(), initCache()])
     server.on("error", (err) => {
       if (err.code === "EADDRINUSE") {
         console.error(
-          `❌ Port ${PORT} is already in use. Stop the process using this port or set PORT to a free port before restarting.`,
+          `Port ${PORT} is already in use. Stop the process using this port or set PORT to a free port before restarting.`,
         );
       } else {
         console.error("Server error:", err);

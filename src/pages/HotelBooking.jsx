@@ -110,7 +110,10 @@ export default function HotelBooking() {
     (new Date(checkOut) - new Date(checkIn)) / (1000 * 60 * 60 * 24),
   );
   const total = rooms.reduce(
-    (sum, r) => sum + (Number(r.effectivePrice ?? r.price ?? 0) || 0) * days,
+    (sum, r) =>
+      sum +
+      (Number(r.totalPrice) ||
+        (Number(r.effectivePrice ?? r.price ?? 0) || 0) * days),
     0,
   );
 

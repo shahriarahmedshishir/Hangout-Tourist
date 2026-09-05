@@ -3,6 +3,7 @@ const router = express.Router();
 const { getDb } = require("../db");
 const { ObjectId } = require("mongodb");
 const { auth } = require("../middleware/auth");
+const { getPriceForDates } = require("../utils/pricing");
 const fs = require("fs");
 const path = require("path");
 
@@ -109,13 +110,15 @@ router.post("/initiate/hotel", auth, async (req, res) => {
         });
       }
 
-      const effectiveRoomPrice = Number(room.effectivePrice ?? room.price ?? 0);
-      totalAmount += effectiveRoomPrice * days;
+      const datePricing = getPriceForDates(room, checkIn, checkOut);
+      const effectiveRoomPrice = datePricing.price;
+      totalAmount += datePricing.totalPrice;
       bookingRooms.push({
         roomId: room._id.toString(),
         roomNumber: room.roomNumber,
         pricePerNight: effectiveRoomPrice,
-        roomTotal: effectiveRoomPrice * days,
+        nightlyPrices: datePricing.nightlyPrices,
+        roomTotal: datePricing.totalPrice,
       });
     }
 
@@ -131,6 +134,7 @@ router.post("/initiate/hotel", auth, async (req, res) => {
       checkOut: checkOutDate,
       days,
       pricePerNight: r.pricePerNight,
+      nightlyPrices: r.nightlyPrices,
       totalAmount: r.roomTotal,
       contactNumber: contactNumber || "",
       nidNumber: guestDetails?.nidNumber || "",
